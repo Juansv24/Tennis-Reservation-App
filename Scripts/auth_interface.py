@@ -13,149 +13,51 @@ US_OPEN_LIGHT_BLUE = "#2478CC"
 US_OPEN_YELLOW = "#FFD400"
 
 def apply_auth_css():
-    """Aplicar CSS personalizado para la interfaz de autenticación"""
-    st.markdown(f"""
+    """Remove Streamlit's default form container styling"""
+    st.markdown("""
     <style>
-    .auth-container {{
-        max-width: 500px;
-        margin: 0 auto;
-        padding: 30px;
-        background: white;
-        border-radius: 15px;
-        box-shadow: 0 8px 32px rgba(0, 24, 84, 0.15);
-        border: 2px solid {US_OPEN_LIGHT_BLUE};
-    }}
+    /* Remove Streamlit's form container border and background */
+    div[data-testid="stForm"] {
+        border: none !important;
+        background: transparent !important;
+        padding: 0 !important;
+        box-shadow: none !important;
+    }
     
-    .auth-header {{
+    /* Alternative selector in case the above doesn't work */
+    .stForm {
+        border: none !important;
+        background: transparent !important;
+        padding: 0 !important;
+        box-shadow: none !important;
+    }
+    
+    /* Remove any form borders */
+    form {
+        border: none !important;
+        background: transparent !important;
+    }
+    
+    /* Target the specific form container */
+    div[data-testid="stForm"] > div {
+        border: none !important;
+        background: transparent !important;
+        padding: 0 !important;
+    }
+    
+    /* Keep your other existing styles here if needed */
+    .auth-header {
         text-align: center;
-        color: {US_OPEN_BLUE};
+        color: #001854;
         font-size: 2rem;
         font-weight: bold;
         margin-bottom: 30px;
         padding-bottom: 15px;
-        border-bottom: 3px solid {US_OPEN_YELLOW};
-    }}
-    
-    .auth-welcome {{
-        background: linear-gradient(135deg, {US_OPEN_LIGHT_BLUE} 0%, {US_OPEN_BLUE} 100%);
-        color: white;
-        padding: 20px;
-        border-radius: 10px;
-        text-align: center;
-        margin-bottom: 20px;
-    }}
-    
-    .auth-form {{
-        background: #F8F9FA;
-        padding: 25px;
-        border-radius: 10px;
-        border: 1px solid #E9ECEF;
-    }}
-    
-    .switch-mode {{
-        text-align: center;
-        margin-top: 20px;
-        padding: 15px;
-        background: #F8F9FA;
-        border-radius: 8px;
-        border: 1px dashed {US_OPEN_LIGHT_BLUE};
-    }}
-    
-    .user-profile {{
-        background: linear-gradient(135deg, #E8F5E8 0%, #F0FFF0 100%);
-        border: 2px solid #4CAF50;
-        border-radius: 10px;
-        padding: 20px;
-        margin: 20px 0;
-    }}
-    
-    .profile-header {{
-        color: {US_OPEN_BLUE};
-        font-size: 1.3rem;
-        font-weight: bold;
-        margin-bottom: 15px;
-        text-align: center;
-    }}
-    
-    .session-info {{
-        background: linear-gradient(135deg, #FFF9E6 0%, #FFFBF0 100%);
-        border: 2px solid {US_OPEN_YELLOW};
-        border-radius: 8px;
-        padding: 15px;
-        margin: 15px 0;
-        color: {US_OPEN_BLUE};
-    }}
-    
-    .remember-me-container {{
-        background: #F0F8FF;
-        border: 1px solid {US_OPEN_LIGHT_BLUE};
-        border-radius: 8px;
-        padding: 15px;
-        margin: 15px 0;
-    }}
-    
-    .logout-buttons {{
-        background: #FFF5F5;
-        border: 1px solid #FF9999;
-        border-radius: 8px;
-        padding: 15px;
-        margin: 15px 0;
-    }}
-    
-    /* Custom button styling for auth */
-    .auth-button {{
-        background: linear-gradient(135deg, {US_OPEN_LIGHT_BLUE} 0%, {US_OPEN_BLUE} 100%);
-        color: {US_OPEN_YELLOW};
-        border: none;
-        padding: 12px 24px;
-        border-radius: 8px;
-        font-weight: bold;
-        font-size: 1.1rem;
-        width: 100%;
-        cursor: pointer;
-        transition: all 0.3s ease;
-    }}
-    
-    .auth-button:hover {{
-        background: linear-gradient(135deg, {US_OPEN_BLUE} 0%, #000C2E 100%);
-        transform: scale(1.02);
-        box-shadow: 0 4px 12px rgba(0, 24, 84, 0.3);
-    }}
-    
-    .secondary-button {{
-        background: white;
-        color: {US_OPEN_BLUE};
-        border: 2px solid {US_OPEN_LIGHT_BLUE};
-        padding: 10px 20px;
-        border-radius: 8px;
-        font-weight: bold;
-        cursor: pointer;
-        transition: all 0.3s ease;
-    }}
-    
-    .secondary-button:hover {{
-        background: {US_OPEN_LIGHT_BLUE};
-        color: white;
-    }}
-    
-    .danger-button {{
-        background: #FF4444;
-        color: white;
-        border: 2px solid #CC0000;
-        padding: 10px 20px;
-        border-radius: 8px;
-        font-weight: bold;
-        cursor: pointer;
-        transition: all 0.3s ease;
-    }}
-    
-    .danger-button:hover {{
-        background: #CC0000;
-        transform: scale(1.02);
-    }}
+        border-bottom: 3px solid #FFD400;
+    }
     </style>
     """, unsafe_allow_html=True)
-
+    
 def show_auth_interface():
     """Mostrar interfaz de autenticación"""
     apply_auth_css()

@@ -42,7 +42,7 @@ def init_session_state():
         st.session_state.app_initialized = True
 
 def show_header():
-    """Mostrar el encabezado principal de la aplicación - WITH TENNIS BALL IMAGE"""
+    """Mostrar el encabezado principal de la aplicación"""
     # Obtener información del usuario actual
     user_info = get_current_user()
     
@@ -50,7 +50,7 @@ def show_header():
     st.markdown("---")
     
     # Title and subtitle
-    col1, col2, col3 = st.columns([1, 2, 1])
+    col1, col2, col3 = st.columns([1, 20, 1])
     
     with col2:
         # Load and display the tennis ball image with title
@@ -60,9 +60,8 @@ def show_header():
             <div style='text-align: center; padding: 20px; background: linear-gradient(135deg, #001854 0%, #2478CC 100%); border-radius: 10px; color: white; margin-bottom: 20px;'>
                 <div style='display: flex; align-items: center; justify-content: center; gap: 15px;'>
                     <img src="data:image/png;base64,{}" style='width: 60px; height: 60px;'>
-                    <h1 style='margin: 0; color: white;'>Tennis Court Reservations</h1>
+                    <h1 style='margin: 0; color: white;'>Reservas Cancha de Tenis Colina Campestre </h1>
                 </div>
-                <p style='margin: 10px 0 0 0; color: white;'>Cancha Pública Colina Campestre</p>
             </div>
             """.format(get_tennis_ball_base64()), unsafe_allow_html=True)
         except:
