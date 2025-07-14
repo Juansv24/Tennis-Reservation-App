@@ -78,7 +78,7 @@ def show_auth_interface():
     return False
 
 def show_login_form():
-    """Mostrar formulario de login con opción Remember Me"""
+    """Mostrar formulario de login con opción Remember Me mejorada"""
     st.markdown('<div class="auth-form">', unsafe_allow_html=True)
     
     with st.form("login_form"):
@@ -97,12 +97,12 @@ def show_login_form():
             key="login_password"
         )
         
-        # Remember Me checkbox
+        # Remember Me checkbox with enhanced description
         st.markdown('<div class="remember-me-container">', unsafe_allow_html=True)
         remember_me = st.checkbox(
-            "🔒 Remember me for 30 days",
+            "🔒 Keep me signed in for 30 days",
             key="remember_me_checkbox",
-            help="Keep me signed in on this device for 30 days"
+            help="Your session will be securely maintained across browser visits and device restarts"
         )
         st.markdown('</div>', unsafe_allow_html=True)
         
@@ -113,6 +113,8 @@ def show_login_form():
         )
         
         if login_submitted:
+            # Use the enhanced login handler from auth_utils
+            from auth_utils import handle_login
             handle_login(email, password, remember_me)
     
     st.markdown('</div>', unsafe_allow_html=True)
@@ -127,7 +129,7 @@ def show_login_form():
     if st.button("Create New Account", key="switch_to_register", use_container_width=True):
         st.session_state.auth_mode = 'register'
         st.rerun()
-
+        
 def show_registration_form():
     """Mostrar formulario de registro"""
     st.markdown('<div class="auth-form">', unsafe_allow_html=True)
