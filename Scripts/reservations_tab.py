@@ -539,6 +539,116 @@ def show_success_message(name, date_obj, selected_hours):
     </div>
     """, unsafe_allow_html=True)
 
+def show_calendar_view(today, tomorrow, today_reservations, tomorrow_reservations, current_hour, current_user):
+    """Mostrar vista de calendario"""
+    st.subheader("Court Availability")
+    
+    # Crear dos columnas para los dos días
+    today_col, tomorrow_col = st.columns(2)
+    
+    # Columna de hoy
+    with today_col:
+        st.markdown(f"""
+        <div class="calendar-header">
+            {format_date_short(today)}<br>
+            <small>TODAY</small>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        show_day_schedule(today, today_reservations, current_user, is_today=True, current_hour=current_hour)
+    
+    # Columna de mañana
+    with tomorrow_col:
+        st.markdown(f"""
+        <div class="calendar-header">
+            {format_date_short(tomorrow)}<br>
+            <small>TOMORROW</small>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        show_day_schedule(tomorrow, tomorrow_reservations, current_user, is_today=False, current_hour=current_hour)
+
+def show_day_schedule(date, reservations_dict, current_user, is_today=False, current_hour=None):
+    """Mostrar horarios para un día específico - ENHANCED with user reservations"""
+    selected_hours = st.session_state.get('selected_hours', [])
+    selected_date = st.session_state.get('selected_date', None)
+    user_reservations = db_manager.get_user_reservations_for_date(current_user['email'], date)
+    
+    for hour in COURT_HOURS:
+        is_reserved = hour in reservations_dict
+        is_my_reservation = hour in user_reservations
+        is_selected = hour in selected_hours and selected_date == date
+        is_past_hour = is_today and current_hour is not None and hour < current_hour
+        is_selectable = not is_reserved and not is_past_hour
+        
+        # Determinar el estado del botón
+        if is_my_reservation:
+            # Es una reserva del usuario actual
+            button_text = f"{format_hour(hour)}\nYour Booking"
+            disabled = True
+            # Use custom HTML for user's own reservations
+            st.markdown(f"""
+            <div class="time-slot-my-reservation">
+                {button_text}
+            </div>
+            """, unsafe_allow_html=True)
+            continue
+        elif is_reserved:
+            # Obtener el nombre del usuario que reservó
+            reserved_name = reservations_dict[hour]
+            # Truncar el nombre si es muy largo
+            if len(reserved_name) > 12:
+                displayed_name = reserved_name[:9] + "..."
+            else:
+                displayed_name = reserved_name
+            button_text = f"{format_hour(hour)}\n{displayed_name}"
+            disabled = True
+        elif is_past_hour:
+            button_text = f"{format_hour(hour)}\nPast"
+            disabled = True
+        elif is_selected:
+            # Use custom HTML for selected state
+            st.markdown(f"""
+            <div 
+                style="
+                    background:white;
+                    border: 3px solid {US_OPEN_YELLOW};
+                    color: {US_OPEN_BLUE};
+                    padding: 2px;
+                    border-radius: 6px;
+                    text-align: center;
+                    margin: 5px 0;
+                    cursor: pointer;
+                    font-weight: bold;
+                    transform: scale(1);
+                    box-shadow: 0 6px 12px rgba(0, 24, 84, 0.4);
+                "
+                onclick="document.querySelector('[data-testid=\\'baseButton-secondary\\'][key*=\\'hidden_{date}_{hour}\\']')?.click()"
+            >
+                {format_hour(hour)}<br>Selected
+            </div>
+            """, unsafe_allow_html=True)
+            
+            # Hidden button for functionality
+            if st.button("Cancel", key=f"hidden_{date}_{hour}"):
+                handle_time_slot_click(hour, date, current_user)
+            continue
+        elif is_selectable:
+            button_text = f"{format_hour(hour)}\nAvailable"
+            disabled = False
+        else:
+            button_text = f"{format_hour(hour)}\nUnavailable"
+            disabled = True
+        
+        # Regular Streamlit button for non-selected states
+        if st.button(
+            button_text,
+            key=f"hour_{date}_{hour}",
+            disabled=disabled,
+            use_container_width=True
+        ):
+            handle_time_slot_click(hour, date, current_user)
+
 def handle_time_slot_click(hour, date, current_user):
     """Manejar clic en un slot de tiempo - ENHANCED with user validation"""
     selected_hours = st.session_state.get('selected_hours', [])
