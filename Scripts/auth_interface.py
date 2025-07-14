@@ -214,8 +214,21 @@ def handle_registration(full_name: str, email: str, password: str, confirm_passw
         st.error("Please fill in all fields")
         return
     
+    # Validar que las contraseñas coincidan
     if password != confirm_password:
-        st.error("Passwords do not match")
+        st.error("❌ Passwords do not match")
+        return
+    
+    # Validar fortaleza de la contraseña usando auth_manager
+    from auth_manager import auth_manager
+    is_valid_password, password_message = auth_manager._validate_password(password)
+    if not is_valid_password:
+        st.error(f"❌ {password_message}")
+        return
+    
+    # Validar email
+    if not auth_manager._validate_email(email):
+        st.error("❌ Please enter a valid email address")
         return
     
     # Intentar registrar usuario
@@ -227,7 +240,7 @@ def handle_registration(full_name: str, email: str, password: str, confirm_passw
         st.session_state.auth_mode = 'login'
         st.rerun()
     else:
-        st.error(message)
+        st.error(f"❌ {message}")
 
 def show_user_profile():
     """Mostrar perfil del usuario autenticado con opciones de sesión"""
