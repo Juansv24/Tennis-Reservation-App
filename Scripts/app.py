@@ -7,7 +7,12 @@ import streamlit as st
 import datetime
 from reservations_tab import show_reservation_tab, init_reservation_session_state
 from auth_interface import show_auth_interface
-from auth_utils import ensure_session_persistence
+from auth_utils import (
+    init_auth_session_state, 
+    require_authentication,
+    get_current_user,
+    try_auto_login
+)
 from database_manager import db_manager
 
 # US Open colors

@@ -78,7 +78,7 @@ def show_auth_interface():
     return False
 
 def show_login_form():
-    """Mostrar formulario de login con opción Remember Me mejorada"""
+    """Mostrar formulario de login con opción Remember Me"""
     st.markdown('<div class="auth-form">', unsafe_allow_html=True)
     
     with st.form("login_form"):
@@ -97,12 +97,12 @@ def show_login_form():
             key="login_password"
         )
         
-        # Remember Me checkbox with enhanced description
+        # Remember Me checkbox
         st.markdown('<div class="remember-me-container">', unsafe_allow_html=True)
         remember_me = st.checkbox(
-            "🔒 Keep me signed in for 30 days",
+            "🔒 Remember me for 30 days",
             key="remember_me_checkbox",
-            help="Your session will be securely maintained across browser visits and device restarts"
+            help="Keep me signed in on this device for 30 days"
         )
         st.markdown('</div>', unsafe_allow_html=True)
         
@@ -113,8 +113,6 @@ def show_login_form():
         )
         
         if login_submitted:
-            # Use the enhanced login handler from auth_utils
-            from auth_utils import handle_login
             handle_login(email, password, remember_me)
     
     st.markdown('</div>', unsafe_allow_html=True)
@@ -129,7 +127,7 @@ def show_login_form():
     if st.button("Create New Account", key="switch_to_register", use_container_width=True):
         st.session_state.auth_mode = 'register'
         st.rerun()
-        
+
 def show_registration_form():
     """Mostrar formulario de registro"""
     st.markdown('<div class="auth-form">', unsafe_allow_html=True)
@@ -216,21 +214,8 @@ def handle_registration(full_name: str, email: str, password: str, confirm_passw
         st.error("Please fill in all fields")
         return
     
-    # Validar que las contraseñas coincidan
     if password != confirm_password:
-        st.error("❌ Passwords do not match")
-        return
-    
-    # Validar fortaleza de la contraseña usando auth_manager
-    from auth_manager import auth_manager
-    is_valid_password, password_message = auth_manager._validate_password(password)
-    if not is_valid_password:
-        st.error(f"❌ {password_message}")
-        return
-    
-    # Validar email
-    if not auth_manager._validate_email(email):
-        st.error("❌ Please enter a valid email address")
+        st.error("Passwords do not match")
         return
     
     # Intentar registrar usuario
@@ -242,7 +227,7 @@ def handle_registration(full_name: str, email: str, password: str, confirm_passw
         st.session_state.auth_mode = 'login'
         st.rerun()
     else:
-        st.error(f"❌ {message}")
+        st.error(message)
 
 def show_user_profile():
     """Mostrar perfil del usuario autenticado con opciones de sesión"""
