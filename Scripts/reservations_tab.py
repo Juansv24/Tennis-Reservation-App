@@ -52,54 +52,67 @@ def format_date_full(date: datetime.date) -> str:
     return f"{day_name}, {date.day} de {month_name} de {date.year}"
 
 def apply_custom_css():
-    """Aplicar CSS personalizado con colores US Open - ENHANCED VERSION"""
+    """CSS mejorado para móvil"""
     st.markdown(f"""
     <style>
+    /* Mobile-optimized styles */
     .calendar-header {{
-        background-color: {US_OPEN_LIGHT_BLUE};
+        background: linear-gradient(135deg, {US_OPEN_BLUE} 0%, {US_OPEN_LIGHT_BLUE} 100%);
         color: white;
         padding: 15px;
-        border-radius: 8px;
+        border-radius: 10px;
         text-align: center;
-        margin-bottom: 20px;
+        margin-bottom: 15px;
         font-weight: bold;
-        font-size: 1.2rem;
+        font-size: 1.1rem;
+        box-shadow: 0 4px 8px rgba(0,0,0,0.2);
     }}
                 
     .time-slot-reserved {{
-        background-color: #FFFFFF;
-        border: 2px solid #E0E0E0;
+        background-color: #FFEBEE;
+        border: 2px solid #E57373;
         color: #C62828;
-        padding: 10px;
-        border-radius: 6px;
+        padding: 15px 8px;
+        border-radius: 8px;
         text-align: center;
         margin: 5px 0;
         cursor: not-allowed;
-        opacity: 0.7;
+        opacity: 0.8;
+        font-size: 0.9rem;
     }}
     
     .time-slot-my-reservation {{
-        background-color: #E8F5E8;
+        background: linear-gradient(135deg, #E8F5E8 0%, #F0FFF0 100%);
         border: 2px solid #4CAF50;
         color: #2E7D32;
-        padding: 10px;
-        border-radius: 6px;
+        padding: 15px 8px;
+        border-radius: 8px;
         text-align: center;
         margin: 5px 0;
         cursor: not-allowed;
         font-weight: bold;
+        font-size: 0.9rem;
+        box-shadow: 0 2px 4px rgba(76, 175, 80, 0.3);
     }}
     
     .time-slot-unavailable {{
         background-color: #F5F5F5;
         border: 2px solid #E0E0E0;
         color: #757575;
-        padding: 10px;
-        border-radius: 6px;
+        padding: 15px 8px;
+        border-radius: 8px;
         text-align: center;
         margin: 5px 0;
         cursor: not-allowed;
-        opacity: 0.5;
+        opacity: 0.6;
+        font-size: 0.9rem;
+    }}
+    
+    /* Animation for selected slots */
+    @keyframes pulse {{
+        0% {{ transform: scale(1.05); }}
+        50% {{ transform: scale(1.08); }}
+        100% {{ transform: scale(1.05); }}
     }}
     
     /* Enhanced success message */
@@ -114,17 +127,21 @@ def apply_custom_css():
         animation: slide-in 0.5s ease-out;
     }}
     
+    /* Mobile-optimized buttons */
     .stButton > button {{
         background-color: #FFFFFF;
-        color: black;
+        color: {US_OPEN_BLUE};
         border: 2px solid {US_OPEN_LIGHT_BLUE};
         font-weight: bold;
         transition: all 0.3s ease;
+        padding: 12px 8px;
+        font-size: 0.9rem;
+        border-radius: 8px;
     }}
     
     .stButton > button:hover {{
-        background-color: white;
-        color: {US_OPEN_BLUE};
+        background-color: {US_OPEN_LIGHT_BLUE};
+        color: white;
         border-color: {US_OPEN_YELLOW};
         transform: scale(1.02);
         box-shadow: 0 4px 8px rgba(0,0,0,0.2);
@@ -138,12 +155,31 @@ def apply_custom_css():
         padding: 15px;
         margin: 15px 0;
         color: {US_OPEN_BLUE};
+        text-align: center;
+    }}
+    
+    /* Mobile expander improvements */
+    .streamlit-expanderHeader {{
+        font-size: 1.1rem !important;
+        font-weight: bold !important;
+    }}
+    
+    /* Hide Streamlit menu on mobile */
+    @media (max-width: 768px) {{
+        .stApp > header {{
+            display: none;
+        }}
+        
+        .main .block-container {{
+            padding-top: 1rem;
+            padding-bottom: 1rem;
+        }}
     }}
     </style>
     """, unsafe_allow_html=True)
 
 def show_reservation_tab():
-    """Mostrar la pestaña de reservas"""
+    """Mostrar la pestaña de reservas - MOBILE OPTIMIZED VERSION"""
     apply_custom_css()
     
     # Obtener información del usuario actual
@@ -163,16 +199,200 @@ def show_reservation_tab():
     user_today_reservations = db_manager.get_user_reservations_for_date(current_user['email'], today)
     user_tomorrow_reservations = db_manager.get_user_reservations_for_date(current_user['email'], tomorrow)
     
-    # Layout principal
-    left_col, right_col = st.columns([1, 2])
+    # Mobile-first layout - single column
+    show_user_info_mobile(current_user)
+    show_user_existing_reservations(today, tomorrow, user_today_reservations, user_tomorrow_reservations)
+    show_mobile_calendar_view(today, tomorrow, today_reservations, tomorrow_reservations, current_hour, current_user)
+    show_mobile_reservation_form(today, tomorrow, current_user)
+
+def show_user_info_mobile(current_user):
+    """Mostrar información del usuario en móvil"""
+    st.markdown(f"""
+    <div class="user-info-display">
+        <strong>👤 Booking as:</strong> {current_user['full_name']}<br>
+        <small>{current_user['email']}</small>
+    </div>
+    """, unsafe_allow_html=True)
+
+def show_mobile_calendar_view(today, tomorrow, today_reservations, tomorrow_reservations, current_hour, current_user):
+    """Vista de calendario optimizada para móvil con expanders"""
+    st.subheader("🎾 Court Availability")
     
-    # Panel izquierdo - Detalles de reserva
-    with left_col:
-        show_reservation_details(today, tomorrow, current_user, user_today_reservations, user_tomorrow_reservations)
+    # Expandable day sections
+    today_expanded = st.session_state.get('today_expanded', True)  # Today open by default
+    tomorrow_expanded = st.session_state.get('tomorrow_expanded', False)
     
-    # Panel derecho - Vista calendario
-    with right_col:
-        show_calendar_view(today, tomorrow, today_reservations, tomorrow_reservations, current_hour, current_user)
+    # Today's schedule in expander
+    with st.expander(
+        f"📅 TODAY - {format_date_short(today)}", 
+        expanded=today_expanded
+    ):
+        show_mobile_day_schedule(today, today_reservations, current_user, is_today=True, current_hour=current_hour)
+    
+    # Tomorrow's schedule in expander  
+    with st.expander(
+        f"📅 TOMORROW - {format_date_short(tomorrow)}", 
+        expanded=tomorrow_expanded
+    ):
+        show_mobile_day_schedule(tomorrow, tomorrow_reservations, current_user, is_today=False, current_hour=current_hour)
+
+def show_mobile_day_schedule(date, reservations_dict, current_user, is_today=False, current_hour=None):
+    """Mostrar horarios para móvil en formato de grid"""
+    selected_hours = st.session_state.get('selected_hours', [])
+    selected_date = st.session_state.get('selected_date', None)
+    user_reservations = db_manager.get_user_reservations_for_date(current_user['email'], date)
+    
+    # Create a 2-column grid for better mobile experience
+    hours_per_row = 2
+    hour_groups = [COURT_HOURS[i:i + hours_per_row] for i in range(0, len(COURT_HOURS), hours_per_row)]
+    
+    for hour_group in hour_groups:
+        cols = st.columns(len(hour_group))
+        
+        for idx, hour in enumerate(hour_group):
+            with cols[idx]:
+                is_reserved = hour in reservations_dict
+                is_my_reservation = hour in user_reservations
+                is_selected = hour in selected_hours and selected_date == date
+                is_past_hour = is_today and current_hour is not None and hour < current_hour
+                is_selectable = not is_reserved and not is_past_hour
+                
+                # Determinar el estado del botón
+                if is_my_reservation:
+                    # Es una reserva del usuario actual
+                    st.markdown(f"""
+                    <div class="time-slot-my-reservation">
+                        {format_hour(hour)}<br><small>Your Booking</small>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    continue
+                elif is_reserved:
+                    # Obtener el nombre del usuario que reservó
+                    reserved_name = reservations_dict[hour]
+                    # Truncar el nombre si es muy largo
+                    if len(reserved_name) > 8:
+                        displayed_name = reserved_name[:5] + "..."
+                    else:
+                        displayed_name = reserved_name
+                    st.markdown(f"""
+                    <div class="time-slot-reserved">
+                        {format_hour(hour)}<br><small>{displayed_name}</small>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    continue
+                elif is_past_hour:
+                    st.markdown(f"""
+                    <div class="time-slot-unavailable">
+                        {format_hour(hour)}<br><small>Past</small>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    continue
+                elif is_selected:
+                    # Use custom HTML for selected state
+                    st.markdown(f"""
+                    <div 
+                        style="
+                            background: linear-gradient(135deg, {US_OPEN_YELLOW} 0%, #FFF000 100%);
+                            border: 3px solid {US_OPEN_BLUE};
+                            color: {US_OPEN_BLUE};
+                            padding: 15px 8px;
+                            border-radius: 8px;
+                            text-align: center;
+                            margin: 5px 0;
+                            cursor: pointer;
+                            font-weight: bold;
+                            transform: scale(1.05);
+                            box-shadow: 0 4px 12px rgba(0, 24, 84, 0.3);
+                            animation: pulse 1.5s infinite;
+                        "
+                        onclick="document.querySelector('[data-testid=\\'baseButton-secondary\\'][key*=\\'mobile_{date}_{hour}\\']')?.click()"
+                    >
+                        {format_hour(hour)}<br><small>✓ Selected</small>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    # Hidden button for functionality
+                    if st.button("Cancel", key=f"mobile_{date}_{hour}", help="Click to deselect"):
+                        handle_time_slot_click(hour, date, current_user)
+                    continue
+                elif is_selectable:
+                    # Available slot button
+                    if st.button(
+                        f"{format_hour(hour)}\nAvailable",
+                        key=f"mobile_hour_{date}_{hour}",
+                        use_container_width=True,
+                        help="Click to select this time slot"
+                    ):
+                        handle_time_slot_click(hour, date, current_user)
+                else:
+                    st.markdown(f"""
+                    <div class="time-slot-unavailable">
+                        {format_hour(hour)}<br><small>Unavailable</small>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+def show_mobile_reservation_form(today_date, tomorrow_date, current_user):
+    """Formulario de reserva optimizado para móvil"""
+    selected_hours = st.session_state.get('selected_hours', [])
+    selected_date = st.session_state.get('selected_date', None)
+    
+    st.divider()
+    
+    # Mostrar reglas de reserva en un expander
+    with st.expander("📋 Reservation Rules"):
+        st.markdown("""
+        • **Today and tomorrow bookings** allowed  
+        • **Maximum 2 hours** per person per day  
+        • **Consecutive hours** required if booking multiple slots  
+        • **Court hours:** 6:00 AM - 9:00 PM  
+        """)
+    
+    # Formulario de confirmación
+    if selected_hours and selected_date is not None:
+        st.markdown("### 🎾 Confirm Your Reservation")
+        
+        # Mostrar detalles de la selección en un container destacado
+        st.markdown(f"""
+        <div style="
+            background: linear-gradient(135deg, #E3F2FD 0%, #F0F8FF 100%);
+            border: 2px solid {US_OPEN_LIGHT_BLUE};
+            border-radius: 12px;
+            padding: 20px;
+            margin: 15px 0;
+            text-align: center;
+        ">
+            <h4 style="color: {US_OPEN_BLUE}; margin: 0 0 10px 0;">📅 {format_date_full(selected_date)}</h4>
+            <p style="margin: 5px 0; font-size: 1.1em;"><strong>⏰ Time:</strong> {format_hour(min(selected_hours))} - {format_hour(max(selected_hours) + 1)}</p>
+            <p style="margin: 5px 0;"><strong>⏱️ Duration:</strong> {len(selected_hours)} hour(s)</p>
+            <p style="margin: 5px 0;"><strong>👤 Player:</strong> {current_user['full_name']}</p>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        # Botón de confirmación grande y prominente
+        if st.button(
+            "🎾 CONFIRM RESERVATION", 
+            type="primary", 
+            use_container_width=True,
+            help="Click to confirm your court reservation"
+        ):
+            handle_reservation_submission(current_user, selected_date, selected_hours)
+            
+        # Botón para limpiar selección
+        if st.button("🗑️ Clear Selection", use_container_width=True):
+            st.session_state.selected_hours = []
+            st.session_state.selected_date = None
+            st.rerun()
+            
+    else:
+        st.markdown("### 📱 How to Reserve")
+        st.info("👆 **Tap any available time slot** above to start your reservation")
+        
+        st.markdown("""
+        **Steps:**
+        1. 📅 Choose today or tomorrow
+        2. ⏰ Select up to 2 consecutive hours  
+        3. 🎾 Confirm your reservation
+        """)
 
 def show_reservation_details(today_date, tomorrow_date, current_user, user_today_reservations, user_tomorrow_reservations):
     """Mostrar panel de detalles de reserva"""
