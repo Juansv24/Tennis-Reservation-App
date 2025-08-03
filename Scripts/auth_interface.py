@@ -650,7 +650,6 @@ def show_forgot_password_form():
         st.session_state.auth_mode = 'login'
         st.rerun()
 
-
 def show_reset_password_form(reset_token: str):
     """Mostrar formulario de nueva contraseña"""
     st.markdown('<div class="auth-header">Crear Nueva Contraseña</div>', unsafe_allow_html=True)
@@ -710,36 +709,46 @@ def handle_forgot_password(email: str):
         st.error("Por favor ingresa una dirección de email válida")
         return
 
-    # Crear token de recuperación
-    success, message, reset_token = auth_manager.create_password_reset_token(email)
-
-    if success and reset_token:
-        # Obtener información del usuario para el email
+    # Verificar primero si el email existe
+    try:
         with auth_manager.get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute('SELECT full_name FROM users WHERE email = ?', (email.strip().lower(),))
+            cursor.execute('SELECT id, full_name FROM users WHERE email = ? AND is_active = 1', (email.strip().lower(),))
             user_data = cursor.fetchone()
-            user_name = user_data[0] if user_data else "Usuario"
 
-        # Enviar email
-        if email_manager.is_configured():
-            email_success, email_message = email_manager.send_password_reset_email(
-                email, reset_token, user_name
-            )
+        if not user_data:
+            # Por seguridad, mostrar el mismo mensaje que si fuera exitoso
+            st.success("📧 Si existe una cuenta con ese email, recibirás un enlace de recuperación.")
+            st.info("Revisa tu email y sigue las instrucciones.")
+            return
 
-            if email_success:
-                st.success("📧 ¡Enlace de recuperación enviado!")
-                st.info("Revisa tu email y sigue las instrucciones para restablecer tu contraseña.")
-                st.warning("⏰ El enlace expira en 30 minutos.")
+        user_id, user_name = user_data
+
+        # Crear token de recuperación solo si el usuario existe
+        success, message, reset_token = auth_manager.create_password_reset_token(email)
+
+        if success and reset_token:
+            # Enviar email
+            if email_manager.is_configured():
+                email_success, email_message = email_manager.send_password_reset_email(
+                    email, reset_token, user_name
+                )
+
+                if email_success:
+                    st.success("📧 ¡Enlace de recuperación enviado!")
+                    st.info("Revisa tu email y sigue las instrucciones para restablecer tu contraseña.")
+                    st.warning("⏰ El enlace expira en 30 minutos.")
+                else:
+                    st.error(f"Error enviando email: {email_message}")
             else:
-                st.error(f"Error enviando email: {email_message}")
+                st.error("Servicio de email no configurado. Contacta al administrador.")
         else:
-            st.error("Servicio de email no configurado. Contacta al administrador.")
-    else:
-        # Por seguridad, no revelar si el email existe o no
-        st.success("📧 Si existe una cuenta con ese email, recibirás un enlace de recuperación.")
-        st.info("Revisa tu email y sigue las instrucciones.")
+            st.error("Error al procesar la solicitud. Por favor intenta de nuevo.")
 
+    except Exception as e:
+        st.error("Error al procesar la solicitud. Por favor intenta de nuevo.")
+        # Log del error para debugging
+        print(f"Error en handle_forgot_password: {str(e)}")
 
 def handle_reset_password(reset_token: str, new_password: str, confirm_password: str):
     """Manejar actualización de contraseña"""

@@ -476,7 +476,8 @@ class AuthManager:
                 user = cursor.fetchone()
 
                 if not user:
-                    return False, "No se encontró una cuenta con ese email", None
+                    # Retornar falso sin revelar que el email no existe
+                    return False, "Error al procesar solicitud", None
 
                 # Crear tabla de tokens de recuperación si no existe
                 cursor.execute('''
@@ -540,7 +541,6 @@ class AuthManager:
 
         except Exception as e:
             return False, f"Error creando token: {str(e)}", None
-
 
     def validate_password_reset_token(self, token: str) -> Tuple[bool, str, Optional[int]]:
         """Validar token de recuperación de contraseña"""

@@ -153,6 +153,15 @@ class EmailManager:
         cal_start = event_start.strftime('%Y%m%dT%H%M%S')
         cal_end = event_end.strftime('%Y%m%dT%H%M%S')
 
+        # Nombres de meses en español
+        months_es = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
+                     'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
+        days_es = ['lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado', 'domingo']
+
+        day_name = days_es[date.weekday()]
+        month_name = months_es[date.month - 1]
+        formatted_date = f"{day_name}, {date.day} de {month_name} de {date.year}"
+
         # Enlace de Google Calendar
         calendar_link = f"https://calendar.google.com/calendar/render?action=TEMPLATE&text=Reserva%20Cancha%20de%20Tenis&dates={cal_start}/{cal_end}&details=Reserva%20de%20Cancha%20de%20Tenis%20en%20Colina%20Campestre%0A%0AReservado%20por:%20{user_name}%0AEmail:%20{to_email}&location=Cancha%20de%20Tenis%20Colina%20Campestre"
 
@@ -174,23 +183,20 @@ class EmailManager:
             <div class="container">
                 <div class="header">
                     <h1>🎾 ¡Reserva Confirmada!</h1>
-                    <p>¡Tu cancha está lista!</p>
                 </div>
 
                 <div class="content">
                     <h2>¡Hola {user_name}!</h2>
-                    <p>¡Excelentes noticias! Tu reserva de cancha de tenis ha sido confirmada. Aquí están los detalles:</p>
+                    <p>¡Excelentes noticias! Tu reserva ha sido confirmada. Aquí están los detalles:</p>
 
                     <div class="reservation-details">
                         <h3>📅 Detalles de la Reserva</h3>
                         <p><strong>Nombre:</strong> {user_name}</p>
-                        <p><strong>Fecha:</strong> {date.strftime('%A, %d de %B de %Y')}</p>
+                        <p><strong>Fecha:</strong> {formatted_date}</p>
                         <p><strong>Hora:</strong> {start_time} - {end_time}</p>
                         <p><strong>Duración:</strong> {len(hours)} hora(s)</p>
                         <p><strong>Ubicación:</strong> Cancha de Tenis Colina Campestre</p>
                     </div>
-
-                    <p>¡No olvides traer tu raqueta y llegar a tiempo!</p>
 
                     <p style="text-align: center;">
                         <a href="{calendar_link}" class="calendar-button" target="_blank">
