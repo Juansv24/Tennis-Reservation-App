@@ -8,6 +8,7 @@ import datetime
 from datetime import timedelta
 from database_manager import db_manager
 from auth_utils import get_current_user
+from timezone_utils import get_colombia_today, get_colombia_now
 
 # Configuración
 COURT_HOURS = list(range(6, 22))  # 6 AM a 9 PM
@@ -17,13 +18,13 @@ US_OPEN_YELLOW = "#FFD400"
 
 def get_today_tomorrow():
     """Obtener hoy y mañana"""
-    today = datetime.date.today()
+    today = get_colombia_today()
     tomorrow = today + timedelta(days=1)
     return today, tomorrow
 
 def get_current_hour():
     """Obtener la hora actual"""
-    return datetime.datetime.now().hour
+    return get_colombia_now().hour
 
 def format_hour(hour: int) -> str:
     """Formatear hora para mostrar"""

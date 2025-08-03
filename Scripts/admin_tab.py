@@ -8,6 +8,7 @@ import datetime
 from datetime import timedelta
 import pandas as pd
 from database_manager import db_manager
+from timezone_utils import get_colombia_today, get_colombia_now
 
 # Configuración de administración
 ADMIN_USERNAME = "admin"
@@ -104,7 +105,7 @@ def show_admin_dashboard():
         st.markdown(f"👋 **Bienvenido, {ADMIN_USERNAME}**")
     
     with col2:
-        current_time = datetime.datetime.now()
+        current_time = get_colombia_now()
         st.caption(f"🕐 {current_time.strftime('%d/%m/%Y %H:%M:%S')}")
     
     with col3:
@@ -160,7 +161,7 @@ def show_reservations_management():
         st.metric("👥 Usuarios Únicos", unique_users)
     
     with col3:
-        today = datetime.date.today()
+        today = get_colombia_today()
         tomorrow = today + timedelta(days=1)
         tomorrow_count = len([r for r in reservations if r[0] == tomorrow.strftime('%Y-%m-%d')])
         st.metric("📅 Reservas Mañana", tomorrow_count)
@@ -234,7 +235,7 @@ def show_reservations_management():
     
     # Filtro por período
     if period_filter != "Todos":
-        today = datetime.date.today()
+        today = get_colombia_today()
         tomorrow = today + timedelta(days=1)
         
         if period_filter == "Hoy":
@@ -279,7 +280,7 @@ def show_reservations_management():
                 st.download_button(
                     label="💾 Descargar CSV",
                     data=csv_data,
-                    file_name=f"reservas_filtradas_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                    file_name=f"reservas_filtradas_{get_colombia_now().strftime('%Y%m%d_%H%M%S')}.csv",
                     mime="text/csv"
                 )
         
@@ -405,7 +406,7 @@ def show_statistics_dashboard():
     
     with col4:
         # Calcular tasa de ocupación de mañana
-        tomorrow = datetime.date.today() + timedelta(days=1)
+        tomorrow = get_colombia_today() + timedelta(days=1)
         tomorrow_reservations = db_manager.get_reservations(tomorrow)
         occupancy_rate = (len(tomorrow_reservations) / 16) * 100  # 16 horarios totales
         st.metric(
@@ -510,7 +511,7 @@ def show_statistics_dashboard():
     
     with temporal_col1:
         # Reservas de hoy y mañana
-        today = datetime.date.today()
+        today = get_colombia_today()
         tomorrow = today + timedelta(days=1)
         
         all_reservations = db_manager.get_all_reservations()
@@ -615,7 +616,7 @@ def show_configuration_panel():
             if csv_content and len(csv_content.split('\n')) > 2:
                 # Agregar información adicional al CSV
                 stats = db_manager.get_reservation_statistics()
-                timestamp = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                timestamp = get_colombia_now().strftime('%Y-%m-%d %H:%M:%S')
                 
                 enhanced_csv = f"""# Reporte de Reservas - Cancha de Tenis
 # Generado: {timestamp}
@@ -627,7 +628,7 @@ def show_configuration_panel():
                 st.download_button(
                     label="💾 Descargar Reporte CSV",
                     data=enhanced_csv,
-                    file_name=f"reporte_completo_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                    file_name=f"reporte_completo_{get_colombia_now().strftime('%Y%m%d_%H%M%S')}.csv",
                     mime="text/csv",
                     use_container_width=True
                 )
@@ -807,10 +808,10 @@ def show_maintenance_panel():
     system_col1, system_col2 = st.columns(2)
     
     with system_col1:
-        current_time = datetime.datetime.now()
+        current_time = get_colombia_now()
         st.write(f"**🕐 Hora del sistema:** {current_time.strftime('%d/%m/%Y %H:%M:%S')}")
         
-        tomorrow = datetime.date.today() + timedelta(days=1)
+        tomorrow = get_colombia_today() + timedelta(days=1)
         st.write(f"**📅 Próxima fecha reservable:** {format_date(tomorrow.strftime('%Y-%m-%d'))}")
         
         st.write(f"**👤 Usuario administrador:** {ADMIN_USERNAME}")
@@ -835,4 +836,4 @@ def init_admin_session_state():
     if 'confirm_clear' not in st.session_state:
         st.session_state.confirm_clear = False
     if 'admin_login_time' not in st.session_state:
-        st.session_state.admin_login_time = datetime.datetime.now()
+        st.session_state.admin_login_time = get_colombia_now()

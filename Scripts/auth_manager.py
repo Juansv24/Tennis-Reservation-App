@@ -12,6 +12,7 @@ from typing import Optional, Dict, Tuple
 import contextlib
 from datetime import datetime, timedelta
 from database_manager import DATABASE_FILE
+from timezone_utils import get_colombia_now
 
 class AuthManager:
     """Simplified authentication manager with identical API to original"""
@@ -146,7 +147,7 @@ class AuthManager:
                         
                         # Set expiration based on remember_me
                         duration_days = 30 if remember_me else 1
-                        expires_at = datetime.now() + timedelta(days=duration_days)
+                        expires_at = get_colombia_now().replace(tzinfo=None) + timedelta(days=duration_days)
                         
                         # Create session (ignore user_agent for simplicity)
                         cursor.execute('''
@@ -200,7 +201,7 @@ class AuthManager:
                     # Check expiration
                     try:
                         expires_at = datetime.fromisoformat(expires_at_str.replace('Z', '+00:00'))
-                        if expires_at < datetime.now():
+                        if expires_at < get_colombia_now().replace(tzinfo=None):
                             cursor.execute('''
                                 UPDATE user_sessions 
                                 SET is_active = 0 
