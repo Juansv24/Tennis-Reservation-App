@@ -15,9 +15,6 @@ import streamlit as st
 # Configuración de email
 SMTP_SERVER = "smtp.gmail.com"
 SMTP_PORT = 587
-EMAIL_ADDRESS = st.secrets["email"]["address"]
-EMAIL_PASSWORD = st.secrets["email"]["password"]
-
 
 class EmailManager:
     """Administrador de envío de emails para el sistema de reservas"""
