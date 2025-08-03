@@ -66,13 +66,24 @@ def show_auth_interface():
     """Mostrar interfaz de autenticación"""
     apply_auth_css()
 
+    # Verificar si hay token de recuperación en la URL
+    try:
+        if "reset_token" in st.query_params:
+            reset_token = st.query_params["reset_token"]
+            show_reset_password_form(reset_token)
+            return False
+    except Exception:
+        pass
+
     # Verificar si el usuario ya está autenticado
     if st.session_state.get('authenticated', False):
         show_user_profile()
         return True
 
-    # Encabezado
-    if st.session_state.auth_mode == 'login':
+    # Mostrar formulario según el modo
+    if st.session_state.auth_mode == 'forgot_password':
+        show_forgot_password_form()
+    elif st.session_state.auth_mode == 'login':
         st.markdown('<div class="auth-header">¡Bienvenido de Vuelta!</div>', unsafe_allow_html=True)
         show_login_form()
     else:
@@ -112,6 +123,14 @@ def show_login_form():
             handle_login(email, password, True)
 
     st.markdown('</div>', unsafe_allow_html=True)
+
+    # Enlaces fuera del formulario (usar st.button, NO st.form_submit_button)
+    st.markdown("---")
+
+    # Botón de "Olvidaste contraseña"
+    if st.button("🔑 ¿Olvidaste tu contraseña?", key="forgot_password_btn", use_container_width=True):
+        st.session_state.auth_mode = 'forgot_password'
+        st.rerun()
 
     # Cambiar a registro
     st.markdown(f"""
@@ -586,3 +605,149 @@ def show_password_changer():
                     logout_user()
                 else:
                     st.error(message)
+
+
+def show_forgot_password_form():
+    """Mostrar formulario de recuperación de contraseña"""
+    st.markdown('<div class="auth-header">Recuperar Contraseña</div>', unsafe_allow_html=True)
+
+    with st.form("forgot_password_form"):
+        st.markdown("### Recuperar tu Contraseña")
+        st.info("Te enviaremos un enlace de recuperación a tu email registrado.")
+
+        email = st.text_input(
+            "Dirección de Email",
+            placeholder="tu.email@ejemplo.com",
+            key="forgot_password_email"
+        )
+
+        submitted = st.form_submit_button(
+            "Enviar Enlace de Recuperación",
+            type="primary",
+            use_container_width=True
+        )
+
+        if submitted:
+            handle_forgot_password(email)
+
+    # Botón para volver al login
+    if st.button("← Volver al Inicio de Sesión", key="back_to_login"):
+        st.session_state.auth_mode = 'login'
+        st.rerun()
+
+
+def show_reset_password_form(reset_token: str):
+    """Mostrar formulario de nueva contraseña"""
+    st.markdown('<div class="auth-header">Crear Nueva Contraseña</div>', unsafe_allow_html=True)
+
+    # Validar token primero
+    token_valid, token_message, user_id = auth_manager.validate_password_reset_token(reset_token)
+
+    if not token_valid:
+        st.error(f"❌ {token_message}")
+        st.info("El enlace puede haber expirado. Solicita una nueva recuperación de contraseña.")
+
+        if st.button("Solicitar Nuevo Enlace"):
+            st.session_state.auth_mode = 'forgot_password'
+            st.rerun()
+        return
+
+    st.success(f"✅ {token_message}")
+
+    with st.form("reset_password_form"):
+        st.markdown("### Nueva Contraseña")
+
+        new_password = st.text_input(
+            "Nueva Contraseña",
+            type="password",
+            placeholder="Ingresa tu nueva contraseña",
+            key="new_password",
+            help="La contraseña debe tener al menos 6 caracteres y contener letras y números"
+        )
+
+        confirm_password = st.text_input(
+            "Confirmar Nueva Contraseña",
+            type="password",
+            placeholder="Confirma tu nueva contraseña",
+            key="confirm_new_password"
+        )
+
+        submitted = st.form_submit_button(
+            "Actualizar Contraseña",
+            type="primary",
+            use_container_width=True
+        )
+
+        if submitted:
+            handle_reset_password(reset_token, new_password, confirm_password)
+
+
+def handle_forgot_password(email: str):
+    """Manejar solicitud de recuperación de contraseña"""
+    if not email:
+        st.error("Por favor ingresa tu dirección de email")
+        return
+
+    # Validar formato de email
+    import re
+    email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+    if not re.match(email_pattern, email):
+        st.error("Por favor ingresa una dirección de email válida")
+        return
+
+    # Crear token de recuperación
+    success, message, reset_token = auth_manager.create_password_reset_token(email)
+
+    if success and reset_token:
+        # Obtener información del usuario para el email
+        with auth_manager.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('SELECT full_name FROM users WHERE email = ?', (email.strip().lower(),))
+            user_data = cursor.fetchone()
+            user_name = user_data[0] if user_data else "Usuario"
+
+        # Enviar email
+        if email_manager.is_configured():
+            email_success, email_message = email_manager.send_password_reset_email(
+                email, reset_token, user_name
+            )
+
+            if email_success:
+                st.success("📧 ¡Enlace de recuperación enviado!")
+                st.info("Revisa tu email y sigue las instrucciones para restablecer tu contraseña.")
+                st.warning("⏰ El enlace expira en 30 minutos.")
+            else:
+                st.error(f"Error enviando email: {email_message}")
+        else:
+            st.error("Servicio de email no configurado. Contacta al administrador.")
+    else:
+        # Por seguridad, no revelar si el email existe o no
+        st.success("📧 Si existe una cuenta con ese email, recibirás un enlace de recuperación.")
+        st.info("Revisa tu email y sigue las instrucciones.")
+
+
+def handle_reset_password(reset_token: str, new_password: str, confirm_password: str):
+    """Manejar actualización de contraseña"""
+    if not new_password or not confirm_password:
+        st.error("Por favor completa todos los campos")
+        return
+
+    if new_password != confirm_password:
+        st.error("Las contraseñas no coinciden")
+        return
+
+    # Resetear contraseña
+    success, message = auth_manager.reset_password_with_token(reset_token, new_password)
+
+    if success:
+        st.success("✅ " + message)
+        st.info("🔐 Por seguridad, todas tus sesiones han sido cerradas.")
+        st.balloons()
+
+        # Redirigir al login después de un momento
+        import time
+        time.sleep(3)
+        st.session_state.auth_mode = 'login'
+        st.rerun()
+    else:
+        st.error("❌ " + message)

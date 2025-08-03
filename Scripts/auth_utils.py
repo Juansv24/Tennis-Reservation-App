@@ -172,6 +172,8 @@ def init_auth_session_state():
         st.session_state.pending_email = None
     if 'pending_password' not in st.session_state:
         st.session_state.pending_password = None
+    if 'auth_mode' not in st.session_state:
+        st.session_state.auth_mode = 'login'
 
     # Intentar inicio de sesión automático en inicialización
     try_auto_login()

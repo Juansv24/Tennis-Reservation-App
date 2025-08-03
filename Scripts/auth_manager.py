@@ -463,6 +463,156 @@ class AuthManager:
         except Exception as e:
             return False, f"Error al actualizar perfil: {str(e)}"
 
+    def create_password_reset_token(self, email: str) -> Tuple[bool, str, Optional[str]]:
+        """Crear token de recuperación de contraseña"""
+        try:
+            email = email.strip().lower()
 
+            with self.get_connection() as conn:
+                cursor = conn.cursor()
+
+                # Verificar que el usuario existe
+                cursor.execute('SELECT id FROM users WHERE email = ? AND is_active = 1', (email,))
+                user = cursor.fetchone()
+
+                if not user:
+                    return False, "No se encontró una cuenta con ese email", None
+
+                # Crear tabla de tokens de recuperación si no existe
+                cursor.execute('''
+                               CREATE TABLE IF NOT EXISTS password_reset_tokens
+                               (
+                                   id
+                                   INTEGER
+                                   PRIMARY
+                                   KEY
+                                   AUTOINCREMENT,
+                                   user_id
+                                   INTEGER
+                                   NOT
+                                   NULL,
+                                   token
+                                   TEXT
+                                   UNIQUE
+                                   NOT
+                                   NULL,
+                                   created_at
+                                   TIMESTAMP
+                                   DEFAULT
+                                   CURRENT_TIMESTAMP,
+                                   expires_at
+                                   TIMESTAMP
+                                   NOT
+                                   NULL,
+                                   is_used
+                                   BOOLEAN
+                                   DEFAULT
+                                   0,
+                                   FOREIGN
+                                   KEY
+                               (
+                                   user_id
+                               ) REFERENCES users
+                               (
+                                   id
+                               )
+                                   )
+                               ''')
+
+                # Limpiar tokens expirados
+                cursor.execute('DELETE FROM password_reset_tokens WHERE expires_at < CURRENT_TIMESTAMP')
+
+                # Generar token único
+                import secrets
+                token = secrets.token_urlsafe(32)
+
+                # Establecer expiración (30 minutos)
+                expires_at = get_colombia_now().replace(tzinfo=None) + timedelta(minutes=30)
+
+                # Guardar token
+                cursor.execute('''
+                               INSERT INTO password_reset_tokens (user_id, token, expires_at)
+                               VALUES (?, ?, ?)
+                               ''', (user[0], token, expires_at.isoformat()))
+
+                conn.commit()
+                return True, "Token de recuperación creado", token
+
+        except Exception as e:
+            return False, f"Error creando token: {str(e)}", None
+
+    def validate_password_reset_token(self, token: str) -> Tuple[bool, str, Optional[int]]:
+        """Validar token de recuperación de contraseña"""
+        try:
+            with self.get_connection() as conn:
+                cursor = conn.cursor()
+
+                cursor.execute('''
+                               SELECT prt.user_id, prt.expires_at, u.email
+                               FROM password_reset_tokens prt
+                                        JOIN users u ON prt.user_id = u.id
+                               WHERE prt.token = ?
+                                 AND prt.is_used = 0
+                                 AND u.is_active = 1
+                               ''', (token,))
+
+                result = cursor.fetchone()
+
+                if not result:
+                    return False, "Token inválido o ya usado", None
+
+                user_id, expires_at_str, email = result
+
+                # Verificar expiración
+                try:
+                    expires_at = datetime.fromisoformat(expires_at_str)
+                    if expires_at < get_colombia_now().replace(tzinfo=None):
+                        return False, "Token expirado", None
+                except ValueError:
+                    return False, "Token inválido", None
+
+                return True, f"Token válido para {email}", user_id
+
+        except Exception as e:
+            return False, f"Error validando token: {str(e)}", None
+
+    def reset_password_with_token(self, token: str, new_password: str) -> Tuple[bool, str]:
+        """Resetear contraseña usando token"""
+        try:
+            # Validar contraseña
+            is_valid_password, password_message = self._validate_password(new_password)
+            if not is_valid_password:
+                return False, password_message
+
+            # Validar token
+            token_valid, token_message, user_id = self.validate_password_reset_token(token)
+            if not token_valid:
+                return False, token_message
+
+            with self.get_connection() as conn:
+                cursor = conn.cursor()
+
+                # Generar nueva contraseña hash
+                new_hash, new_salt = self._hash_password(new_password)
+
+                # Actualizar contraseña
+                cursor.execute('''
+                               UPDATE users
+                               SET password_hash = ?,
+                                   salt          = ?
+                               WHERE id = ?
+                               ''', (new_hash, new_salt, user_id))
+
+                # Marcar token como usado
+                cursor.execute('UPDATE password_reset_tokens SET is_used = 1 WHERE token = ?', (token,))
+
+                # Invalidar todas las sesiones del usuario por seguridad
+                cursor.execute('UPDATE user_sessions SET is_active = 0 WHERE user_id = ?', (user_id,))
+
+                conn.commit()
+                return True, "Contraseña actualizada exitosamente"
+
+        except Exception as e:
+            return False, f"Error reseteando contraseña: {str(e)}"
 # Instancia global
 auth_manager = AuthManager()

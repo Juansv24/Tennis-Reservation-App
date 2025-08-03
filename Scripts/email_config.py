@@ -241,5 +241,86 @@ class EmailManager:
 
         return self.send_email(to_email, subject, html_body, text_body)
 
+    def send_password_reset_email(self, to_email: str, reset_token: str, user_name: str) -> Tuple[bool, str]:
+        """Enviar email de recuperación de contraseña"""
+        subject = "🔒 Recuperación de Contraseña - Sistema de Reservas"
+
+        # Crear enlace de recuperación (ajusta la URL según tu despliegue)
+        reset_link = f"https://reservas-tenis-colina.streamlit.app/?reset_token={reset_token}"
+
+        html_body = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <style>
+                body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
+                .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
+                .header {{ background: linear-gradient(135deg, #001854 0%, #2478CC 100%); color: white; padding: 30px; text-align: center; border-radius: 10px; }}
+                .content {{ background: #f9f9f9; padding: 30px; border-radius: 10px; margin: 20px 0; }}
+                .reset-button {{ background: #DC143C; color: white; padding: 15px 30px; text-decoration: none; border-radius: 8px; display: inline-block; margin: 20px 0; font-weight: bold; }}
+                .warning {{ background: #FFF3CD; border: 1px solid #FFEAA7; padding: 15px; border-radius: 5px; color: #856404; }}
+                .footer {{ text-align: center; color: #666; font-size: 14px; }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <h1>🔒 Recuperación de Contraseña</h1>
+                    <p>Sistema de Reservas de Cancha de Tenis</p>
+                </div>
+
+                <div class="content">
+                    <h2>Hola {user_name},</h2>
+                    <p>Recibimos una solicitud para restablecer la contraseña de tu cuenta.</p>
+
+                    <p>Haz clic en el siguiente botón para crear una nueva contraseña:</p>
+
+                    <p style="text-align: center;">
+                        <a href="{reset_link}" class="reset-button">
+                            🔒 Restablecer Contraseña
+                        </a>
+                    </p>
+
+                    <div class="warning">
+                        <strong>⚠️ Importante:</strong>
+                        <ul>
+                            <li>Este enlace expira en 30 minutos</li>
+                            <li>Solo se puede usar una vez</li>
+                            <li>Si no solicitaste este cambio, ignora este email</li>
+                        </ul>
+                    </div>
+
+                    <p><small>Si tienes problemas con el botón, copia este enlace: {reset_link}</small></p>
+                </div>
+
+                <div class="footer">
+                    <p>Sistema de Reservas de Cancha de Tenis - Colina Campestre</p>
+                    <p>Este es un mensaje automatizado, por favor no respondas.</p>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+
+        text_body = f"""
+        Recuperación de Contraseña - Sistema de Reservas
+
+        Hola {user_name},
+
+        Recibimos una solicitud para restablecer tu contraseña.
+
+        Usa este enlace para crear una nueva contraseña:
+        {reset_link}
+
+        IMPORTANTE:
+        - Este enlace expira en 30 minutos
+        - Solo se puede usar una vez
+        - Si no solicitaste este cambio, ignora este email
+
+        Sistema de Reservas de Cancha de Tenis - Colina Campestre
+        """
+
+        return self.send_email(to_email, subject, html_body, text_body)
+
 # Instancia global
 email_manager = EmailManager()
