@@ -199,7 +199,7 @@ def show_reservation_details(today_date, tomorrow_date, current_user, user_today
         • **Solo se puede hacer reservar para hoy y para mañana**  
         • **Máximo 2 horas** por persona por día. 
         • **Horas consecutivas** requeridas si se reservan 2 horas.
-        . No se permite reservar la cancha en **los mismos horarios dos días consecutivos**.
+        • No se permite reservar la cancha en **los mismos horarios dos días consecutivos**.
         • **Horario de cancha:** 6:00 AM - 9:00 PM  
         """)
 
