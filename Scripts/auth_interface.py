@@ -386,7 +386,7 @@ def handle_email_verification(verification_code: str):
 
         # Pequeña demora para mostrar mensaje de éxito
         import time
-        time.sleep(5)
+        time.sleep(3)
         st.rerun()
     else:
         st.error("❌ " + message)

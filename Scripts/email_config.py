@@ -22,11 +22,13 @@ class EmailManager:
     def __init__(self):
         self.smtp_server = SMTP_SERVER
         self.smtp_port = SMTP_PORT
+
         try:
             self.email_address = st.secrets["email"]["address"]
             self.email_password = st.secrets["email"]["password"]
         except KeyError:
-            st.warning("⚠️ Credenciales de email no configuradas. Las funciones de email pueden no funcionar.")
+            self.email_address = None
+            self.email_password = None
 
     def generate_verification_code(self) -> str:
         """Generar código de verificación de 6 caracteres"""
@@ -93,12 +95,12 @@ class EmailManager:
             <div class="container">
                 <div class="header">
                     <h1>🎾 Reservas de Cancha de Tenis</h1>
-                    <p>¡Bienvenido a Colina Campestre!</p>
+                    <p>¡Bienvenido a la cancha pública de Colina Campestre!</p>
                 </div>
 
                 <div class="content">
                     <h2>¡Hola {user_name}!</h2>
-                    <p>Gracias por crear tu cuenta para reservas de cancha de tenis. Para completar tu registro, por favor usa este código de verificación:</p>
+                    <p>Gracias por crear tu cuenta para reservar la cancha ubicada en la 148 con 56a. Para completar tu registro, por favor usa este código de verificación:</p>
 
                     <div class="code">{verification_code}</div>
 
