@@ -541,6 +541,7 @@ class AuthManager:
         except Exception as e:
             return False, f"Error creando token: {str(e)}", None
 
+
     def validate_password_reset_token(self, token: str) -> Tuple[bool, str, Optional[int]]:
         """Validar token de recuperación de contraseña"""
         try:
@@ -575,6 +576,7 @@ class AuthManager:
 
         except Exception as e:
             return False, f"Error validando token: {str(e)}", None
+
 
     def reset_password_with_token(self, token: str, new_password: str) -> Tuple[bool, str]:
         """Resetear contraseña usando token"""
