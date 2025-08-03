@@ -198,7 +198,8 @@ def show_reservation_details(today_date, tomorrow_date, current_user, user_today
         st.markdown("""
         • **Solo se puede hacer reservar para hoy y para mañana**  
         • **Máximo 2 horas** por persona por día. 
-        • **Horas consecutivas** requeridas si se reservan 2 horas
+        • **Horas consecutivas** requeridas si se reservan 2 horas.
+        . No se permite reservar la cancha en **los mismos horarios dos días consecutivos**.
         • **Horario de cancha:** 6:00 AM - 9:00 PM  
         """)
 
@@ -232,7 +233,7 @@ def show_reservation_details(today_date, tomorrow_date, current_user, user_today
         st.info("Selecciona los horarios disponibles en el calendario para continuar")
 
         st.markdown("### Cómo Reservar")
-        st.write("1. **Selecciona los horarios disponibles que desees entre hoy y mañana (hasta 2 horas)")
+        st.write("1. **Selecciona los horarios disponibles** que desees entre hoy y mañana (hasta 2 horas)")
         st.write("2. **Confirma tu reserva** con un click")
 
 def show_user_existing_reservations(today_date, tomorrow_date, user_today_reservations, user_tomorrow_reservations):
