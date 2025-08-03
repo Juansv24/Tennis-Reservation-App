@@ -70,8 +70,23 @@ def show_auth_interface():
     try:
         if "reset_token" in st.query_params:
             reset_token = st.query_params["reset_token"]
-            show_reset_password_form(reset_token)
-            return False
+
+            # AGREGAR ESTA VALIDACIÓN
+            # Validar el token antes de mostrar el formulario
+            token_valid, token_message, user_id = auth_manager.validate_password_reset_token(reset_token)
+
+            if token_valid:
+                show_reset_password_form(reset_token)
+                return False
+            else:
+                # Token inválido - limpiar URL y mostrar mensaje
+                try:
+                    del st.query_params["reset_token"]
+                except Exception:
+                    pass
+                st.error("❌ El enlace de recuperación ha expirado o ya fue usado")
+                st.info("💡 Solicita un nuevo enlace de recuperación")
+                st.session_state.auth_mode = 'forgot_password'
     except Exception:
         pass
 
@@ -743,6 +758,13 @@ def handle_reset_password(reset_token: str, new_password: str, confirm_password:
         st.success("✅ " + message)
         st.info("🔐 Por seguridad, todas tus sesiones han sido cerradas.")
         st.balloons()
+
+        # AGREGAR ESTA PARTE - Limpiar token de la URL
+        try:
+            if "reset_token" in st.query_params:
+                del st.query_params["reset_token"]
+        except Exception:
+            pass
 
         # Redirigir al login después de un momento
         import time

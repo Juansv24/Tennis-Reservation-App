@@ -560,7 +560,7 @@ class AuthManager:
                 result = cursor.fetchone()
 
                 if not result:
-                    return False, "Token inválido o ya usado", None
+                    return False, "Token inválido o ya usado ingrese a https://reservas-tenis-colina.streamlit.app para volver a iniciar sesión", None
 
                 user_id, expires_at_str, email = result
 
