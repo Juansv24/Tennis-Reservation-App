@@ -85,7 +85,6 @@ def show_footer():
             <div style='text-align: center; color: #666;'>
                 <b>Sistema de Reservas de Cancha de Tenis</b><br>
                 Desarrollada en Streamlit por Juan Sebastian Vallejo
-                Todos los derechos reservados
             </div>
             """,
             unsafe_allow_html=True
