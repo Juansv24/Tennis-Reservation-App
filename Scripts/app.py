@@ -1,5 +1,5 @@
 """
-Enhanced Main Application for Tennis Court Reservation System with Working Authentication
+Aplicación Principal Mejorada para Sistema de Reservas de Cancha de Tenis con Autenticación Funcional
 """
 
 import streamlit as st
@@ -7,162 +7,162 @@ import datetime
 from reservations_tab import show_reservation_tab, init_reservation_session_state
 from auth_interface import show_auth_interface
 from auth_utils import (
-    init_auth_session_state, 
+    init_auth_session_state,
     require_authentication,
     get_current_user,
     try_auto_login
 )
 from database_manager import db_manager
 
-# US Open colors
+# Colores US Open
 US_OPEN_BLUE = "#001854"
 US_OPEN_LIGHT_BLUE = "#2478CC"
 US_OPEN_YELLOW = "#FFD400"
 
 def setup_page_config():
-    """Configure the Streamlit page"""
+    """Configurar la página de Streamlit"""
     st.set_page_config(
-        page_title="Tennis Court Reservations",
+        page_title="Reservas de Cancha de Tenis",
         page_icon="🎾",
         layout="wide",
         initial_sidebar_state="expanded"
     )
 
 def init_session_state():
-    """Initialize session state - AUTH FIRST!"""
-    # CRITICAL: Initialize auth states FIRST, before any UI
+    """Inicializar estado de sesión - ¡AUTENTICACIÓN PRIMERO!"""
+    # CRÍTICO: Inicializar estados de autenticación PRIMERO, antes de cualquier UI
     init_auth_session_state()
-    
-    # Then initialize other states
+
+    # Luego inicializar otros estados
     init_reservation_session_state()
-    
-    # Global app state
+
+    # Estado global de la aplicación
     if 'app_initialized' not in st.session_state:
         st.session_state.app_initialized = True
 
 def show_header():
-    """Show the main header"""
+    """Mostrar el encabezado principal"""
     user_info = get_current_user()
-    
+
     st.markdown("---")
-    
-    # Title section
+
+    # Sección de título
     col1, col2, col3 = st.columns([1, 20, 1])
-    
+
     with col2:
         st.markdown("""
         <div style='text-align: center; padding: 20px; background: linear-gradient(135deg, #001854 0%, #2478CC 100%); border-radius: 10px; color: white; margin-bottom: 20px;'>
-            <h1 style='margin: 0; color: white;'>🎾 Tennis Court Reservations</h1>
+            <h1 style='margin: 0; color: white;'>🎾 Reservas de Cancha de Tenis</h1>
             <p style='margin: 10px 0 0 0; color: white;'>Cancha Pública Colina Campestre</p>
         </div>
         """, unsafe_allow_html=True)
-    
-    # User greeting
+
+    # Saludo al usuario
     if user_info:
-        st.success(f"Welcome back, **{user_info['full_name']}**! 👋")
-        
-        # Show session info
+        st.success(f"¡Bienvenido de vuelta, **{user_info['full_name']}**! 👋")
+
+        # Mostrar información de sesión
         session_token = user_info.get('session_token', '')
         if session_token:
-            st.info("🔐 Your session is active and remembered")
-    
-    # Show auto-login success message
+            st.info("🔐 Tu sesión está activa y recordada")
+
+    # Mostrar mensaje de éxito de inicio de sesión automático
     if st.session_state.get('show_auto_login_notice', False):
-        st.success("✅ **Automatically signed in** - Your session was restored!")
+        st.success("✅ **Sesión iniciada automáticamente** - ¡Tu sesión fue restaurada!")
         st.session_state.show_auto_login_notice = False
-    
+
     st.markdown("---")
 
 def show_footer():
-    """Show footer"""
+    """Mostrar pie de página"""
     st.markdown("---")
-    
+
     footer_col1, footer_col2, footer_col3 = st.columns([1, 2, 1])
-    
+
     with footer_col2:
         st.markdown(
             f"""
             <div style='text-align: center; color: #666;'>
-                <b>Tennis Court Reservation System</b><br>
-                Built with Streamlit • SQLite Database • Persistent Sessions<br>
-                <small>🔒 Your session is automatically saved and restored</small>
+                <b>Sistema de Reservas de Cancha de Tenis</b><br>
+                Construido con Streamlit • Base de Datos SQLite • Sesiones Persistentes<br>
+                <small>🔒 Tu sesión se guarda y restaura automáticamente</small>
             </div>
-            """, 
+            """,
             unsafe_allow_html=True
         )
 
 def show_main_content():
-    """Show main application content"""
-    
-    # Check authentication (this will automatically try auto-login)
+    """Mostrar contenido principal de la aplicación"""
+
+    # Verificar autenticación (esto intentará automáticamente el inicio de sesión automático)
     if not require_authentication():
-        # Show login interface
+        # Mostrar interfaz de inicio de sesión
         show_auth_interface()
         return
-    
-    # User is authenticated - show main content
+
+    # Usuario está autenticado - mostrar contenido principal
     try:
         show_reservation_tab()
-    
+
     except Exception as e:
-        st.error(f"❌ Error in the application: {str(e)}")
-        st.info("🔄 Try refreshing the page or contact the administrator.")
-        
-        # Show error details
-        with st.expander("🔧 Error Details"):
+        st.error(f"❌ Error en la aplicación: {str(e)}")
+        st.info("🔄 Intenta actualizar la página o contacta al administrador.")
+
+        # Mostrar detalles del error
+        with st.expander("🔧 Detalles del Error"):
             st.exception(e)
 
 def main():
-    """Main application function"""
+    """Función principal de la aplicación"""
     try:
-        # STEP 1: Configure page
+        # PASO 1: Configurar página
         setup_page_config()
-        
-        # STEP 2: Initialize session state (includes auto-login attempt)
+
+        # PASO 2: Inicializar estado de sesión (incluye intento de inicio de sesión automático)
         init_session_state()
-        
-        # STEP 3: Show header
+
+        # PASO 3: Mostrar encabezado
         show_header()
-        
-        # STEP 4: Show main content
+
+        # PASO 4: Mostrar contenido principal
         show_main_content()
-        
-        # STEP 5: Show footer
+
+        # PASO 5: Mostrar pie de página
         show_footer()
-        
+
     except Exception as e:
-        st.error("🚨 Critical Application Error")
+        st.error("🚨 Error Crítico de la Aplicación")
         st.exception(e)
-        
-        if st.button("🔄 Reset Application"):
-            # Clear problematic session state
+
+        if st.button("🔄 Reiniciar Aplicación"):
+            # Limpiar estado de sesión problemático
             for key in list(st.session_state.keys()):
                 if key not in ['session_token', 'authenticated', 'user_info']:
                     del st.session_state[key]
             st.rerun()
 
 def check_system_health():
-    """Check system health"""
+    """Verificar salud del sistema"""
     try:
-        # Test database
+        # Probar base de datos
         db_manager.get_all_reservations()
-        
-        # Test auth system
+
+        # Probar sistema de autenticación
         from auth_manager import auth_manager
         auth_manager.init_auth_tables()
-        
-        return True, "System operational"
-    
+
+        return True, "Sistema operacional"
+
     except Exception as e:
-        return False, f"System error: {str(e)}"
+        return False, f"Error del sistema: {str(e)}"
 
 if __name__ == "__main__":
-    # Check system health
+    # Verificar salud del sistema
     is_healthy, health_message = check_system_health()
-    
+
     if is_healthy:
         main()
     else:
-        st.error(f"🚨 System Health Check Failed: {health_message}")
-        if st.button("🔄 Retry"):
+        st.error(f"🚨 Falló la Verificación de Salud del Sistema: {health_message}")
+        if st.button("🔄 Reintentar"):
             st.rerun()

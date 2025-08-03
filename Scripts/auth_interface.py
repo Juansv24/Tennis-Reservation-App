@@ -1,53 +1,54 @@
 """
-Enhanced Authentication Interface for Tennis Court Reservation System
-Added Remember Me functionality and improved session management
+Interfaz de Autenticación Mejorada para Sistema de Reservas de Cancha de Tenis
+Agrega funcionalidad de Recordarme y gestión de sesión mejorada
 """
 
 import streamlit as st
 from auth_manager import auth_manager
-from auth_utils import logout_user, logout_all_sessions, init_auth_session_state, require_authentication, save_session_token
+from auth_utils import logout_user, logout_all_sessions, init_auth_session_state, require_authentication, \
+    save_session_token
 from email_config import email_manager
 from database_manager import db_manager
 
-# US Open colors
+# Colores US Open
 US_OPEN_BLUE = "#001854"
 US_OPEN_LIGHT_BLUE = "#2478CC"
 US_OPEN_YELLOW = "#FFD400"
 
+
 def apply_auth_css():
-    """Remove Streamlit's default form container styling"""
+    """Remover estilos de contenedor de formulario predeterminados de Streamlit"""
     st.markdown("""
     <style>
-    /* Remove Streamlit's form container border and background */
+    /* Remover borde y fondo del contenedor de formulario de Streamlit */
     div[data-testid="stForm"] {
         border: none !important;
         background: transparent !important;
         padding: 0 !important;
         box-shadow: none !important;
     }
-    
-    /* Alternative selector in case the above doesn't work */
+
+    /* Selector alternativo en caso de que el anterior no funcione */
     .stForm {
         border: none !important;
         background: transparent !important;
         padding: 0 !important;
         box-shadow: none !important;
     }
-    
-    /* Remove any form borders */
+
+    /* Remover cualquier borde de formulario */
     form {
         border: none !important;
         background: transparent !important;
     }
-    
-    /* Target the specific form container */
+
+    /* Dirigirse al contenedor específico del formulario */
     div[data-testid="stForm"] > div {
         border: none !important;
         background: transparent !important;
         padding: 0 !important;
     }
-    
-    /* Keep your other existing styles here if needed */
+
     .auth-header {
         text-align: center;
         color: #001854;
@@ -59,65 +60,67 @@ def apply_auth_css():
     }
     </style>
     """, unsafe_allow_html=True)
-    
+
+
 def show_auth_interface():
     """Mostrar interfaz de autenticación"""
     apply_auth_css()
-    
+
     # Verificar si el usuario ya está autenticado
     if st.session_state.get('authenticated', False):
         show_user_profile()
         return True
-    
-    # Header
+
+    # Encabezado
     if st.session_state.auth_mode == 'login':
-        st.markdown('<div class="auth-header">Welcome Back!</div>', unsafe_allow_html=True)
+        st.markdown('<div class="auth-header">¡Bienvenido de Vuelta!</div>', unsafe_allow_html=True)
         show_login_form()
     else:
-        st.markdown('<div class="auth-header">Join Us!</div>', unsafe_allow_html=True)
+        st.markdown('<div class="auth-header">¡Únete a Nosotros!</div>', unsafe_allow_html=True)
         show_registration_form()
-    
+
     return False
 
+
 def show_login_form():
-    """Mostrar formulario de login con opción Remember Me"""
+    """Mostrar formulario de inicio de sesión con opción Recordarme"""
     st.markdown('<div class="auth-form">', unsafe_allow_html=True)
-    
+
     with st.form("login_form"):
-        st.markdown("### Sign In")
-        
+        st.markdown("### Iniciar Sesión")
+
         email = st.text_input(
-            "Email Address",
-            placeholder="your.email@example.com",
+            "Dirección de Email",
+            placeholder="tu.email@ejemplo.com",
             key="login_email"
         )
-        
+
         password = st.text_input(
-            "Password",
+            "Contraseña",
             type="password",
-            placeholder="Enter your password",
+            placeholder="Ingresa tu contraseña",
             key="login_password"
         )
 
         login_submitted = st.form_submit_button(
-            "Sign In",
+            "Iniciar Sesión",
             type="primary",
             use_container_width=True
         )
-        
+
         if login_submitted:
             handle_login(email, password, True)
-    
+
     st.markdown('</div>', unsafe_allow_html=True)
-    
-    # Switch to registration
+
+    # Cambiar a registro
     st.markdown(f"""
     <div class="switch-mode">
-        <p>Don't have an account?</p>
+        <p>¿No tienes una cuenta?</p>
     </div>
     """, unsafe_allow_html=True)
-    
-    if st.button("Create New Account", key="switch_to_register", use_container_width=True):
+
+    if st.button("Crear Nueva Cuenta", key="switch_to_register", use_container_width=True):
         st.session_state.auth_mode = 'register'
         st.rerun()
 
@@ -126,7 +129,7 @@ def show_registration_form():
     """Mostrar formulario de registro con verificación por email"""
     st.markdown('<div class="auth-form">', unsafe_allow_html=True)
 
-    # Check if we're in email verification step
+    # Verificar si estamos en el paso de verificación de email
     if st.session_state.get('awaiting_verification', False):
         show_email_verification_form()
     else:
@@ -134,17 +137,17 @@ def show_registration_form():
 
     st.markdown('</div>', unsafe_allow_html=True)
 
-    # Switch to login
+    # Cambiar a inicio de sesión
     st.markdown(f"""
     <div class="switch-mode">
-        <p>Already have an account?</p>
+        <p>¿Ya tienes una cuenta?</p>
     </div>
     """, unsafe_allow_html=True)
 
-    if st.button("Sign In Instead", key="switch_to_login", use_container_width=True):
+    if st.button("Iniciar Sesión", key="switch_to_login", use_container_width=True):
         st.session_state.auth_mode = 'login'
         st.session_state.awaiting_verification = False
-        # Clear pending data when switching
+        # Limpiar datos pendientes al cambiar
         for key in ['pending_name', 'pending_email', 'pending_password']:
             if key in st.session_state:
                 del st.session_state[key]
@@ -152,39 +155,39 @@ def show_registration_form():
 
 
 def show_initial_registration_form():
-    """Show initial registration form"""
+    """Mostrar formulario inicial de registro"""
     with st.form("registration_form"):
-        st.markdown("### Create Account")
+        st.markdown("### Crear Cuenta")
 
         full_name = st.text_input(
-            "Full Name",
-            placeholder="Enter your full name",
+            "Nombre Completo",
+            placeholder="Ingresa tu nombre completo",
             key="register_name"
         )
 
         email = st.text_input(
-            "Email Address",
-            placeholder="your.email@example.com",
+            "Dirección de Email",
+            placeholder="tu.email@ejemplo.com",
             key="register_email"
         )
 
         password = st.text_input(
-            "Password",
+            "Contraseña",
             type="password",
-            placeholder="Create a password (min. 6 characters)",
+            placeholder="Crea una contraseña (mín. 6 caracteres)",
             key="register_password",
-            help="Password must be at least 6 characters and contain letters and numbers"
+            help="La contraseña debe tener al menos 6 caracteres y contener letras y números"
         )
 
         confirm_password = st.text_input(
-            "Confirm Password",
+            "Confirmar Contraseña",
             type="password",
-            placeholder="Confirm your password",
+            placeholder="Confirma tu contraseña",
             key="register_confirm_password"
         )
 
         register_submitted = st.form_submit_button(
-            "Send Verification Code",
+            "Enviar Código de Verificación",
             type="primary",
             use_container_width=True
         )
@@ -194,33 +197,33 @@ def show_initial_registration_form():
 
 
 def show_email_verification_form():
-    """Show email verification form"""
-    st.success("📧 Verification code sent!")
-    st.info(f"Please check your email: **{st.session_state.pending_email}**")
+    """Mostrar formulario de verificación de email"""
+    st.success("📧 ¡Código de verificación enviado!")
+    st.info(f"Por favor revisa tu email: **{st.session_state.pending_email}**")
 
     with st.form("verification_form"):
-        st.markdown("### Verify Your Email")
+        st.markdown("### Verifica tu Email")
 
         verification_code = st.text_input(
-            "Verification Code",
-            placeholder="Enter 6-character code",
+            "Código de Verificación",
+            placeholder="Ingresa el código de 6 caracteres",
             max_chars=6,
             key="verification_code",
-            help="Check your email for the verification code"
-        ).upper()  # Convert to uppercase automatically
+            help="Revisa tu email para el código de verificación"
+        ).upper()  # Convertir a mayúsculas automáticamente
 
         col1, col2 = st.columns(2)
 
         with col1:
             verify_submitted = st.form_submit_button(
-                "Verify & Create Account",
+                "Verificar y Crear Cuenta",
                 type="primary",
                 use_container_width=True
             )
 
         with col2:
             resend_submitted = st.form_submit_button(
-                "Resend Code",
+                "Reenviar Código",
                 use_container_width=True
             )
 
@@ -230,40 +233,37 @@ def show_email_verification_form():
         if resend_submitted:
             send_verification_code(st.session_state.pending_email, st.session_state.pending_name)
 
-    # Option to go back and change email
-    if st.button("← Change Email Address", key="change_email"):
+    # Opción para volver y cambiar email
+    if st.button("← Cambiar Dirección de Email", key="change_email"):
         st.session_state.awaiting_verification = False
         st.rerun()
 
 
 def handle_initial_registration(full_name: str, email: str, password: str, confirm_password: str):
-    """Handle initial registration and send verification email"""
-    # Basic validations
+    """Manejar registro inicial y enviar email de verificación"""
+    # Validaciones básicas
     if not all([full_name, email, password, confirm_password]):
-        st.error("Please fill in all fields")
+        st.error("Por favor completa todos los campos")
         return
 
     if password != confirm_password:
-        st.error("Passwords do not match")
+        st.error("Las contraseñas no coinciden")
         return
 
-    # Validate email format
+    # Validar formato de email
     import re
     email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
     if not re.match(email_pattern, email):
-        st.error("Please enter a valid email address")
+        st.error("Por favor ingresa una dirección de email válida")
         return
 
-    # REPLACE THIS ENTIRE SECTION:
-    # Check if email already exists
+    # Verificar si el email ya existe
     try:
-        # Use the auth_manager method instead of direct database access
         from auth_manager import auth_manager
 
-        # Try to get user by email - this is safer than direct DB access
         with auth_manager.get_connection() as conn:
             cursor = conn.cursor()
-            # Make sure users table exists first
+            # Asegurar que la tabla users existe primero
             cursor.execute('''
                            CREATE TABLE IF NOT EXISTS users
                            (
@@ -304,68 +304,67 @@ def handle_initial_registration(full_name: str, email: str, password: str, confi
 
             cursor.execute('SELECT id FROM users WHERE email = ?', (email.strip().lower(),))
             if cursor.fetchone():
-                st.error("An account with this email already exists")
+                st.error("Ya existe una cuenta con este email")
                 return
 
     except Exception as e:
-        st.error(f"Error checking email availability: {str(e)}")
-        # Don't return here - let them try anyway
-        st.warning("Unable to verify email availability, but continuing with registration...")
+        st.error(f"Error verificando disponibilidad del email: {str(e)}")
+        st.warning("No se pudo verificar disponibilidad del email, pero continuando con el registro...")
 
-    # Save pending registration data
+    # Guardar datos de registro pendientes
     st.session_state.pending_name = full_name.strip()
     st.session_state.pending_email = email.strip().lower()
     st.session_state.pending_password = password
 
-    # Send verification code
+    # Enviar código de verificación
     if send_verification_code(email.strip().lower(), full_name.strip()):
         st.session_state.awaiting_verification = True
         st.rerun()
 
 
 def send_verification_code(email: str, name: str) -> bool:
-    """Send verification code to email"""
+    """Enviar código de verificación por email"""
     try:
-        # Check if email service is configured
+        # Verificar si el servicio de email está configurado
         if not email_manager.is_configured():
-            st.error("Email service is not configured. Please contact administrator.")
+            st.error("El servicio de email no está configurado. Por favor contacta al administrador.")
             return False
 
-        # Generate code
+        # Generar código
         verification_code = email_manager.generate_verification_code()
 
-        # Save to database
+        # Guardar en base de datos
         if not db_manager.save_verification_code(email, verification_code):
-            st.error("Error saving verification code. Please try again.")
+            st.error("Error guardando código de verificación. Por favor intenta de nuevo.")
             return False
 
-        # Send email
+        # Enviar email
         success, message = email_manager.send_verification_email(email, verification_code, name)
 
         if success:
-            st.success("📧 Verification code sent to your email!")
-            st.info("⏰ Code expires in 10 minutes")
+            st.success("📧 ¡Código de verificación enviado a tu email!")
+            st.info("⏰ El código expira en 10 minutos")
             return True
         else:
-            st.error(f"Failed to send email: {message}")
+            st.error(f"Error al enviar email: {message}")
             return False
 
     except Exception as e:
-        st.error(f"Error sending verification code: {str(e)}")
+        st.error(f"Error enviando código de verificación: {str(e)}")
         return False
 
 
 def handle_email_verification(verification_code: str):
-    """Handle email verification"""
+    """Manejar verificación de email"""
     if not verification_code:
-        st.error("Please enter the verification code")
+        st.error("Por favor ingresa el código de verificación")
         return
 
     if len(verification_code) != 6:
-        st.error("Verification code must be 6 characters")
+        st.error("El código de verificación debe tener 6 caracteres")
         return
 
-    # Attempt registration with verification
+    # Intentar registro con verificación
     success, message = auth_manager.register_user(
         st.session_state.pending_email,
         st.session_state.pending_password,
@@ -375,9 +374,9 @@ def handle_email_verification(verification_code: str):
 
     if success:
         st.success("✅ " + message)
-        st.info("You can now sign in with your new account!")
+        st.info("¡Ahora puedes iniciar sesión con tu nueva cuenta!")
 
-        # Clear pending data
+        # Limpiar datos pendientes
         st.session_state.awaiting_verification = False
         for key in ['pending_name', 'pending_email', 'pending_password']:
             if key in st.session_state:
@@ -385,28 +384,29 @@ def handle_email_verification(verification_code: str):
 
         st.session_state.auth_mode = 'login'
 
-        # Small delay to show success message
+        # Pequeña demora para mostrar mensaje de éxito
         import time
         time.sleep(5)
         st.rerun()
     else:
         st.error("❌ " + message)
-        if "expired" in message.lower():
-            st.info("💡 You can request a new code using the 'Resend Code' button")
+        if "expirado" in message.lower():
+            st.info("💡 Puedes solicitar un nuevo código usando el botón 'Reenviar Código'")
+
 
 def handle_login(email: str, password: str, remember_me: bool = True):
-    """Manejar intento de login con Remember Me"""
+    """Manejar intento de inicio de sesión con Recordarme"""
     if not email or not password:
-        st.error("Please fill in all fields")
+        st.error("Por favor completa todos los campos")
         return
-    
+
     success, message, user_info = auth_manager.login_user(email, password, remember_me)
-    
+
     if success:
         st.session_state.authenticated = True
         st.session_state.user_info = user_info
-        
-        # Save session token for persistence
+
+        # Guardar token de sesión para persistencia
         if user_info and user_info.get('session_token'):
             save_session_token(user_info['session_token'])
 
@@ -415,122 +415,125 @@ def handle_login(email: str, password: str, remember_me: bool = True):
     else:
         st.error(message)
 
+
 def handle_registration(full_name: str, email: str, password: str, confirm_password: str):
     """Manejar intento de registro"""
     # Validaciones básicas
     if not all([full_name, email, password, confirm_password]):
-        st.error("Please fill in all fields")
+        st.error("Por favor completa todos los campos")
         return
-    
+
     if password != confirm_password:
-        st.error("Passwords do not match")
+        st.error("Las contraseñas no coinciden")
         return
-    
+
     # Intentar registrar usuario
     success, message = auth_manager.register_user(email, password, full_name)
-    
+
     if success:
         st.success(message)
-        st.info("You can now sign in with your new account!")
+        st.info("¡Ahora puedes iniciar sesión con tu nueva cuenta!")
         st.session_state.auth_mode = 'login'
         st.rerun()
     else:
         st.error(message)
 
+
 def show_user_profile():
     """Mostrar perfil del usuario autenticado con opciones de sesión"""
     user_info = st.session_state.user_info
-    
+
     if not user_info:
         logout_user()
         return
-    
-    # Header de bienvenida
+
+    # Encabezado de bienvenida
     st.markdown(f"""
     <div class="auth-welcome">
-        <h2>Welcome, {user_info['full_name']}! 🎾</h2>
-        <p>You're signed in as {user_info['email']}</p>
+        <h2>¡Bienvenido, {user_info['full_name']}! 🎾</h2>
+        <p>Has iniciado sesión como {user_info['email']}</p>
     </div>
     """, unsafe_allow_html=True)
-    
+
     # Información de sesión
     session_token = user_info.get('session_token', '')
     if session_token:
-        # Show partial token for security
+        # Mostrar token parcial por seguridad
         token_display = session_token[:8] + "..." + session_token[-4:] if len(session_token) > 12 else session_token
         st.markdown(f"""
         <div class="session-info">
-            <strong>🔐 Active Session:</strong> {token_display}<br>
-            <small>Your session is securely maintained across browser visits</small>
+            <strong>🔐 Sesión Activa:</strong> {token_display}<br>
+            <small>Tu sesión se mantiene segura entre visitas del navegador</small>
         </div>
         """, unsafe_allow_html=True)
-    
+
     # Perfil en sidebar
     with st.sidebar:
         st.markdown(f"""
         <div class="user-profile">
-            <div class="profile-header">👤 Your Profile</div>
-            <p><strong>Name:</strong> {user_info['full_name']}</p>
+            <div class="profile-header">👤 Tu Perfil</div>
+            <p><strong>Nombre:</strong> {user_info['full_name']}</p>
             <p><strong>Email:</strong> {user_info['email']}</p>
         </div>
         """, unsafe_allow_html=True)
-        
+
         # Botones de perfil
-        st.subheader("⚙️ Account Settings")
-        
-        if st.button("🔧 Edit Profile", use_container_width=True):
+        st.subheader("⚙️ Configuración de Cuenta")
+
+        if st.button("🔧 Editar Perfil", use_container_width=True):
             show_profile_editor()
-        
-        if st.button("🔒 Change Password", use_container_width=True):
+
+        if st.button("🔒 Cambiar Contraseña", use_container_width=True):
             show_password_changer()
-        
+
         st.divider()
-        
-        # Session management section
-        st.subheader("🔐 Session Management")
-        
+
+        # Sección de gestión de sesión
+        st.subheader("🔐 Gestión de Sesión")
+
         st.markdown("""
         <div class="logout-buttons">
         """, unsafe_allow_html=True)
-        
-        # Regular logout button
-        if st.button("🚪 Sign Out", use_container_width=True, type="secondary"):
+
+        # Botón de cerrar sesión regular
+        if st.button("🚪 Cerrar Sesión", use_container_width=True, type="secondary"):
             logout_user()
-        
-        # Sign out from all devices button
-        if st.button("🚨 Sign Out All Devices", 
-                    use_container_width=True, 
-                    help="This will sign you out from all devices and browsers"):
+
+        # Botón de cerrar sesión en todos los dispositivos
+        if st.button("🚨 Cerrar Sesión en Todos los Dispositivos",
+                     use_container_width=True,
+                     help="Esto te desconectará de todos los dispositivos y navegadores"):
             logout_all_sessions()
-        
+
         st.markdown('</div>', unsafe_allow_html=True)
-        
-        # Session info in sidebar
-        with st.expander("ℹ️ Session Info"):
-            st.write("**Current session features:**")
-            st.write("• Automatic sign-in on return visits")
-            st.write("• Secure token-based authentication")
-            st.write("• Session expires automatically")
-            st.write("• Multi-device session management")
+
+        # Información de sesión en sidebar
+        with st.expander("ℹ️ Info de Sesión"):
+            st.write("**Características de sesión actual:**")
+            st.write("• Inicio de sesión automático en visitas de regreso")
+            st.write("• Autenticación segura basada en tokens")
+            st.write("• La sesión expira automáticamente")
+            st.write("• Gestión de sesión multi-dispositivo")
+
 
 def show_profile_editor():
     """Mostrar editor de perfil"""
     user_info = st.session_state.user_info
-    
-    with st.expander("Edit Profile", expanded=True):
+
+    with st.expander("Editar Perfil", expanded=True):
         with st.form("edit_profile_form"):
             new_name = st.text_input(
-                "Full Name",
+                "Nombre Completo",
                 value=user_info['full_name'],
                 key="edit_profile_name"
             )
-            
-            if st.form_submit_button("Update Profile", type="primary"):
+
+            if st.form_submit_button("Actualizar Perfil", type="primary"):
                 success, message = auth_manager.update_user_profile(
-                    user_info['id'], 
+                    user_info['id'],
                     new_name
                 )
-                
+
                 if success:
                     st.session_state.user_info['full_name'] = new_name
                     st.success(message)
@@ -538,48 +541,49 @@ def show_profile_editor():
                 else:
                     st.error(message)
 
+
 def show_password_changer():
     """Mostrar cambiador de contraseña"""
     user_info = st.session_state.user_info
-    
-    with st.expander("Change Password", expanded=True):
-        st.warning("⚠️ Changing your password will sign you out from all devices for security.")
-        
+
+    with st.expander("Cambiar Contraseña", expanded=True):
+        st.warning("⚠️ Cambiar tu contraseña te desconectará de todos los dispositivos por seguridad.")
+
         with st.form("change_password_form"):
             current_password = st.text_input(
-                "Current Password",
+                "Contraseña Actual",
                 type="password",
                 key="current_password"
             )
-            
+
             new_password = st.text_input(
-                "New Password",
+                "Nueva Contraseña",
                 type="password",
                 key="new_password",
-                help="Password must be at least 6 characters and contain letters and numbers"
+                help="La contraseña debe tener al menos 6 caracteres y contener letras y números"
             )
-            
+
             confirm_new_password = st.text_input(
-                "Confirm New Password",
+                "Confirmar Nueva Contraseña",
                 type="password",
                 key="confirm_new_password"
             )
-            
-            if st.form_submit_button("Change Password", type="primary"):
+
+            if st.form_submit_button("Cambiar Contraseña", type="primary"):
                 if new_password != confirm_new_password:
-                    st.error("New passwords do not match")
+                    st.error("Las nuevas contraseñas no coinciden")
                     return
-                
+
                 success, message = auth_manager.change_password(
                     user_info['id'],
                     current_password,
                     new_password
                 )
-                
+
                 if success:
                     st.success(message)
-                    st.info("Please sign in again with your new password.")
-                    # The password change method automatically invalidates all sessions
+                    st.info("Por favor inicia sesión de nuevo con tu nueva contraseña.")
+                    # El método de cambio de contraseña invalida automáticamente todas las sesiones
                     logout_user()
                 else:
                     st.error(message)

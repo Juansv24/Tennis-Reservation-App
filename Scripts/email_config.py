@@ -1,5 +1,5 @@
 """
-Email Configuration and Utilities for Tennis Court Reservation System
+Configuración y Utilidades de Email para Sistema de Reservas de Cancha de Tenis
 """
 
 import smtplib
@@ -12,16 +12,15 @@ from datetime import datetime
 from typing import Optional, Tuple
 import streamlit as st
 
-# Email configuration
+# Configuración de email
 SMTP_SERVER = "smtp.gmail.com"
 SMTP_PORT = 587
 EMAIL_ADDRESS = st.secrets["email"]["address"]
 EMAIL_PASSWORD = st.secrets["email"]["password"]
 
 
-
 class EmailManager:
-    """Manage email sending for the tennis court reservation system"""
+    """Administrador de envío de emails para el sistema de reservas"""
 
     def __init__(self):
         self.smtp_server = SMTP_SERVER
@@ -30,56 +29,55 @@ class EmailManager:
             self.email_address = st.secrets["email"]["address"]
             self.email_password = st.secrets["email"]["password"]
         except KeyError:
-            st.warning("⚠️ Email credentials not configured. Email features may not work.")
-
+            st.warning("⚠️ Credenciales de email no configuradas. Las funciones de email pueden no funcionar.")
 
     def generate_verification_code(self) -> str:
-        """Generate a 6-character verification code"""
+        """Generar código de verificación de 6 caracteres"""
         return ''.join(secrets.choice(string.ascii_uppercase + string.digits) for _ in range(6))
 
     def is_configured(self) -> bool:
-        """Check if email is properly configured"""
+        """Verificar si el email está configurado correctamente"""
         try:
             return bool(st.secrets["email"]["address"] and st.secrets["email"]["password"])
         except KeyError:
             return False
 
     def send_email(self, to_email: str, subject: str, body_html: str, body_text: str = None) -> Tuple[bool, str]:
-        """Send an email with HTML and optional text fallback"""
+        """Enviar email con HTML y texto alternativo opcional"""
         if not self.is_configured():
-            return False, "Email service not configured"
+            return False, "Servicio de email no configurado"
 
         try:
-            # Create message
+            # Crear mensaje
             message = MIMEMultipart("alternative")
             message["Subject"] = subject
             message["From"] = self.email_address
             message["To"] = to_email
 
-            # Add text version if provided
+            # Agregar versión de texto si se proporciona
             if body_text:
                 text_part = MIMEText(body_text, "plain")
                 message.attach(text_part)
 
-            # Add HTML version
+            # Agregar versión HTML
             html_part = MIMEText(body_html, "html")
             message.attach(html_part)
 
-            # Create secure connection and send
+            # Crear conexión segura y enviar
             context = ssl.create_default_context()
             with smtplib.SMTP(self.smtp_server, self.smtp_port) as server:
                 server.starttls(context=context)
                 server.login(self.email_address, self.email_password)
                 server.sendmail(self.email_address, to_email, message.as_string())
 
-            return True, "Email sent successfully"
+            return True, "Email enviado exitosamente"
 
         except Exception as e:
-            return False, f"Failed to send email: {str(e)}"
+            return False, f"Error al enviar email: {str(e)}"
 
     def send_verification_email(self, to_email: str, verification_code: str, user_name: str) -> Tuple[bool, str]:
-        """Send email verification code"""
-        subject = "🎾 Verify Your Tennis Court Account"
+        """Enviar código de verificación por email"""
+        subject = "🎾 Verifica tu Cuenta del Sistema de Reservas"
 
         html_body = f"""
         <!DOCTYPE html>
@@ -97,24 +95,24 @@ class EmailManager:
         <body>
             <div class="container">
                 <div class="header">
-                    <h1>🎾 Tennis Court Reservations</h1>
-                    <p>Welcome to Colina Campestre!</p>
+                    <h1>🎾 Reservas de Cancha de Tenis</h1>
+                    <p>¡Bienvenido a Colina Campestre!</p>
                 </div>
 
                 <div class="content">
-                    <h2>Hi {user_name}!</h2>
-                    <p>Thanks for creating your tennis court reservation account. To complete your registration, please use this verification code:</p>
+                    <h2>¡Hola {user_name}!</h2>
+                    <p>Gracias por crear tu cuenta para reservas de cancha de tenis. Para completar tu registro, por favor usa este código de verificación:</p>
 
                     <div class="code">{verification_code}</div>
 
-                    <p>This code will expire in 10 minutes for security reasons.</p>
+                    <p>Este código expirará en 10 minutos por razones de seguridad.</p>
 
-                    <p>If you didn't create this account, please ignore this email.</p>
+                    <p>Si no creaste esta cuenta, por favor ignora este email.</p>
                 </div>
 
                 <div class="footer">
-                    <p>Tennis Court Reservation System - Colina Campestre</p>
-                    <p>This is an automated message, please don't reply to this email.</p>
+                    <p>Sistema de Reservas de Cancha de Tenis - Colina Campestre</p>
+                    <p>Este es un mensaje automatizado, por favor no respondas a este email.</p>
                 </div>
             </div>
         </body>
@@ -122,43 +120,43 @@ class EmailManager:
         """
 
         text_body = f"""
-        Tennis Court Reservations - Email Verification
+        Sistema de Reservas de Cancha de Tenis - Verificación de Email
 
-        Hi {user_name}!
+        ¡Hola {user_name}!
 
-        Thanks for creating your account. Please use this verification code to complete your registration:
+        Gracias por crear tu cuenta. Por favor usa este código de verificación para completar tu registro:
 
         {verification_code}
 
-        This code expires in 10 minutes.
+        Este código expira en 10 minutos.
 
-        If you didn't create this account, please ignore this email.
+        Si no creaste esta cuenta, por favor ignora este email.
 
-        Tennis Court Reservation System - Colina Campestre
+        Sistema de Reservas de Cancha de Tenis - Colina Campestre
         """
 
         return self.send_email(to_email, subject, html_body, text_body)
 
     def send_reservation_confirmation(self, to_email: str, user_name: str, date: datetime, hours: list,
                                       reservation_details: dict) -> Tuple[bool, str]:
-        """Send reservation confirmation email with calendar event"""
-        subject = f"🎾 Reservation Confirmed - {date.strftime('%B %d, %Y')}"
+        """Enviar email de confirmación de reserva con evento de calendario"""
+        subject = f"🎾 Reserva Confirmada - {date.strftime('%d de %B, %Y')}"
 
-        # Format hours
+        # Formatear horas
         sorted_hours = sorted(hours)
         start_time = f"{sorted_hours[0]:02d}:00"
         end_time = f"{(sorted_hours[-1] + 1):02d}:00"
 
-        # Create calendar event data
+        # Crear datos del evento de calendario
         event_start = date.replace(hour=sorted_hours[0], minute=0, second=0)
         event_end = date.replace(hour=sorted_hours[-1] + 1, minute=0, second=0)
 
-        # Format dates for calendar (UTC format)
+        # Formatear fechas para calendario (formato UTC)
         cal_start = event_start.strftime('%Y%m%dT%H%M%S')
         cal_end = event_end.strftime('%Y%m%dT%H%M%S')
 
-        # Google Calendar link
-        calendar_link = f"https://calendar.google.com/calendar/render?action=TEMPLATE&text=Tennis%20Court%20Reservation&dates={cal_start}/{cal_end}&details=Tennis%20Court%20Reservation%20at%20Colina%20Campestre%0A%0AReserved%20by:%20{user_name}%0AEmail:%20{to_email}&location=Colina%20Campestre%20Tennis%20Court"
+        # Enlace de Google Calendar
+        calendar_link = f"https://calendar.google.com/calendar/render?action=TEMPLATE&text=Reserva%20Cancha%20de%20Tenis&dates={cal_start}/{cal_end}&details=Reserva%20de%20Cancha%20de%20Tenis%20en%20Colina%20Campestre%0A%0AReservado%20por:%20{user_name}%0AEmail:%20{to_email}&location=Cancha%20de%20Tenis%20Colina%20Campestre"
 
         html_body = f"""
         <!DOCTYPE html>
@@ -177,64 +175,72 @@ class EmailManager:
         <body>
             <div class="container">
                 <div class="header">
-                    <h1>🎾 Reservation Confirmed!</h1>
-                    <p>Your court is ready!</p>
+                    <h1>🎾 ¡Reserva Confirmada!</h1>
+                    <p>¡Tu cancha está lista!</p>
                 </div>
 
                 <div class="content">
-                    <h2>Hi {user_name}!</h2>
-                    <p>Great news! Your tennis court reservation has been confirmed. Here are the details:</p>
+                    <h2>¡Hola {user_name}!</h2>
+                    <p>¡Excelentes noticias! Tu reserva de cancha de tenis ha sido confirmada. Aquí están los detalles:</p>
 
                     <div class="reservation-details">
-                        <h3>📅 Reservation Details</h3>
-                        <p><strong>Name:</strong> {user_name}</p>
-                        <p><strong>Date:</strong> {date.strftime('%A, %B %d, %Y')}</p>
-                        <p><strong>Time:</strong> {start_time} - {end_time}</p>
-                        <p><strong>Duration:</strong> {len(hours)} hour(s)</p>
-                        <p><strong>Location:</strong> Colina Campestre Tennis Court</p>
+                        <h3>📅 Detalles de la Reserva</h3>
+                        <p><strong>Nombre:</strong> {user_name}</p>
+                        <p><strong>Fecha:</strong> {date.strftime('%A, %d de %B de %Y')}</p>
+                        <p><strong>Hora:</strong> {start_time} - {end_time}</p>
+                        <p><strong>Duración:</strong> {len(hours)} hora(s)</p>
+                        <p><strong>Ubicación:</strong> Cancha de Tenis Colina Campestre</p>
                     </div>
 
-                    <p>Don't forget to bring your racket and be on time!</p>
+                    <p>¡No olvides traer tu raqueta y llegar a tiempo!</p>
 
                     <p style="text-align: center;">
                         <a href="{calendar_link}" class="calendar-button" target="_blank">
-                            📅 Add to Google Calendar
+                            📅 Agregar a Google Calendar
                         </a>
                     </p>
 
-                    <p><small>Having trouble with the button? Copy this link: {calendar_link}</small></p>
+                    <p><small>¿Problemas con el botón? Copia este enlace: {calendar_link}</small></p>
                 </div>
 
                 <div class="footer">
-                    <p>Tennis Court Reservation System - Colina Campestre</p>
-                    <p>This is an automated confirmation. Please don't reply to this email.</p>
+                    <p>Sistema de Reservas de Cancha de Tenis - Colina Campestre</p>
+                    <p>Esta es una confirmación automatizada. Por favor no respondas a este email.</p>
                 </div>
             </div>
         </body>
         </html>
         """
 
+        # Nombres de meses en español
+        months_es = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
+                     'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
+        days_es = ['lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado', 'domingo']
+
+        day_name = days_es[date.weekday()]
+        month_name = months_es[date.month - 1]
+        formatted_date = f"{day_name}, {date.day} de {month_name} de {date.year}"
+
         text_body = f"""
-        Tennis Court Reservation Confirmed!
+        ¡Reserva de Cancha de Tenis Confirmada!
 
-        Hi {user_name}!
+        ¡Hola {user_name}!
 
-        Your tennis court reservation has been confirmed:
+        Tu reserva de cancha de tenis ha sido confirmada:
 
-        Reservation Details:
-        - Name: {user_name}
-        - Date: {date.strftime('%A, %B %d, %Y')}
-        - Time: {start_time} - {end_time}
-        - Duration: {len(hours)} hour(s)
-        - Location: Colina Campestre Tennis Court
+        Detalles de la Reserva:
+        - Nombre: {user_name}
+        - Fecha: {formatted_date}
+        - Hora: {start_time} - {end_time}
+        - Duración: {len(hours)} hora(s)
+        - Ubicación: Cancha de Tenis Colina Campestre
 
-        Add to Google Calendar: {calendar_link}
+        Agregar a Google Calendar: {calendar_link}
 
-        Tennis Court Reservation System - Colina Campestre
+        Sistema de Reservas de Cancha de Tenis - Colina Campestre
         """
 
         return self.send_email(to_email, subject, html_body, text_body)
 
-
-# Global instance
+# Instancia global
 email_manager = EmailManager()
