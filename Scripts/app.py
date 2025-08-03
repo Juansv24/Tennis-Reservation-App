@@ -84,8 +84,8 @@ def show_footer():
             f"""
             <div style='text-align: center; color: #666;'>
                 <b>Sistema de Reservas de Cancha de Tenis</b><br>
-                Construido con Streamlit • Base de Datos SQLite • Sesiones Persistentes<br>
-                <small>🔒 Tu sesión se guarda y restaura automáticamente</small>
+                Desarrollada en Streamlit por Juan Sebastian Vallejo
+                Todos los derechos reservados
             </div>
             """,
             unsafe_allow_html=True
