@@ -127,7 +127,7 @@ class AuthManager:
         except Exception:
             pass
     
-    def create_session(self, user_id: int, remember_me: bool = False, user_agent: str = None) -> str:
+    def create_session(self, user_id: int, remember_me: bool = True, user_agent: str = None) -> str:
         """Create session - simplified but maintains identical API"""
         try:
             self._cleanup_expired_sessions()
@@ -305,7 +305,7 @@ class AuthManager:
         except Exception as e:
             return False, f"Error creating account: {str(e)}"
     
-    def login_user(self, email: str, password: str, remember_me: bool = False) -> Tuple[bool, str, Optional[Dict]]:
+    def login_user(self, email: str, password: str, remember_me: bool = True) -> Tuple[bool, str, Optional[Dict]]:
         """Login user - identical API to original"""
         try:
             if not email or not password:

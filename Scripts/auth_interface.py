@@ -96,16 +96,7 @@ def show_login_form():
             placeholder="Enter your password",
             key="login_password"
         )
-        
-        # Remember Me checkbox
-        st.markdown('<div class="remember-me-container">', unsafe_allow_html=True)
-        remember_me = st.checkbox(
-            "🔒 Remember me for 30 days",
-            key="remember_me_checkbox",
-            help="Keep me signed in on this device for 30 days"
-        )
-        st.markdown('</div>', unsafe_allow_html=True)
-        
+
         login_submitted = st.form_submit_button(
             "Sign In",
             type="primary",
@@ -113,7 +104,7 @@ def show_login_form():
         )
         
         if login_submitted:
-            handle_login(email, password, remember_me)
+            handle_login(email, password, True)
     
     st.markdown('</div>', unsafe_allow_html=True)
     
@@ -184,7 +175,7 @@ def show_registration_form():
         st.session_state.auth_mode = 'login'
         st.rerun()
 
-def handle_login(email: str, password: str, remember_me: bool = False):
+def handle_login(email: str, password: str, remember_me: bool = True):
     """Manejar intento de login con Remember Me"""
     if not email or not password:
         st.error("Please fill in all fields")
@@ -199,9 +190,7 @@ def handle_login(email: str, password: str, remember_me: bool = False):
         # Save session token for persistence
         if user_info and user_info.get('session_token'):
             save_session_token(user_info['session_token'])
-        
-        duration_text = "30 days" if remember_me else "1 day"
-        st.success(f"Welcome back, {user_info['full_name']}! Session valid for {duration_text}.")
+
         st.balloons()
         st.rerun()
     else:
