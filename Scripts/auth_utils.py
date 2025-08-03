@@ -146,18 +146,25 @@ def logout_all_sessions():
             pass
         logout_user()
 
+
 def init_auth_session_state():
-    """Initialize authentication session state"""
-    
-    # Initialize base authentication states
+    """Inicializar estado de sesión de autenticación"""
     if 'authenticated' not in st.session_state:
         st.session_state.authenticated = False
     if 'user_info' not in st.session_state:
         st.session_state.user_info = None
     if 'auth_mode' not in st.session_state:
-        st.session_state.auth_mode = 'login'
-    
+        st.session_state.auth_mode = 'login'  # 'login' o 'register'
+
+    # NEW: Add these email verification states
+    if 'awaiting_verification' not in st.session_state:
+        st.session_state.awaiting_verification = False
+    if 'pending_name' not in st.session_state:
+        st.session_state.pending_name = None
+    if 'pending_email' not in st.session_state:
+        st.session_state.pending_email = None
+    if 'pending_password' not in st.session_state:
+        st.session_state.pending_password = None
+
     # Try auto-login on initialization
-    if try_auto_login() and not st.session_state.get('auto_login_notified', False):
-        st.session_state.show_auto_login_notice = True
-        st.session_state.auto_login_notified = True
+    try_auto_login()

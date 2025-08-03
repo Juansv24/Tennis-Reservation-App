@@ -9,6 +9,7 @@ from datetime import timedelta
 from database_manager import db_manager
 from auth_utils import get_current_user
 from timezone_utils import get_colombia_today, get_colombia_now
+from email_config import email_manager
 
 # Configuración
 COURT_HOURS = list(range(6, 22))  # 6 AM a 9 PM
@@ -276,21 +277,25 @@ def handle_reservation_submission(current_user, date, selected_hours):
     if len(user_existing_hours) + len(selected_hours) > 2:
         st.error(f"You can only reserve 2 hours per day. You already have {len(user_existing_hours)} hour(s) reserved.")
         return
-    
+
     # Intentar guardar todas las horas
     success_count = 0
     failed_hours = []
-    
+
     for hour in selected_hours:
         if db_manager.save_reservation(date, hour, current_user['full_name'], current_user['email']):
             success_count += 1
         else:
             failed_hours.append(hour)
-    
+
     # Mostrar resultado
     if success_count == len(selected_hours):
         # Éxito completo
         show_success_message(current_user['full_name'], date, selected_hours)
+
+        # Send confirmation email
+        send_reservation_confirmation_email(current_user, date, selected_hours)
+
         st.session_state.selected_hours = []
         st.session_state.selected_date = None
         st.balloons()
@@ -303,6 +308,40 @@ def handle_reservation_submission(current_user, date, selected_hours):
     else:
         # Falló completamente
         st.error("Unable to make reservation. All selected time slots are already taken.")
+
+def send_reservation_confirmation_email(current_user, date, selected_hours):
+    """Send reservation confirmation email"""
+    try:
+        # Check if email service is configured first
+        if not email_manager.is_configured():
+            st.info("📧 Email service not configured - reservation saved without email confirmation")
+            return
+
+        # Convert date to datetime for email
+        date_datetime = datetime.datetime.combine(date, datetime.datetime.min.time())
+
+        success, message = email_manager.send_reservation_confirmation(
+            current_user['email'],
+            current_user['full_name'],
+            date_datetime,
+            selected_hours,
+            {}  # Additional reservation details if needed
+        )
+
+        if success:
+            st.success("📧 Confirmation email sent!")
+        else:
+            st.warning(f"⚠️ Reservation saved but email failed: {message}")
+            # Show the specific error for debugging
+            with st.expander("Email Error Details"):
+                st.write(message)
+
+    except Exception as e:
+        st.warning("⚠️ Reservation saved but email notification failed")
+        # Show error details for debugging
+        with st.expander("Error Details"):
+            st.write(f"Error: {str(e)}")
+        st.info("💡 Your reservation is confirmed even without the email")
 
 def show_success_message(name, date_obj, selected_hours):
     """Mostrar mensaje de éxito"""

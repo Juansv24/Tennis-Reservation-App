@@ -1,6 +1,5 @@
 """
 Enhanced Main Application for Tennis Court Reservation System with Working Authentication
-The key fix: Initialize auth state BEFORE any other UI components
 """
 
 import streamlit as st

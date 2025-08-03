@@ -268,43 +268,50 @@ class AuthManager:
                 return True
         except Exception:
             return False
-    
-    def register_user(self, email: str, password: str, full_name: str) -> Tuple[bool, str]:
-        """Register user - identical to original"""
+
+    def register_user(self, email: str, password: str, full_name: str, verification_code: str = None) -> Tuple[
+        bool, str]:
+        """Register user with email verification"""
         try:
             if not email or not self._validate_email(email):
                 return False, "Please enter a valid email address"
-            
+
             if not full_name or len(full_name.strip()) < 2:
                 return False, "Please enter a valid full name"
-            
+
             is_valid_password, password_message = self._validate_password(password)
             if not is_valid_password:
                 return False, password_message
-            
+
             email = email.strip().lower()
             full_name = full_name.strip()
-            
+
+            # If verification code is required
+            if verification_code:
+                from database_manager import db_manager
+                if not db_manager.verify_email_code(email, verification_code):
+                    return False, "Invalid or expired verification code"
+
             with self.get_connection() as conn:
                 cursor = conn.cursor()
-                
+
                 cursor.execute('SELECT id FROM users WHERE email = ?', (email,))
                 if cursor.fetchone():
                     return False, "An account with this email already exists"
-                
+
                 password_hash, salt = self._hash_password(password)
-                
+
                 cursor.execute('''
-                    INSERT INTO users (email, password_hash, salt, full_name)
-                    VALUES (?, ?, ?, ?)
-                ''', (email, password_hash, salt, full_name))
-                
+                               INSERT INTO users (email, password_hash, salt, full_name)
+                               VALUES (?, ?, ?, ?)
+                               ''', (email, password_hash, salt, full_name))
+
                 conn.commit()
                 return True, "Account created successfully"
-        
+
         except Exception as e:
             return False, f"Error creating account: {str(e)}"
-    
+
     def login_user(self, email: str, password: str, remember_me: bool = True) -> Tuple[bool, str, Optional[Dict]]:
         """Login user - identical API to original"""
         try:
