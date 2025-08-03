@@ -176,7 +176,7 @@ def show_reservation_tab():
 
 def show_reservation_details(today_date, tomorrow_date, current_user, user_today_reservations, user_tomorrow_reservations):
     """Mostrar panel de detalles de reserva"""
-    st.subheader("Detalles de Reserva")
+    st.subheader("Detalles de la Reserva")
 
     # Mostrar información del usuario
     st.markdown(f"""
@@ -196,9 +196,9 @@ def show_reservation_details(today_date, tomorrow_date, current_user, user_today
     # Mostrar reglas de reserva
     with st.expander("📋 Reglas de Reserva"):
         st.markdown("""
-        • **Solo reservas para hoy y mañana**  
-        • **Máximo 2 horas** por persona por día  
-        • **Horas consecutivas** requeridas si reservas múltiples slots  
+        • **Solo se puede hacer reservar para hoy y para mañana**  
+        • **Máximo 2 horas** por persona por día. 
+        • **Horas consecutivas** requeridas si se reservan 2 horas
         • **Horario de cancha:** 6:00 AM - 9:00 PM  
         """)
 
@@ -229,11 +229,11 @@ def show_reservation_details(today_date, tomorrow_date, current_user, user_today
             handle_reservation_submission(current_user, selected_date, selected_hours)
 
     else:
-        st.info("Selecciona slots de tiempo del calendario para continuar")
+        st.info("Selecciona los horarios disponibles en el calendario para continuar")
 
         st.markdown("### Cómo Reservar")
-        st.write("1. **Selecciona slots de tiempo** de hoy o mañana (hasta 2 horas)")
-        st.write("2. **Confirma tu reserva** con un clic")
+        st.write("1. **Selecciona los horarios disponibles que desees entre hoy y mañana (hasta 2 horas)")
+        st.write("2. **Confirma tu reserva** con un click")
 
 def show_user_existing_reservations(today_date, tomorrow_date, user_today_reservations, user_tomorrow_reservations):
     """Mostrar reservas existentes del usuario"""
@@ -359,7 +359,7 @@ def show_success_message(name, date_obj, selected_hours):
 
 def show_calendar_view(today, tomorrow, today_reservations, tomorrow_reservations, current_hour, current_user):
     """Mostrar vista de calendario"""
-    st.subheader("Disponibilidad de Cancha")
+    st.subheader("Disponibilidad de la Cancha")
 
     # Crear dos columnas para los dos días
     today_col, tomorrow_col = st.columns(2)

@@ -463,7 +463,6 @@ def show_user_profile():
         st.markdown(f"""
         <div class="session-info">
             <strong>🔐 Sesión Activa:</strong> {token_display}<br>
-            <small>Tu sesión se mantiene segura entre visitas del navegador</small>
         </div>
         """, unsafe_allow_html=True)
 

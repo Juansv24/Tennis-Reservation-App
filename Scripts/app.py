@@ -61,10 +61,6 @@ def show_header():
     if user_info:
         st.success(f"¡Bienvenido de vuelta, **{user_info['full_name']}**! 👋")
 
-        # Mostrar información de sesión
-        session_token = user_info.get('session_token', '')
-        if session_token:
-            st.info("🔐 Tu sesión está activa y recordada")
 
     # Mostrar mensaje de éxito de inicio de sesión automático
     if st.session_state.get('show_auto_login_notice', False):
