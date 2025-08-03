@@ -27,8 +27,7 @@ class EmailManager:
             self.email_address = st.secrets["email"]["address"]
             self.email_password = st.secrets["email"]["password"]
         except KeyError:
-            self.email_address = None
-            self.email_password = None
+            st.warning("⚠️ Credenciales de email no configuradas...")
 
     def generate_verification_code(self) -> str:
         """Generar código de verificación de 6 caracteres"""
