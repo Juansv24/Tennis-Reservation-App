@@ -86,7 +86,7 @@ class EmailManager:
                 .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
                 .header {{ background: linear-gradient(135deg, #001854 0%, #2478CC 100%); color: white; padding: 30px; text-align: center; border-radius: 10px; }}
                 .content {{ background: #f9f9f9; padding: 30px; border-radius: 10px; margin: 20px 0; }}
-                .code {{ background: #FFD400; color: #001854; font-size: 36px; font-weight: bold; padding: 20px; text-align: center; border-radius: 8px; letter-spacing: 8px; }}
+                .code {{ background: #FFD400; color: #FFFFFF; font-size: 36px; font-weight: bold; padding: 20px; text-align: center; border-radius: 8px; letter-spacing: 8px; }}
                 .footer {{ text-align: center; color: #666; font-size: 14px; }}
             </style>
         </head>

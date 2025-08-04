@@ -204,33 +204,46 @@ def show_reservation_details(today_date, tomorrow_date, current_user, user_today
         """, unsafe_allow_html=True)
 
     # Mostrar selección actual
-    if selected_hours and selected_date is not None:
-        st.markdown("### Nueva Selección")
-
-        st.write(f"**Fecha:** {format_date_full(selected_date)}")
-        st.write(f"**Slots de Tiempo:** {len(selected_hours)} hora(s)")
-
-        for hour in sorted(selected_hours):
-            st.write(f"• {format_hour(hour)} - {format_hour(hour + 1)}")
-
-        if len(selected_hours) > 1:
-            start_time = format_hour(min(selected_hours))
-            end_time = format_hour(max(selected_hours) + 1)
-            st.write(f"**Tiempo Total:** {start_time} - {end_time}")
-
         st.divider()
 
-        # Formulario simplificado (sin nombre y email)
+        # Always show the reservation form section
         st.markdown("### Confirmar Reserva")
 
-        # Mostrar resumen de la reserva
-        st.info(f"Reservando para: **{current_user['full_name']}** ({current_user['email']})")
+        if selected_hours and selected_date is not None:
+            # Show selection details when slots are selected
+            st.write(f"**Fecha:** {format_date_full(selected_date)}")
+            st.write(f"**Slots de Tiempo:** {len(selected_hours)} hora(s)")
 
-        if st.button("✅ Confirmar Reserva", type="primary", use_container_width=True):
-            handle_reservation_submission(current_user, selected_date, selected_hours)
+            for hour in sorted(selected_hours):
+                st.write(f"• {format_hour(hour)} - {format_hour(hour + 1)}")
 
-    else:
-        st.info("Selecciona los horarios disponibles en el calendario para continuar")
+            if len(selected_hours) > 1:
+                start_time = format_hour(min(selected_hours))
+                end_time = format_hour(max(selected_hours) + 1)
+                st.write(f"**Tiempo Total:** {start_time} - {end_time}")
+
+            # Show user confirmation
+            st.success(f"Reservando para: **{current_user['full_name']}** ({current_user['email']})")
+
+            button_disabled = False
+            button_text = "✅ Confirmar Reserva"
+        else:
+            # Show instruction when no slots selected
+            st.info("Selecciona los horarios disponibles en el calendario para continuar")
+            button_disabled = True
+            button_text = "Selecciona horarios primero"
+
+        # Always show the button - bigger and more prominent
+        st.markdown("<br>", unsafe_allow_html=True)  # Add some space
+        if st.button(
+                button_text,
+                type="primary",
+                use_container_width=True,
+                disabled=button_disabled,
+                key="confirm_reservation_btn"
+        ):
+            if selected_hours and selected_date is not None:
+                handle_reservation_submission(current_user, selected_date, selected_hours)
 
         st.markdown("### Cómo Reservar")
         st.write("1. **Selecciona los horarios disponibles** que desees entre hoy y mañana (hasta 2 horas)")
