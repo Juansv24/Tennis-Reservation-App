@@ -208,7 +208,7 @@ def show_initial_registration_form():
         password = st.text_input(
             "Contraseña",
             type="password",
-            placeholder="Crea una contraseña (mín. 6 caracteres)",
+            placeholder="Mín. 6 caracteres con letras y números",
             key="register_password",
             help="La contraseña debe tener al menos 6 caracteres y contener letras y números"
         )
@@ -282,6 +282,13 @@ def handle_initial_registration(full_name: str, email: str, password: str, confi
 
     if password != confirm_password:
         st.error("Las contraseñas no coinciden")
+        return
+
+    # ADD THIS: Validate password strength BEFORE sending code
+    from auth_manager import auth_manager
+    is_valid_password, password_message = auth_manager._validate_password(password)
+    if not is_valid_password:
+        st.error(password_message)
         return
 
     # Validar formato de email

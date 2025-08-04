@@ -313,7 +313,7 @@ class AuthManager:
             return False, f"Error al crear cuenta: {str(e)}"
 
     def login_user(self, email: str, password: str, remember_me: bool = True) -> Tuple[bool, str, Optional[Dict]]:
-        """Iniciar sesión de usuario"""
+        """Iniciar sesión de usuario con validación mejorada"""
         try:
             if not email or not password:
                 return False, "Por favor ingresa email y contraseña", None
@@ -323,27 +323,31 @@ class AuthManager:
             with self.get_connection() as conn:
                 cursor = conn.cursor()
 
+                # PRIMERO: revisar si el correo está registrado
+                cursor.execute('SELECT id FROM users WHERE email = ?', (email,))
+                if not cursor.fetchone():
+                    return False, "No existe una cuenta con este email", None
+
+                # SEGUNDO: Extraer data del usuario para validación
                 cursor.execute('''
-                               SELECT id, email, password_hash, salt, full_name, is_active
+                               SELECT id, email, password_hash, salt, full_name
                                FROM users
                                WHERE email = ?
+                                 AND is_active = 1
                                ''', (email,))
 
                 user_data = cursor.fetchone()
-
                 if not user_data:
-                    return False, "Email o contraseña inválidos", None
+                    return False, "Error de acceso. Contacta al administrador", None
 
-                user_id, user_email, stored_hash, salt, full_name, is_active = user_data
+                user_id, user_email, stored_hash, salt, full_name = user_data
 
-                if not is_active:
-                    return False, "Cuenta desactivada", None
-
+                # TERCERO: Validar contraseña
                 password_hash, _ = self._hash_password(password, salt)
-
                 if password_hash != stored_hash:
-                    return False, "Email o contraseña inválidos", None
+                    return False, "Contraseña incorrecta", None
 
+                # CUARTO: Crear sesión si todo está ok
                 session_token = self.create_session(user_id, remember_me)
 
                 if not session_token:
