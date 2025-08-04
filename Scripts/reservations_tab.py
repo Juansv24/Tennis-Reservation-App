@@ -139,6 +139,35 @@ def apply_custom_css():
         margin: 15px 0;
         color: {US_OPEN_BLUE};
     }}
+        /* Target all buttons within the big-confirm-button class */
+    .big-confirm-button button {{
+        font-size: 2rem !important;
+        padding: 20px 40px !important;
+        height: 70px !important;
+        font-weight: bold !important;
+        border-radius: 12px !important;
+        min-height: 70px !important;
+    }}
+    
+    /* More specific targeting for Streamlit's button structure */
+    div[data-testid="stButton"] button[kind="primary"] {{
+        font-size: 2rem !important;
+        padding: 20px 40px !important;
+        height: 70px !important;
+        font-weight: bold !important;
+        border-radius: 12px !important;
+        min-height: 70px !important;
+    }}
+    
+    /* Even more specific - target by the button key */
+    button[key="big_confirm_btn"] {{
+        font-size: 2rem !important;
+        padding: 20px 40px !important;
+        height: 70px !important;
+        font-weight: bold !important;
+        border-radius: 12px !important;
+        min-height: 70px !important;
+    }}
     </style>
     """, unsafe_allow_html=True)
 
@@ -167,12 +196,31 @@ def show_reservation_tab():
     left_col, right_col = st.columns([1, 2])
 
     # Panel izquierdo - Detalles de reserva
-    with left_col:
+    col1, col2, col3 = st.columns([1, 1, 1])
+    with col2:
+        # This will help us detect screen size
+        pass
+
+    # Check if we should use mobile layout (single column)
+    # For simplicity, we'll use a checkbox for user preference, but you could also auto-detect
+    use_mobile_layout = st.checkbox("📱 Usar vista móvil", key="mobile_layout",
+                                    help="Activa para pantallas pequeñas")
+
+    if use_mobile_layout:
+        # Mobile layout - stack vertically
+        show_calendar_view(today, tomorrow, today_reservations, tomorrow_reservations, current_hour, current_user)
+        st.divider()
         show_reservation_details(today, tomorrow, current_user, user_today_reservations, user_tomorrow_reservations)
 
-    # Panel derecho - Vista calendario
-    with right_col:
-        show_calendar_view(today, tomorrow, today_reservations, tomorrow_reservations, current_hour, current_user)
+    else:
+        # Desktop layout - side by side
+        left_col, right_col = st.columns([1, 2])
+
+        with left_col:
+            show_reservation_details(today, tomorrow, current_user, user_today_reservations, user_tomorrow_reservations)
+
+        with right_col:
+            show_calendar_view(today, tomorrow, today_reservations, tomorrow_reservations, current_hour, current_user)
 
 def show_reservation_details(today_date, tomorrow_date, current_user, user_today_reservations, user_tomorrow_reservations):
     """Mostrar panel de detalles de reserva"""
@@ -204,46 +252,36 @@ def show_reservation_details(today_date, tomorrow_date, current_user, user_today
         """, unsafe_allow_html=True)
 
     # Mostrar selección actual
+    if selected_hours and selected_date is not None:
+        st.markdown("### Nueva Selección")
+
+        st.write(f"**Fecha:** {format_date_full(selected_date)}")
+        st.write(f"**Slots de Tiempo:** {len(selected_hours)} hora(s)")
+
+        for hour in sorted(selected_hours):
+            st.write(f"• {format_hour(hour)} - {format_hour(hour + 1)}")
+
+        if len(selected_hours) > 1:
+            start_time = format_hour(min(selected_hours))
+            end_time = format_hour(max(selected_hours) + 1)
+            st.write(f"**Tiempo Total:** {start_time} - {end_time}")
+
         st.divider()
 
-        # Always show the reservation form section
+        # Formulario simplificado (sin nombre y email)
         st.markdown("### Confirmar Reserva")
 
-        if selected_hours and selected_date is not None:
-            # Show selection details when slots are selected
-            st.write(f"**Fecha:** {format_date_full(selected_date)}")
-            st.write(f"**Slots de Tiempo:** {len(selected_hours)} hora(s)")
+        # Mostrar resumen de la reserva
+        st.info(f"Reservando para: **{current_user['full_name']}** ({current_user['email']})")
 
-            for hour in sorted(selected_hours):
-                st.write(f"• {format_hour(hour)} - {format_hour(hour + 1)}")
+        # Add visual emphasis and bigger button
+        st.markdown('<div class="big-confirm-button">', unsafe_allow_html=True)
+        if st.button(r"$\textsf{\normalsize  ✅ Confirmar Reserva}$", type="primary", use_container_width=True, key="big_confirm_btn"):
+            handle_reservation_submission(current_user, selected_date, selected_hours)
+        st.markdown('</div>', unsafe_allow_html=True)
 
-            if len(selected_hours) > 1:
-                start_time = format_hour(min(selected_hours))
-                end_time = format_hour(max(selected_hours) + 1)
-                st.write(f"**Tiempo Total:** {start_time} - {end_time}")
-
-            # Show user confirmation
-            st.success(f"Reservando para: **{current_user['full_name']}** ({current_user['email']})")
-
-            button_disabled = False
-            button_text = "✅ Confirmar Reserva"
-        else:
-            # Show instruction when no slots selected
-            st.info("Selecciona los horarios disponibles en el calendario para continuar")
-            button_disabled = True
-            button_text = "Selecciona horarios primero"
-
-        # Always show the button - bigger and more prominent
-        st.markdown("<br>", unsafe_allow_html=True)  # Add some space
-        if st.button(
-                button_text,
-                type="primary",
-                use_container_width=True,
-                disabled=button_disabled,
-                key="confirm_reservation_btn"
-        ):
-            if selected_hours and selected_date is not None:
-                handle_reservation_submission(current_user, selected_date, selected_hours)
+    else:
+        st.info("Selecciona los horarios disponibles en el calendario para continuar")
 
         st.markdown("### Cómo Reservar")
         st.write("1. **Selecciona los horarios disponibles** que desees entre hoy y mañana (hasta 2 horas)")

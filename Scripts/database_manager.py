@@ -247,7 +247,7 @@ class DatabaseManager:
                 cursor.execute('''
                                INSERT INTO email_verifications (email, code, expires_at)
                                VALUES (?, ?, ?)
-                               ''', (email.strip().lower(), code, expires_at.isoformat()))
+                               ''', (email.strip().lower(), code.upper(), expires_at.isoformat()))
 
                 conn.commit()
                 return True
@@ -261,31 +261,50 @@ class DatabaseManager:
             with self.get_connection() as conn:
                 cursor = conn.cursor()
 
+                # Get current time in the same format as stored
+                from timezone_utils import get_colombia_now
+                current_time = get_colombia_now().replace(tzinfo=None).isoformat()
+
                 cursor.execute('''
-                               SELECT id
+                               SELECT id, expires_at
                                FROM email_verifications
                                WHERE email = ?
                                  AND code = ?
-                                 AND expires_at > CURRENT_TIMESTAMP
                                  AND is_used = 0
+                               ORDER BY created_at DESC LIMIT 1
                                ''', (email.strip().lower(), code.strip().upper()))
 
                 result = cursor.fetchone()
 
                 if result:
-                    # Marcar como usado
-                    cursor.execute('''
-                                   UPDATE email_verifications
-                                   SET is_used = 1
-                                   WHERE id = ?
-                                   ''', (result[0],))
-                    conn.commit()
-                    return True
+                    verification_id, expires_at_str = result
+
+                    # Parse the expiration time and compare
+                    try:
+                        from datetime import datetime
+                        expires_at = datetime.fromisoformat(expires_at_str)
+                        current_dt = get_colombia_now().replace(tzinfo=None)
+
+                        if current_dt > expires_at:
+                            return False  # Expired
+
+                        # Mark as used
+                        cursor.execute('''
+                                       UPDATE email_verifications
+                                       SET is_used = 1
+                                       WHERE id = ?
+                                       ''', (verification_id,))
+                        conn.commit()
+                        return True
+
+                    except ValueError:
+                        return False
 
                 return False
-        except Exception:
-            return False
 
+        except Exception as e:
+            print(f"Error in verify_email_code: {str(e)}")  # For debugging
+            return False
 
 # Instancia global
 db_manager = DatabaseManager()
