@@ -1,4 +1,4 @@
 streamlit
-supabase==2.3.4
+supabase==2.18.0
 pytz
 pandas
