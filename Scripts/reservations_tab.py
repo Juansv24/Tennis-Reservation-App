@@ -198,15 +198,19 @@ def show_reservation_tab():
     )
 
     if should_refresh:
-        # Show loading indicator for fresh data
         with st.spinner("Actualizando disponibilidad..."):
-            # Fetch fresh data from database
-            today_reservations = db_manager.get_reservations_with_names_for_date(today)
-            tomorrow_reservations = db_manager.get_reservations_with_names_for_date(tomorrow)
-            user_today_reservations = db_manager.get_user_reservations_for_date(current_user['email'], today)
-            user_tomorrow_reservations = db_manager.get_user_reservations_for_date(current_user['email'], tomorrow)
+            # Single database call instead of 4 separate calls
+            summary = db_manager.get_date_reservations_summary([today, tomorrow], current_user['email'])
 
-        # Cache the data
+            today_str = today.strftime('%Y-%m-%d')
+            tomorrow_str = tomorrow.strftime('%Y-%m-%d')
+
+            today_reservations = summary['reservation_names'].get(today_str, {})
+            tomorrow_reservations = summary['reservation_names'].get(tomorrow_str, {})
+            user_today_reservations = summary['user_reservations'].get(today_str, [])
+            user_tomorrow_reservations = summary['user_reservations'].get(tomorrow_str, [])
+
+        # Cache the data (same structure as before)
         st.session_state[cache_key] = {
             'today_reservations': today_reservations,
             'tomorrow_reservations': tomorrow_reservations,
@@ -605,8 +609,10 @@ def handle_time_slot_click(hour, date, current_user):
         else:
             user_existing_hours = cached_data['user_tomorrow_reservations']
     else:
-        # Fallback if no cache (shouldn't happen)
-        user_existing_hours = db_manager.get_user_reservations_for_date(current_user['email'], date)
+        # Fallback if no cache (shouldn't happen) - use optimized method
+        summary = db_manager.get_date_reservations_summary([date], current_user['email'])
+        date_str = date.strftime('%Y-%m-%d')
+        user_existing_hours = summary['user_reservations'].get(date_str, [])
 
     # Si es una fecha diferente, limpiar selección anterior
     if selected_date is not None and selected_date != date:

@@ -101,6 +101,53 @@ class SupabaseManager:
         except Exception:
             return []
 
+    def get_date_reservations_summary(self, dates: List[datetime.date], user_email: str) -> Dict:
+        """Get all reservation data for multiple dates in one call"""
+        try:
+            date_strings = [d.strftime('%Y-%m-%d') for d in dates]
+
+            # Single query for all reservations across dates
+            result = self.client.table('reservations').select(
+                'date, hour, name, email'
+            ).in_('date', date_strings).order('date, hour').execute()
+
+            # Initialize summary structure
+            summary = {
+                'all_reservations': {},
+                'user_reservations': {},
+                'reservation_names': {}
+            }
+
+            # Initialize each date
+            for date in dates:
+                date_str = date.strftime('%Y-%m-%d')
+                summary['all_reservations'][date_str] = []
+                summary['user_reservations'][date_str] = []
+                summary['reservation_names'][date_str] = {}
+
+            # Process results
+            for row in result.data:
+                date_str = row['date']
+                hour = row['hour']
+
+                summary['all_reservations'][date_str].append(hour)
+                summary['reservation_names'][date_str][hour] = row['name']
+
+                if row['email'] == user_email.strip().lower():
+                    summary['user_reservations'][date_str].append(hour)
+
+            return summary
+        except Exception as e:
+            st.error(f"Error obteniendo datos de reservas: {e}")
+            # Return empty structure on error
+            summary = {'all_reservations': {}, 'user_reservations': {}, 'reservation_names': {}}
+            for date in dates:
+                date_str = date.strftime('%Y-%m-%d')
+                summary['all_reservations'][date_str] = []
+                summary['user_reservations'][date_str] = []
+                summary['reservation_names'][date_str] = {}
+            return summary
+
     def delete_reservation(self, date: str, hour: int) -> bool:
         """Eliminar una reserva específica"""
         try:

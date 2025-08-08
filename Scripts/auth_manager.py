@@ -115,9 +115,16 @@ class SupabaseAuthManager:
                 return None
 
             # Verificar expiración
-            expires_at = datetime.fromisoformat(session['expires_at'].replace('Z', ''))
-            # Use Colombian timezone for comparison
-            current_time = get_colombia_now().replace(tzinfo=None)  # Make timezone-naive for comparison
+            expires_at_str = session['expires_at']
+            if expires_at_str.endswith('Z'):
+                expires_at_str = expires_at_str[:-1]  # Remove Z
+            expires_at = datetime.fromisoformat(expires_at_str)
+
+            if expires_at.tzinfo is not None:
+                expires_at = expires_at.replace(tzinfo=None)
+
+            current_time = get_colombia_now().replace(tzinfo=None)
+
             if expires_at < current_time:
                 self.destroy_session(session_token)
                 return None
