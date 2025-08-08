@@ -7,6 +7,7 @@ import secrets
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Tuple
 from database_manager import db_manager
+from timezone_utils import get_colombia_now
 
 class SupabaseAuthManager:
     """Administrador de autenticación usando Supabase"""
@@ -69,7 +70,7 @@ class SupabaseAuthManager:
                 try:
                     session_token = self._generate_session_token()
                     duration_days = 30 if remember_me else 1
-                    expires_at = datetime.now() + timedelta(days=duration_days)
+                    expires_at = get_colombia_now().replace(tzinfo=None) + timedelta(days=duration_days)
 
                     result = self.client.table('user_sessions').insert({
                         'user_id': user_id,
@@ -115,18 +116,20 @@ class SupabaseAuthManager:
 
             # Verificar expiración
             expires_at = datetime.fromisoformat(session['expires_at'].replace('Z', ''))
-            if expires_at < datetime.now():
+            # Use Colombian timezone for comparison
+            current_time = get_colombia_now().replace(tzinfo=None)  # Make timezone-naive for comparison
+            if expires_at < current_time:
                 self.destroy_session(session_token)
                 return None
 
             # Actualizar último uso de la sesión
             self.client.table('user_sessions').update({
-                'last_used': datetime.now().isoformat()
+                'last_used': get_colombia_now().replace(tzinfo=None).isoformat()
             }).eq('session_token', session_token).execute()
 
             # Actualizar último login del usuario
             self.client.table('users').update({
-                'last_login': datetime.now().isoformat()
+                'last_login': get_colombia_now().replace(tzinfo=None).isoformat()
             }).eq('id', session['user_id']).execute()
 
             return {

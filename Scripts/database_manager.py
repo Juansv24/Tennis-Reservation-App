@@ -6,6 +6,7 @@ from supabase import create_client, Client
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Tuple
 import contextlib
+from timezone_utils import get_colombia_now
 
 
 class SupabaseManager:
@@ -41,7 +42,7 @@ class SupabaseManager:
                 'hour': hour,
                 'name': name.strip(),
                 'email': email.strip().lower(),
-                'created_at': datetime.now().isoformat()
+                'created_at': get_colombia_now().isoformat()
             }).execute()
             return len(result.data) > 0
         except Exception as e:
@@ -154,7 +155,7 @@ class SupabaseManager:
     def cleanup_expired_data(self):
         """Limpiar datos expirados del sistema"""
         try:
-            now = datetime.now().isoformat()
+            now = get_colombia_now().replace(tzinfo=None).isoformat()
 
             # Limpiar códigos de verificación expirados
             self.client.table('email_verifications').delete().lt('expires_at', now).execute()

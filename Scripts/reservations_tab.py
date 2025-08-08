@@ -2,7 +2,7 @@
 Pestaña de Reservas para Sistema de Reservas de Cancha de Tenis
 VERSIÓN ACTUALIZADA con Integración de Autenticación
 """
-
+import time
 import streamlit as st
 import datetime
 from datetime import timedelta
@@ -171,8 +171,9 @@ def apply_custom_css():
     </style>
     """, unsafe_allow_html=True)
 
+
 def show_reservation_tab():
-    """Mostrar la pestaña de reservas"""
+    """Mostrar la pestaña de reservas con caché optimizado"""
     apply_custom_css()
 
     # Obtener información del usuario actual
@@ -184,36 +185,61 @@ def show_reservation_tab():
     today, tomorrow = get_today_tomorrow()
     current_hour = get_current_hour()
 
-    # Obtener horas reservadas con nombres para cada día
-    today_reservations = db_manager.get_reservations_with_names_for_date(today)
-    tomorrow_reservations = db_manager.get_reservations_with_names_for_date(tomorrow)
+    # CACHING SYSTEM - Cache data for 30 seconds
+    cache_key = f"reservations_cache_{today}_{tomorrow}"
+    cache_timestamp_key = f"cache_timestamp_{today}_{tomorrow}"
 
-    # Obtener reservas del usuario actual
-    user_today_reservations = db_manager.get_user_reservations_for_date(current_user['email'], today)
-    user_tomorrow_reservations = db_manager.get_user_reservations_for_date(current_user['email'], tomorrow)
+    # Check if we need to refresh cache (every 30 seconds)
+    current_time = time.time()
+    should_refresh = (
+            cache_key not in st.session_state or
+            cache_timestamp_key not in st.session_state or
+            current_time - st.session_state[cache_timestamp_key] > 30
+    )
 
-    # Layout principal
-    left_col, right_col = st.columns([1, 2])
+    if should_refresh:
+        # Show loading indicator for fresh data
+        with st.spinner("Actualizando disponibilidad..."):
+            # Fetch fresh data from database
+            today_reservations = db_manager.get_reservations_with_names_for_date(today)
+            tomorrow_reservations = db_manager.get_reservations_with_names_for_date(tomorrow)
+            user_today_reservations = db_manager.get_user_reservations_for_date(current_user['email'], today)
+            user_tomorrow_reservations = db_manager.get_user_reservations_for_date(current_user['email'], tomorrow)
 
-    # Panel izquierdo - Detalles de reserva
-    col1, col2, col3 = st.columns([1, 1, 1])
-    with col2:
-        # This will help us detect screen size
-        pass
+        # Cache the data
+        st.session_state[cache_key] = {
+            'today_reservations': today_reservations,
+            'tomorrow_reservations': tomorrow_reservations,
+            'user_today_reservations': user_today_reservations,
+            'user_tomorrow_reservations': user_tomorrow_reservations
+        }
+        st.session_state[cache_timestamp_key] = current_time
 
-    # Check if we should use mobile layout (single column)
-    # For simplicity, we'll use a checkbox for user preference, but you could also auto-detect
+        # Show cache refresh indicator
+        st.success("✅ Datos actualizados", icon="🔄")
+
+    else:
+        # Use cached data (fast)
+        cached_data = st.session_state[cache_key]
+        today_reservations = cached_data['today_reservations']
+        tomorrow_reservations = cached_data['tomorrow_reservations']
+        user_today_reservations = cached_data['user_today_reservations']
+        user_tomorrow_reservations = cached_data['user_tomorrow_reservations']
+
+    # Show cache age info (optional - for debugging)
+    cache_age = get_cache_age()
+    if cache_age < 30:
+        st.caption(f"🕐 Datos actualizados hace {int(cache_age)}s")
+
+    # Rest of the layout code remains the same
     use_mobile_layout = st.checkbox("📱 Usar vista móvil", key="mobile_layout",
                                     help="Activa para pantallas pequeñas")
 
     if use_mobile_layout:
-        # Mobile layout - stack vertically
         show_calendar_view(today, tomorrow, today_reservations, tomorrow_reservations, current_hour, current_user)
         st.divider()
         show_reservation_details(today, tomorrow, current_user, user_today_reservations, user_tomorrow_reservations)
-
     else:
-        # Desktop layout - side by side
         left_col, right_col = st.columns([1, 2])
 
         with left_col:
@@ -306,8 +332,9 @@ def show_user_existing_reservations(today_date, tomorrow_date, user_today_reserv
 
         st.divider()
 
+
 def handle_reservation_submission(current_user, date, selected_hours):
-    """Manejar el envío de la reserva con autenticación"""
+    """Manejar el envío de la reserva con validación en tiempo real"""
 
     # Validar límite de horas
     if len(selected_hours) > 2:
@@ -318,46 +345,88 @@ def handle_reservation_submission(current_user, date, selected_hours):
     if len(selected_hours) > 1:
         sorted_hours = sorted(selected_hours)
         for i in range(1, len(sorted_hours)):
-            if sorted_hours[i] - sorted_hours[i-1] != 1:
+            if sorted_hours[i] - sorted_hours[i - 1] != 1:
                 st.error("Las horas seleccionadas deben ser consecutivas")
                 return
 
-    # Verificar límite por usuario (máximo 2 horas por día)
+    # REAL-TIME VALIDATION - Check availability right before booking
+    with st.spinner("Verificando disponibilidad..."):
+        unavailable_hours = []
+        for hour in selected_hours:
+            if not db_manager.is_hour_available(date, hour):
+                unavailable_hours.append(hour)
+
+    # Handle conflicts
+    if unavailable_hours:
+        hour_list = ", ".join([format_hour(h) for h in unavailable_hours])
+        st.error(f"⚠️ Los siguientes horarios ya fueron reservados por otro usuario: {hour_list}")
+
+        # Remove unavailable hours from selection
+        available_hours = [h for h in selected_hours if h not in unavailable_hours]
+        st.session_state.selected_hours = available_hours
+
+        if not available_hours:
+            st.session_state.selected_date = None
+            st.info("💡 Por favor selecciona otros horarios disponibles")
+        else:
+            remaining_hours = ", ".join([format_hour(h) for h in available_hours])
+            st.info(f"Horarios aún disponibles: {remaining_hours}")
+
+        # Force cache refresh to show current state
+        invalidate_reservation_cache()
+        st.rerun()
+        return
+
+    # Real-time check for user's existing reservations
     user_existing_hours = db_manager.get_user_reservations_for_date(current_user['email'], date)
     if len(user_existing_hours) + len(selected_hours) > 2:
         st.error(f"Solo puedes reservar 2 horas por día. Ya tienes {len(user_existing_hours)} hora(s) reservada(s).")
+        # Refresh cache in case user's reservations changed
+        invalidate_reservation_cache()
         return
 
-    # Intentar guardar todas las horas
+    # Proceed with reservation attempt
     success_count = 0
     failed_hours = []
 
-    for hour in selected_hours:
-        if db_manager.save_reservation(date, hour, current_user['full_name'], current_user['email']):
-            success_count += 1
-        else:
-            failed_hours.append(hour)
+    with st.spinner("Procesando reserva..."):
+        for hour in selected_hours:
+            if db_manager.save_reservation(date, hour, current_user['full_name'], current_user['email']):
+                success_count += 1
+            else:
+                failed_hours.append(hour)
 
-    # Mostrar resultado
+    # Handle results
     if success_count == len(selected_hours):
         # Éxito completo
         show_success_message(current_user['full_name'], date, selected_hours)
 
-        # Enviar email de confirmación
-        send_reservation_confirmation_email(current_user, date, selected_hours)
+        # IMPORTANT: Invalidate cache after successful reservation
+        invalidate_reservation_cache()
 
+        # Clear selection
         st.session_state.selected_hours = []
         st.session_state.selected_date = None
+
+        # Send confirmation email
+        send_reservation_confirmation_email(current_user, date, selected_hours)
         st.balloons()
 
     elif success_count > 0:
         # Éxito parcial
-        st.warning(f"Se reservaron {success_count} hora(s). Las siguientes ya estaban ocupadas: {', '.join(format_hour(h) for h in failed_hours)}")
+        st.warning(
+            f"Se reservaron {success_count} hora(s). Las siguientes ya estaban ocupadas: {', '.join(format_hour(h) for h in failed_hours)}")
         st.session_state.selected_hours = failed_hours
+        # Invalidate cache to show updated state
+        invalidate_reservation_cache()
 
     else:
         # Falló completamente
         st.error("No se pudo hacer la reserva. Todos los slots seleccionados ya están ocupados.")
+        # Invalidate cache and clear selection
+        invalidate_reservation_cache()
+        st.session_state.selected_hours = []
+        st.session_state.selected_date = None
 
 def send_reservation_confirmation_email(current_user, date, selected_hours):
     """Enviar email de confirmación de reserva"""
@@ -519,13 +588,25 @@ def show_day_schedule(date, reservations_dict, current_user, is_today=False, cur
         ):
             handle_time_slot_click(hour, date, current_user)
 
+
 def handle_time_slot_click(hour, date, current_user):
-    """Manejar clic en un slot de tiempo con validación de usuario"""
+    """Manejar clic en un slot de tiempo usando datos cacheados"""
     selected_hours = st.session_state.get('selected_hours', [])
     selected_date = st.session_state.get('selected_date', None)
 
-    # Verificar límite de horas existentes del usuario
-    user_existing_hours = db_manager.get_user_reservations_for_date(current_user['email'], date)
+    # Get user existing hours from cached data (NO DATABASE CALL)
+    today, tomorrow = get_today_tomorrow()
+    cache_key = f"reservations_cache_{today}_{tomorrow}"
+
+    if cache_key in st.session_state:
+        cached_data = st.session_state[cache_key]
+        if date == today:
+            user_existing_hours = cached_data['user_today_reservations']
+        else:
+            user_existing_hours = cached_data['user_tomorrow_reservations']
+    else:
+        # Fallback if no cache (shouldn't happen)
+        user_existing_hours = db_manager.get_user_reservations_for_date(current_user['email'], date)
 
     # Si es una fecha diferente, limpiar selección anterior
     if selected_date is not None and selected_date != date:
@@ -573,3 +654,25 @@ def init_reservation_session_state():
         st.session_state.selected_hours = []
     if 'selected_date' not in st.session_state:
         st.session_state.selected_date = None
+
+
+def invalidate_reservation_cache():
+    """Force cache refresh"""
+    today, tomorrow = get_today_tomorrow()
+    cache_key = f"reservations_cache_{today}_{tomorrow}"
+    cache_timestamp_key = f"cache_timestamp_{today}_{tomorrow}"
+
+    if cache_key in st.session_state:
+        del st.session_state[cache_key]
+    if cache_timestamp_key in st.session_state:
+        del st.session_state[cache_timestamp_key]
+
+
+def get_cache_age():
+    """Get age of current cache in seconds"""
+    today, tomorrow = get_today_tomorrow()
+    cache_timestamp_key = f"cache_timestamp_{today}_{tomorrow}"
+
+    if cache_timestamp_key in st.session_state:
+        return time.time() - st.session_state[cache_timestamp_key]
+    return float('inf')  # Very old if no cache
