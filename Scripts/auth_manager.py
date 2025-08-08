@@ -1,94 +1,28 @@
 """
-Sistema de Autenticación Simplificado para Reservas de Cancha de Tenis
-Reemplaza auth_manager.py con funcionalidad idéntica pero código simplificado
-Mantiene TODAS las características existentes y compatibilidad de API
+Gestor de Autenticación Supabase para Sistema de Reservas de Cancha de Tenis
 """
-
-import sqlite3
+import streamlit as st
 import hashlib
 import secrets
-import streamlit as st
-from typing import Optional, Dict, Tuple
-import contextlib
 from datetime import datetime, timedelta
-from database_manager import DATABASE_FILE
-from timezone_utils import get_colombia_now
+from typing import Optional, Dict, Tuple
+from database_manager import db_manager
 
-class AuthManager:
-    """Administrador de autenticación simplificado con API idéntica al original"""
+class SupabaseAuthManager:
+    """Administrador de autenticación usando Supabase"""
 
-    def __init__(self, db_file: str = DATABASE_FILE):
-        self.db_file = db_file
-        self.init_auth_tables()
-
-    @contextlib.contextmanager
-    def get_connection(self):
-        """Administrador de contexto para conexiones de base de datos"""
-        conn = sqlite3.connect(self.db_file)
-        try:
-            yield conn
-        except Exception as e:
-            conn.rollback()
-            raise e
-        finally:
-            conn.close()
-
-    def init_auth_tables(self):
-        """Crear tablas de autenticación"""
-        with self.get_connection() as conn:
-            cursor = conn.cursor()
-
-            # Tabla de usuarios
-            cursor.execute('''
-                CREATE TABLE IF NOT EXISTS users (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    email TEXT UNIQUE NOT NULL,
-                    password_hash TEXT NOT NULL,
-                    salt TEXT NOT NULL,
-                    full_name TEXT NOT NULL,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    last_login TIMESTAMP,
-                    is_active BOOLEAN DEFAULT 1
-                )
-            ''')
-
-            # Tabla de sesiones (sin complejidad de user_agent)
-            cursor.execute('''
-                CREATE TABLE IF NOT EXISTS user_sessions (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    user_id INTEGER NOT NULL,
-                    session_token TEXT UNIQUE NOT NULL,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    expires_at TIMESTAMP NOT NULL,
-                    last_used TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    is_active BOOLEAN DEFAULT 1,
-                    FOREIGN KEY (user_id) REFERENCES users (id)
-                )
-            ''')
-
-            # Crear índices
-            cursor.execute('''
-                CREATE INDEX IF NOT EXISTS idx_session_token 
-                ON user_sessions(session_token)
-            ''')
-
-            cursor.execute('''
-                CREATE INDEX IF NOT EXISTS idx_session_user_active 
-                ON user_sessions(user_id, is_active)
-            ''')
-
-            conn.commit()
+    def __init__(self):
+        self.client = db_manager.client
 
     def _hash_password(self, password: str, salt: str = None) -> Tuple[str, str]:
-        """Generar hash con salt"""
+        """Generar hash de contraseña con salt"""
         if salt is None:
             salt = secrets.token_hex(16)
-
         password_hash = hashlib.sha256((password + salt).encode()).hexdigest()
         return password_hash, salt
 
     def _generate_session_token(self) -> str:
-        """Generar token de sesión"""
+        """Generar token de sesión único"""
         return secrets.token_urlsafe(32)
 
     def _validate_email(self, email: str) -> bool:
@@ -116,163 +50,120 @@ class AuthManager:
     def _cleanup_expired_sessions(self):
         """Limpiar sesiones expiradas"""
         try:
-            with self.get_connection() as conn:
-                cursor = conn.cursor()
-                cursor.execute('''
-                    UPDATE user_sessions 
-                    SET is_active = 0 
-                    WHERE expires_at < CURRENT_TIMESTAMP AND is_active = 1
-                ''')
-                conn.commit()
+            db_manager.cleanup_expired_data()
         except Exception:
             pass
 
     def create_session(self, user_id: int, remember_me: bool = True, user_agent: str = None) -> str:
-        """Crear sesión"""
+        """Crear nueva sesión para el usuario"""
         try:
             self._cleanup_expired_sessions()
 
-            with self.get_connection() as conn:
-                cursor = conn.cursor()
-
-                # Verificar que el usuario existe
-                cursor.execute('SELECT id FROM users WHERE id = ? AND is_active = 1', (user_id,))
-                if not cursor.fetchone():
-                    return None
-
-                # Generar token único
-                for attempt in range(5):
-                    try:
-                        session_token = self._generate_session_token()
-
-                        # Establecer expiración basada en remember_me
-                        duration_days = 30 if remember_me else 1
-                        expires_at = get_colombia_now().replace(tzinfo=None) + timedelta(days=duration_days)
-
-                        # Crear sesión
-                        cursor.execute('''
-                            INSERT INTO user_sessions 
-                            (user_id, session_token, expires_at)
-                            VALUES (?, ?, ?)
-                        ''', (user_id, session_token, expires_at.isoformat()))
-
-                        conn.commit()
-                        return session_token
-
-                    except sqlite3.IntegrityError:
-                        # Colisión de token, reintentar
-                        if attempt == 4:
-                            return None
-                        continue
-                    except Exception:
-                        return None
-
+            # Verificar que el usuario existe
+            result = self.client.table('users').select('id').eq('id', user_id).eq('is_active', True).execute()
+            if not result.data:
                 return None
 
+            # Generar token único
+            for attempt in range(5):
+                try:
+                    session_token = self._generate_session_token()
+                    duration_days = 30 if remember_me else 1
+                    expires_at = datetime.now() + timedelta(days=duration_days)
+
+                    result = self.client.table('user_sessions').insert({
+                        'user_id': user_id,
+                        'session_token': session_token,
+                        'expires_at': expires_at.isoformat(),
+                        'is_active': True
+                    }).execute()
+
+                    if result.data:
+                        return session_token
+
+                except Exception:
+                    if attempt == 4:
+                        return None
+                    continue
+
+            return None
         except Exception:
             return None
 
     def validate_session(self, session_token: str) -> Optional[Dict]:
-        """Validar sesión"""
-        if not session_token:
-            return None
-
+        """Validar sesión existente"""
         try:
-            self._cleanup_expired_sessions()
-
-            with self.get_connection() as conn:
-                cursor = conn.cursor()
-
-                # Verificar sesión
-                cursor.execute('''
-                               SELECT s.user_id, s.expires_at, u.email, u.full_name, u.is_active
-                               FROM user_sessions s
-                                        JOIN users u ON s.user_id = u.id
-                               WHERE s.session_token = ?
-                                 AND s.is_active = 1
-                                 AND u.is_active = 1
-                               ''', (session_token,))
-
-                session_data = cursor.fetchone()
-
-                if session_data:
-                    user_id, expires_at_str, email, full_name, is_active = session_data
-
-                    # Verificar expiración
-                    try:
-                        expires_at = datetime.fromisoformat(expires_at_str.replace('Z', '+00:00'))
-                        if expires_at < get_colombia_now().replace(tzinfo=None):
-                            cursor.execute('''
-                                           UPDATE user_sessions
-                                           SET is_active = 0
-                                           WHERE session_token = ?
-                                           ''', (session_token,))
-                            conn.commit()
-                            return None
-                    except (ValueError, AttributeError):
-                        return None
-
-                    # Actualizar último uso
-                    cursor.execute('''
-                                   UPDATE user_sessions
-                                   SET last_used = CURRENT_TIMESTAMP
-                                   WHERE session_token = ?
-                                   ''', (session_token,))
-
-                    cursor.execute('''
-                                   UPDATE users
-                                   SET last_login = CURRENT_TIMESTAMP
-                                   WHERE id = ?
-                                   ''', (user_id,))
-
-                    conn.commit()
-
-                    return {
-                        'id': user_id,
-                        'email': email,
-                        'full_name': full_name,
-                        'session_token': session_token
-                    }
-
+            if not session_token:
                 return None
 
-        except Exception:
+            self._cleanup_expired_sessions()
+
+            # Buscar sesión con información del usuario
+            result = self.client.table('user_sessions').select(
+                'user_id, expires_at, users(email, full_name, is_active)'
+            ).eq('session_token', session_token).eq('is_active', True).execute()
+
+            if not result.data:
+                return None
+
+            session = result.data[0]
+            user = session['users']
+
+            # Verificar si el usuario está activo
+            if not user['is_active']:
+                return None
+
+            # Verificar expiración
+            expires_at = datetime.fromisoformat(session['expires_at'].replace('Z', ''))
+            if expires_at < datetime.now():
+                self.destroy_session(session_token)
+                return None
+
+            # Actualizar último uso de la sesión
+            self.client.table('user_sessions').update({
+                'last_used': datetime.now().isoformat()
+            }).eq('session_token', session_token).execute()
+
+            # Actualizar último login del usuario
+            self.client.table('users').update({
+                'last_login': datetime.now().isoformat()
+            }).eq('id', session['user_id']).execute()
+
+            return {
+                'id': session['user_id'],
+                'email': user['email'],
+                'full_name': user['full_name'],
+                'session_token': session_token
+            }
+
+        except Exception as e:
+            st.error(f"Error validando sesión: {e}")
             return None
 
     def destroy_session(self, session_token: str) -> bool:
-        """Destruir sesión"""
+        """Destruir sesión específica"""
         try:
-            with self.get_connection() as conn:
-                cursor = conn.cursor()
-                cursor.execute('''
-                               UPDATE user_sessions
-                               SET is_active = 0
-                               WHERE session_token = ?
-                               ''', (session_token,))
-                conn.commit()
-                return cursor.rowcount > 0
+            result = self.client.table('user_sessions').update({
+                'is_active': False
+            }).eq('session_token', session_token).execute()
+            return True
         except Exception:
             return False
 
     def destroy_all_user_sessions(self, user_id: int) -> bool:
-        """Destruir todas las sesiones del usuario"""
+        """Destruir todas las sesiones de un usuario"""
         try:
-            with self.get_connection() as conn:
-                cursor = conn.cursor()
-                cursor.execute('''
-                               UPDATE user_sessions
-                               SET is_active = 0
-                               WHERE user_id = ?
-                               ''', (user_id,))
-                conn.commit()
-                return True
+            result = self.client.table('user_sessions').update({
+                'is_active': False
+            }).eq('user_id', user_id).execute()
+            return True
         except Exception:
             return False
 
-    def register_user(self, email: str, password: str, full_name: str, verification_code: str = None) -> Tuple[
-        bool, str]:
-        """Registrar usuario con verificación de email"""
+    def register_user(self, email: str, password: str, full_name: str, verification_code: str = None) -> Tuple[bool, str]:
+        """Registrar nuevo usuario en el sistema"""
         try:
+            # Validaciones básicas
             if not email or not self._validate_email(email):
                 return False, "Por favor ingresa una dirección de email válida"
 
@@ -286,28 +177,30 @@ class AuthManager:
             email = email.strip().lower()
             full_name = full_name.strip()
 
-            # Si se requiere código de verificación
-            if verification_code:
-                from database_manager import db_manager
-                if not db_manager.verify_email_code(email, verification_code):
-                    return False, "Código de verificación inválido o expirado"
+            # Verificar código de verificación si se requiere
+            if verification_code and not db_manager.verify_email_code(email, verification_code):
+                return False, "Código de verificación inválido o expirado"
 
-            with self.get_connection() as conn:
-                cursor = conn.cursor()
+            # Verificar si el usuario ya existe
+            result = self.client.table('users').select('id').eq('email', email).execute()
+            if result.data:
+                return False, "Ya existe una cuenta con este email"
 
-                cursor.execute('SELECT id FROM users WHERE email = ?', (email,))
-                if cursor.fetchone():
-                    return False, "Ya existe una cuenta con este email"
+            # Crear hash de contraseña
+            password_hash, salt = self._hash_password(password)
 
-                password_hash, salt = self._hash_password(password)
+            # Insertar nuevo usuario
+            user_result = self.client.table('users').insert({
+                'email': email,
+                'password_hash': password_hash,
+                'salt': salt,
+                'full_name': full_name,
+                'is_active': True
+            }).execute()
 
-                cursor.execute('''
-                               INSERT INTO users (email, password_hash, salt, full_name)
-                               VALUES (?, ?, ?, ?)
-                               ''', (email, password_hash, salt, full_name))
-
-                conn.commit()
+            if user_result.data:
                 return True, "Cuenta creada exitosamente"
+            return False, "Error al crear cuenta"
 
         except Exception as e:
             return False, f"Error al crear cuenta: {str(e)}"
@@ -320,123 +213,101 @@ class AuthManager:
 
             email = email.strip().lower()
 
-            with self.get_connection() as conn:
-                cursor = conn.cursor()
+            # PRIMERO: revisar si el correo está registrado
+            result = self.client.table('users').select('id').eq('email', email).execute()
+            if not result.data:
+                return False, "No existe una cuenta con este email", None
 
-                # PRIMERO: revisar si el correo está registrado
-                cursor.execute('SELECT id FROM users WHERE email = ?', (email,))
-                if not cursor.fetchone():
-                    return False, "No existe una cuenta con este email", None
+            # SEGUNDO: Extraer data del usuario para validación
+            result = self.client.table('users').select('*').eq('email', email).eq('is_active', True).execute()
 
-                # SEGUNDO: Extraer data del usuario para validación
-                cursor.execute('''
-                               SELECT id, email, password_hash, salt, full_name
-                               FROM users
-                               WHERE email = ?
-                                 AND is_active = 1
-                               ''', (email,))
+            if not result.data:
+                return False, "Error de acceso. Contacta al administrador", None
 
-                user_data = cursor.fetchone()
-                if not user_data:
-                    return False, "Error de acceso. Contacta al administrador", None
+            user = result.data[0]
 
-                user_id, user_email, stored_hash, salt, full_name = user_data
+            # TERCERO: Validar contraseña
+            password_hash, _ = self._hash_password(password, user['salt'])
+            if password_hash != user['password_hash']:
+                return False, "Contraseña incorrecta", None
 
-                # TERCERO: Validar contraseña
-                password_hash, _ = self._hash_password(password, salt)
-                if password_hash != stored_hash:
-                    return False, "Contraseña incorrecta", None
+            # CUARTO: Crear sesión si todo está ok
+            session_token = self.create_session(user['id'], remember_me)
 
-                # CUARTO: Crear sesión si todo está ok
-                session_token = self.create_session(user_id, remember_me)
+            if not session_token:
+                return False, "Error al crear sesión - por favor intenta de nuevo", None
 
-                if not session_token:
-                    return False, "Error al crear sesión - por favor intenta de nuevo", None
+            # Actualizar último inicio de sesión
+            self.client.table('users').update({
+                'last_login': datetime.now().isoformat()
+            }).eq('id', user['id']).execute()
 
-                user_info = {
-                    'id': user_id,
-                    'email': user_email,
-                    'full_name': full_name,
-                    'session_token': session_token
-                }
+            user_info = {
+                'id': user['id'],
+                'email': user['email'],
+                'full_name': user['full_name'],
+                'session_token': session_token
+            }
 
-                return True, "Inicio de sesión exitoso", user_info
+            return True, "Inicio de sesión exitoso", user_info
 
         except Exception as e:
             return False, f"Error de inicio de sesión: {str(e)}", None
 
     def get_user_by_id(self, user_id: int) -> Optional[Dict]:
-        """Obtener usuario por ID"""
+        """Obtener información de usuario por ID"""
         try:
-            with self.get_connection() as conn:
-                cursor = conn.cursor()
+            result = self.client.table('users').select(
+                'id, email, full_name, created_at, last_login'
+            ).eq('id', user_id).eq('is_active', True).execute()
 
-                cursor.execute('''
-                               SELECT id, email, full_name, created_at, last_login
-                               FROM users
-                               WHERE id = ?
-                                 AND is_active = 1
-                               ''', (user_id,))
-
-                user_data = cursor.fetchone()
-
-                if user_data:
-                    return {
-                        'id': user_data[0],
-                        'email': user_data[1],
-                        'full_name': user_data[2],
-                        'created_at': user_data[3],
-                        'last_login': user_data[4]
-                    }
-
-                return None
-
+            if result.data:
+                user = result.data[0]
+                return {
+                    'id': user['id'],
+                    'email': user['email'],
+                    'full_name': user['full_name'],
+                    'created_at': user['created_at'],
+                    'last_login': user['last_login']
+                }
+            return None
         except Exception:
             return None
 
     def change_password(self, user_id: int, current_password: str, new_password: str) -> Tuple[bool, str]:
-        """Cambiar contraseña"""
+        """Cambiar contraseña de usuario"""
         try:
+            # Validar nueva contraseña
             is_valid_password, password_message = self._validate_password(new_password)
             if not is_valid_password:
                 return False, password_message
 
-            with self.get_connection() as conn:
-                cursor = conn.cursor()
+            # Obtener datos actuales del usuario
+            result = self.client.table('users').select('password_hash, salt').eq('id', user_id).execute()
 
-                cursor.execute('''
-                               SELECT password_hash, salt
-                               FROM users
-                               WHERE id = ?
-                               ''', (user_id,))
+            if not result.data:
+                return False, "Usuario no encontrado"
 
-                user_data = cursor.fetchone()
-                if not user_data:
-                    return False, "Usuario no encontrado"
+            user = result.data[0]
 
-                stored_hash, salt = user_data
+            # Verificar contraseña actual
+            current_hash, _ = self._hash_password(current_password, user['salt'])
+            if current_hash != user['password_hash']:
+                return False, "La contraseña actual es incorrecta"
 
-                current_hash, _ = self._hash_password(current_password, salt)
-                if current_hash != stored_hash:
-                    return False, "La contraseña actual es incorrecta"
+            # Generar nueva contraseña hash
+            new_hash, new_salt = self._hash_password(new_password)
 
-                new_hash, new_salt = self._hash_password(new_password)
+            # Actualizar contraseña
+            self.client.table('users').update({
+                'password_hash': new_hash,
+                'salt': new_salt
+            }).eq('id', user_id).execute()
 
-                cursor.execute('''
-                               UPDATE users
-                               SET password_hash = ?,
-                                   salt          = ?
-                               WHERE id = ?
-                               ''', (new_hash, new_salt, user_id))
+            # Invalidar todas las sesiones por seguridad
+            self.destroy_all_user_sessions(user_id)
 
-                cursor.execute('''
-                               UPDATE user_sessions
-                               SET is_active = 0
-                               WHERE user_id = ?
-                               ''', (user_id,))
-
-                conn.commit()
-                return True, "Contraseña cambiada exitosamente. Por favor inicia sesión de nuevo."
+            return True, "Contraseña cambiada exitosamente. Por favor inicia sesión de nuevo."
 
         except Exception as e:
             return False, f"Error al cambiar contraseña: {str(e)}"
@@ -449,20 +320,14 @@ class AuthManager:
 
             full_name = full_name.strip()
 
-            with self.get_connection() as conn:
-                cursor = conn.cursor()
+            result = self.client.table('users').update({
+                'full_name': full_name
+            }).eq('id', user_id).execute()
 
-                cursor.execute('''
-                               UPDATE users
-                               SET full_name = ?
-                               WHERE id = ?
-                               ''', (full_name, user_id))
-
-                if cursor.rowcount > 0:
-                    conn.commit()
-                    return True, "Perfil actualizado exitosamente"
-                else:
-                    return False, "Usuario no encontrado"
+            if result.data:
+                return True, "Perfil actualizado exitosamente"
+            else:
+                return False, "Usuario no encontrado"
 
         except Exception as e:
             return False, f"Error al actualizar perfil: {str(e)}"
@@ -472,76 +337,35 @@ class AuthManager:
         try:
             email = email.strip().lower()
 
-            with self.get_connection() as conn:
-                cursor = conn.cursor()
+            # Verificar que el usuario existe
+            result = self.client.table('users').select('id').eq('email', email).eq('is_active', True).execute()
 
-                # Verificar que el usuario existe
-                cursor.execute('SELECT id FROM users WHERE email = ? AND is_active = 1', (email,))
-                user = cursor.fetchone()
+            if not result.data:
+                # No revelar que el email no existe por seguridad
+                return False, "Error al procesar solicitud", None
 
-                if not user:
-                    # Retornar falso sin revelar que el email no existe
-                    return False, "Error al procesar solicitud", None
+            user_id = result.data[0]['id']
 
-                # Crear tabla de tokens de recuperación si no existe
-                cursor.execute('''
-                               CREATE TABLE IF NOT EXISTS password_reset_tokens
-                               (
-                                   id
-                                   INTEGER
-                                   PRIMARY
-                                   KEY
-                                   AUTOINCREMENT,
-                                   user_id
-                                   INTEGER
-                                   NOT
-                                   NULL,
-                                   token
-                                   TEXT
-                                   UNIQUE
-                                   NOT
-                                   NULL,
-                                   created_at
-                                   TIMESTAMP
-                                   DEFAULT
-                                   CURRENT_TIMESTAMP,
-                                   expires_at
-                                   TIMESTAMP
-                                   NOT
-                                   NULL,
-                                   is_used
-                                   BOOLEAN
-                                   DEFAULT
-                                   0,
-                                   FOREIGN
-                                   KEY
-                               (
-                                   user_id
-                               ) REFERENCES users
-                               (
-                                   id
-                               )
-                                   )
-                               ''')
+            # Limpiar tokens expirados
+            self.client.table('password_reset_tokens').delete().lt(
+                'expires_at', datetime.now().isoformat()
+            ).execute()
 
-                # Limpiar tokens expirados
-                cursor.execute('DELETE FROM password_reset_tokens WHERE expires_at < CURRENT_TIMESTAMP')
+            # Generar token único
+            token = secrets.token_urlsafe(32)
+            expires_at = datetime.now() + timedelta(minutes=30)
 
-                # Generar token único
-                import secrets
-                token = secrets.token_urlsafe(32)
+            # Guardar token
+            token_result = self.client.table('password_reset_tokens').insert({
+                'user_id': user_id,
+                'token': token,
+                'expires_at': expires_at.isoformat(),
+                'is_used': False
+            }).execute()
 
-                # Establecer expiración (30 minutos)
-                expires_at = get_colombia_now().replace(tzinfo=None) + timedelta(minutes=30)
-
-                # Guardar token
-                cursor.execute('''
-                               INSERT INTO password_reset_tokens (user_id, token, expires_at)
-                               VALUES (?, ?, ?)
-                               ''', (user[0], token, expires_at.isoformat()))
-
-                conn.commit()
+            if token_result.data:
                 return True, "Token de recuperación creado", token
+            return False, "Error creando token", None
 
         except Exception as e:
             return False, f"Error creando token: {str(e)}", None
@@ -549,43 +373,33 @@ class AuthManager:
     def validate_password_reset_token(self, token: str) -> Tuple[bool, str, Optional[int]]:
         """Validar token de recuperación de contraseña"""
         try:
-            with self.get_connection() as conn:
-                cursor = conn.cursor()
+            result = self.client.table('password_reset_tokens').select(
+                'user_id, expires_at, users(email)'
+            ).eq('token', token).eq('is_used', False).execute()
 
-                cursor.execute('''
-                               SELECT prt.user_id, prt.expires_at, u.email
-                               FROM password_reset_tokens prt
-                                        JOIN users u ON prt.user_id = u.id
-                               WHERE prt.token = ?
-                                 AND prt.is_used = 0
-                                 AND u.is_active = 1
-                               ''', (token,))
+            if not result.data:
+                return False, "Token inválido o ya usado. Ingresa a https://reservas-tenis-colina.streamlit.app para volver a iniciar sesión", None
 
-                result = cursor.fetchone()
+            token_data = result.data[0]
+            user_email = token_data['users']['email']
 
-                if not result:
-                    return False, "Token inválido o ya usado ingrese a https://reservas-tenis-colina.streamlit.app para volver a iniciar sesión", None
+            # Verificar expiración
+            try:
+                expires_at = datetime.fromisoformat(token_data['expires_at'].replace('Z', ''))
+                if expires_at < datetime.now():
+                    return False, "Token expirado", None
+            except ValueError:
+                return False, "Token inválido", None
 
-                user_id, expires_at_str, email = result
-
-                # Verificar expiración
-                try:
-                    expires_at = datetime.fromisoformat(expires_at_str)
-                    if expires_at < get_colombia_now().replace(tzinfo=None):
-                        return False, "Token expirado", None
-                except ValueError:
-                    return False, "Token inválido", None
-
-                return True, f"Token válido para {email}", user_id
+            return True, f"Token válido para {user_email}", token_data['user_id']
 
         except Exception as e:
             return False, f"Error validando token: {str(e)}", None
 
-
     def reset_password_with_token(self, token: str, new_password: str) -> Tuple[bool, str]:
-        """Resetear contraseña usando token"""
+        """Resetear contraseña usando token de recuperación"""
         try:
-            # Validar contraseña
+            # Validar nueva contraseña
             is_valid_password, password_message = self._validate_password(new_password)
             if not is_valid_password:
                 return False, password_message
@@ -595,30 +409,28 @@ class AuthManager:
             if not token_valid:
                 return False, token_message
 
-            with self.get_connection() as conn:
-                cursor = conn.cursor()
+            # Generar nueva contraseña hash
+            new_hash, new_salt = self._hash_password(new_password)
 
-                # Generar nueva contraseña hash
-                new_hash, new_salt = self._hash_password(new_password)
+            # Actualizar contraseña
+            self.client.table('users').update({
+                'password_hash': new_hash,
+                'salt': new_salt
+            }).eq('id', user_id).execute()
 
-                # Actualizar contraseña
-                cursor.execute('''
-                               UPDATE users
-                               SET password_hash = ?,
-                                   salt          = ?
-                               WHERE id = ?
-                               ''', (new_hash, new_salt, user_id))
+            # Marcar token como usado
+            self.client.table('password_reset_tokens').update({
+                'is_used': True
+            }).eq('token', token).execute()
 
-                # Marcar token como usado
-                cursor.execute('UPDATE password_reset_tokens SET is_used = 1 WHERE token = ?', (token,))
+            # Invalidar todas las sesiones por seguridad
+            self.destroy_all_user_sessions(user_id)
 
-                # Invalidar todas las sesiones del usuario por seguridad
-                cursor.execute('UPDATE user_sessions SET is_active = 0 WHERE user_id = ?', (user_id,))
-
-                conn.commit()
-                return True, "Contraseña actualizada exitosamente"
+            return True, "Contraseña actualizada exitosamente"
 
         except Exception as e:
             return False, f"Error reseteando contraseña: {str(e)}"
+
+
 # Instancia global
-auth_manager = AuthManager()
+auth_manager = SupabaseAuthManager()

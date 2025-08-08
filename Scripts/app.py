@@ -142,9 +142,9 @@ def check_system_health():
         # Probar base de datos
         db_manager.get_all_reservations()
 
-        # Probar sistema de autenticación
         from auth_manager import auth_manager
-        auth_manager.init_auth_tables()
+        # Simplemente verificar que auth_manager existe y funciona
+        auth_manager.client.table('users').select('id').limit(1).execute()
 
         return True, "Sistema operacional"
 

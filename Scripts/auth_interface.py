@@ -302,51 +302,10 @@ def handle_initial_registration(full_name: str, email: str, password: str, confi
     try:
         from auth_manager import auth_manager
 
-        with auth_manager.get_connection() as conn:
-            cursor = conn.cursor()
-            # Asegurar que la tabla users existe primero
-            cursor.execute('''
-                           CREATE TABLE IF NOT EXISTS users
-                           (
-                               id
-                               INTEGER
-                               PRIMARY
-                               KEY
-                               AUTOINCREMENT,
-                               email
-                               TEXT
-                               UNIQUE
-                               NOT
-                               NULL,
-                               password_hash
-                               TEXT
-                               NOT
-                               NULL,
-                               salt
-                               TEXT
-                               NOT
-                               NULL,
-                               full_name
-                               TEXT
-                               NOT
-                               NULL,
-                               created_at
-                               TIMESTAMP
-                               DEFAULT
-                               CURRENT_TIMESTAMP,
-                               last_login
-                               TIMESTAMP,
-                               is_active
-                               BOOLEAN
-                               DEFAULT
-                               1
-                           )
-                           ''')
-
-            cursor.execute('SELECT id FROM users WHERE email = ?', (email.strip().lower(),))
-            if cursor.fetchone():
-                st.error("Ya existe una cuenta con este email")
-                return
+        result = auth_manager.client.table('users').select('id').eq('email', email.strip().lower()).execute()
+        if result.data:
+            st.error("Ya existe una cuenta con este email")
+            return
 
     except Exception as e:
         st.error(f"Error verificando disponibilidad del email: {str(e)}")
@@ -718,16 +677,17 @@ def handle_forgot_password(email: str):
 
     # Verificar primero si el email existe
     try:
-        with auth_manager.get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute('SELECT id, full_name FROM users WHERE email = ? AND is_active = 1', (email.strip().lower(),))
-            user_data = cursor.fetchone()
+        result = auth_manager.client.table('users').select('id, full_name').eq('email', email.strip().lower()).eq(
+            'is_active', True).execute()
 
-        if not user_data:
+        if not result.data:
             # Por seguridad, mostrar el mismo mensaje que si fuera exitoso
             st.success("📧 Si existe una cuenta con ese email, recibirás un enlace de recuperación.")
             st.info("Revisa tu email y sigue las instrucciones.")
             return
+
+        user_data = result.data[0]
+        user_id, user_name = user_data['id'], user_data['full_name']
 
         user_id, user_name = user_data
 
