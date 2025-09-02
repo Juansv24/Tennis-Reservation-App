@@ -61,41 +61,66 @@ def clear_session_token():
 
 
 def try_auto_login():
-    """Intentar inicio de sesión automático usando token de sesión guardado"""
+    """
+    Intentar inicio de sesión automático usando token de sesión guardado
 
-    # Saltar si ya está autenticado
+    Esta función se ejecuta automáticamente al cargar la aplicación para
+    restaurar la sesión del usuario si tiene un token válido guardado.
+
+    Returns:
+        bool: True si el inicio de sesión automático fue exitoso, False si no
+    """
+
+    # PASO 1: Verificar si el usuario ya está autenticado
+    # Si ya está autenticado, no necesitamos hacer nada más
     if st.session_state.get('authenticated', False):
         return True
 
-    # Obtener token guardado
+    # PASO 2: Intentar obtener token de sesión guardado
+    # Primero del estado de sesión, luego de los parámetros URL
     session_token = get_saved_session_token()
 
+    # Si no hay token guardado, no se puede hacer login automático
     if not session_token:
         return False
 
     try:
-        # Validar sesión con servidor
+        # PASO 3: Validar sesión con el servidor
+        # Esta llamada también configura el contexto RLS automáticamente
         user_info = auth_manager.validate_session(session_token)
 
         if user_info:
-            # Sesión válida - restaurar autenticación
+            # PASO 4: Sesión válida - restaurar autenticación en la aplicación
             st.session_state.authenticated = True
             st.session_state.user_info = user_info
 
-            # Asegurar que el token esté guardado correctamente
+            # PASO 5: Asegurar que el token esté guardado correctamente
+            # Esto actualiza tanto el estado de sesión como los parámetros URL
             save_session_token(session_token)
 
+            # PASO 6: Marcar para mostrar notificación de login automático
+            # Esto le dice al usuario que su sesión fue restaurada
+            st.session_state.show_auto_login_notice = True
+
+            # Login automático exitoso
             return True
+
         else:
-            # Sesión inválida - limpiar
+            # PASO 7: Sesión inválida - limpiar todos los tokens guardados
+            # Esto incluye estado de sesión y parámetros URL
             clear_session_token()
+
+            # Login automático falló
             return False
 
     except Exception as e:
-        # Error durante validación - limpiar
+        # PASO 8: Error durante validación - limpiar todo por seguridad
         clear_session_token()
-        return False
 
+        # Opcional: Log del error para debugging (comentar en producción)
+        print(f"Error en try_auto_login: {str(e)}")
+
+        return False
 
 def require_authentication():
     """Verificar autenticación con inicio de sesión automático"""

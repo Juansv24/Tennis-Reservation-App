@@ -34,6 +34,26 @@ class SupabaseManager:
             st.error("Tablas no encontradas. Por favor ejecuta el SQL de configuración en el dashboard de Supabase.")
             return False
 
+    def set_session_context(self, session_token: str):
+        """Set session token for RLS context"""
+        self._current_session_token = session_token
+        if session_token:
+            try:
+                # Set session token in PostgreSQL session
+                self.client.rpc('set_session_token', {'token': session_token}).execute()
+            except Exception as e:
+                print(f"Failed to set session context: {e}")
+        else:
+            try:
+                self.client.rpc('set_session_token', {'token': None}).execute()
+            except Exception:
+                pass
+
+    def clear_session_context(self):
+        """Clear session context"""
+        self.set_session_context(None)
+        self._current_session_token = None
+
     def save_reservation(self, date: datetime.date, hour: int, name: str, email: str) -> bool:
         """Guardar nueva reserva"""
         try:

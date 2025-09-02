@@ -92,53 +92,101 @@ class SupabaseAuthManager:
             return None
 
     def validate_session(self, session_token: str) -> Optional[Dict]:
-        """Validar sesión existente"""
+        """
+        Validar sesión existente y configurar contexto RLS
+
+        Args:
+            session_token (str): Token de sesión a validar
+
+        Returns:
+            Optional[Dict]: Información del usuario si la sesión es válida, None si no
+        """
         try:
+            # Verificar que el token no esté vacío
             if not session_token:
                 return None
 
+            # PASO 1: Configurar contexto de sesión para RLS antes de cualquier consulta
+            try:
+                self.client.rpc('set_session_token', {'token': session_token}).execute()
+            except Exception as e:
+                # Si falla el contexto RLS, continuar sin él (para compatibilidad)
+                print(f"Advertencia: No se pudo configurar contexto RLS: {e}")
+
+            # PASO 2: Limpiar sesiones expiradas automáticamente
             self._cleanup_expired_sessions()
 
-            # Buscar sesión con información del usuario
+            # PASO 3: Buscar sesión activa con información del usuario
             result = self.client.table('user_sessions').select(
                 'user_id, expires_at, users(email, full_name, is_active)'
             ).eq('session_token', session_token).eq('is_active', True).execute()
 
+            # Verificar que se encontró la sesión
             if not result.data:
+                # Sesión no encontrada - limpiar contexto RLS
+                try:
+                    self.client.rpc('set_session_token', {'token': None}).execute()
+                except Exception:
+                    pass
                 return None
 
             session = result.data[0]
             user = session['users']
 
-            # Verificar si el usuario está activo
+            # PASO 4: Verificar que el usuario esté activo
             if not user['is_active']:
+                # Usuario inactivo - limpiar contexto RLS
+                try:
+                    self.client.rpc('set_session_token', {'token': None}).execute()
+                except Exception:
+                    pass
                 return None
 
-            # Verificar expiración
+            # PASO 5: Verificar si la sesión ha expirado
             expires_at_str = session['expires_at']
+
+            # Limpiar 'Z' al final si existe (formato UTC)
             if expires_at_str.endswith('Z'):
-                expires_at_str = expires_at_str[:-1]  # Remove Z
+                expires_at_str = expires_at_str[:-1]
+
             expires_at = datetime.fromisoformat(expires_at_str)
 
+            # Asegurar que ambas fechas estén en el mismo formato (sin zona horaria)
             if expires_at.tzinfo is not None:
                 expires_at = expires_at.replace(tzinfo=None)
 
             current_time = get_colombia_now().replace(tzinfo=None)
 
+            # Si la sesión expiró, destruirla y retornar None
             if expires_at < current_time:
                 self.destroy_session(session_token)
+                # Limpiar contexto RLS
+                try:
+                    self.client.rpc('set_session_token', {'token': None}).execute()
+                except Exception:
+                    pass
                 return None
 
-            # Actualizar último uso de la sesión
-            self.client.table('user_sessions').update({
-                'last_used': get_colombia_now().replace(tzinfo=None).isoformat()
-            }).eq('session_token', session_token).execute()
+            # PASO 6: Actualizar timestamp de último uso de la sesión
+            try:
+                self.client.table('user_sessions').update({
+                    'last_used': get_colombia_now().replace(tzinfo=None).isoformat()
+                }).eq('session_token', session_token).execute()
+            except Exception:
+                # No es crítico si falla la actualización del timestamp
+                pass
 
-            # Actualizar último login del usuario
-            self.client.table('users').update({
-                'last_login': get_colombia_now().replace(tzinfo=None).isoformat()
-            }).eq('id', session['user_id']).execute()
+            # PASO 7: Actualizar último login del usuario
+            try:
+                self.client.table('users').update({
+                    'last_login': get_colombia_now().replace(tzinfo=None).isoformat()
+                }).eq('id', session['user_id']).execute()
+            except Exception:
+                # No es crítico si falla la actualización del último login
+                pass
 
+            # PASO 8: Retornar información del usuario válida
+            # El contexto RLS ya está configurado para futuras operaciones
             return {
                 'id': session['user_id'],
                 'email': user['email'],
@@ -147,6 +195,12 @@ class SupabaseAuthManager:
             }
 
         except Exception as e:
+            # En caso de cualquier error, limpiar contexto RLS y retornar None
+            try:
+                self.client.rpc('set_session_token', {'token': None}).execute()
+            except Exception:
+                pass
+
             st.error(f"Error validando sesión: {e}")
             return None
 
@@ -216,19 +270,19 @@ class SupabaseAuthManager:
             return False, f"Error al crear cuenta: {str(e)}"
 
     def login_user(self, email: str, password: str, remember_me: bool = True) -> Tuple[bool, str, Optional[Dict]]:
-        """Iniciar sesión de usuario con validación mejorada"""
+        """Iniciar sesión de usuario con validación mejorada y contexto RLS"""
         try:
             if not email or not password:
                 return False, "Por favor ingresa email y contraseña", None
 
             email = email.strip().lower()
 
-            # PRIMERO: revisar si el correo está registrado
+            # PRIMERO: Verificar si el correo está registrado
             result = self.client.table('users').select('id').eq('email', email).execute()
             if not result.data:
                 return False, "No existe una cuenta con este email", None
 
-            # SEGUNDO: Extraer data del usuario para validación
+            # SEGUNDO: Obtener datos del usuario para validación
             result = self.client.table('users').select('*').eq('email', email).eq('is_active', True).execute()
 
             if not result.data:
@@ -247,11 +301,22 @@ class SupabaseAuthManager:
             if not session_token:
                 return False, "Error al crear sesión - por favor intenta de nuevo", None
 
-            # Actualizar último inicio de sesión
-            self.client.table('users').update({
-                'last_login': datetime.now().isoformat()
-            }).eq('id', user['id']).execute()
+            # QUINTO: Configurar contexto RLS para futuras operaciones
+            try:
+                self.client.rpc('set_session_token', {'token': session_token}).execute()
+            except Exception as e:
+                # Si falla RLS, continuar (para compatibilidad)
+                print(f"Advertencia: No se pudo configurar contexto RLS en login: {e}")
 
+            # SEXTO: Actualizar último inicio de sesión
+            try:
+                self.client.table('users').update({
+                    'last_login': datetime.now().isoformat()
+                }).eq('id', user['id']).execute()
+            except Exception:
+                pass  # No crítico si falla
+
+            # SÉPTIMO: Preparar información del usuario
             user_info = {
                 'id': user['id'],
                 'email': user['email'],
@@ -262,6 +327,12 @@ class SupabaseAuthManager:
             return True, "Inicio de sesión exitoso", user_info
 
         except Exception as e:
+            # En caso de error, limpiar contexto RLS
+            try:
+                self.client.rpc('set_session_token', {'token': None}).execute()
+            except Exception:
+                pass
+
             return False, f"Error de inicio de sesión: {str(e)}", None
 
     def get_user_by_id(self, user_id: int) -> Optional[Dict]:
