@@ -240,9 +240,8 @@ def show_reservation_tab():
                                     help="Activa para pantallas pequeñas")
 
     if use_mobile_layout:
-        show_calendar_view(today, tomorrow, today_reservations, tomorrow_reservations, current_hour, current_user)
-        st.divider()
-        show_reservation_details(today, tomorrow, current_user, user_today_reservations, user_tomorrow_reservations)
+        show_mobile_layout(today, tomorrow, today_reservations, tomorrow_reservations, current_hour, current_user,
+                           user_today_reservations, user_tomorrow_reservations)
     else:
         left_col, right_col = st.columns([1, 2])
 
@@ -252,8 +251,94 @@ def show_reservation_tab():
         with right_col:
             show_calendar_view(today, tomorrow, today_reservations, tomorrow_reservations, current_hour, current_user)
 
+
+def show_mobile_layout(today, tomorrow, today_reservations, tomorrow_reservations, current_hour, current_user,
+                       user_today_reservations, user_tomorrow_reservations):
+    """Mostrar layout móvil optimizado"""
+
+    # PARTE 1: Información del usuario y reservas existentes (ARRIBA)
+    st.subheader("Detalles de la Reserva")
+
+    # Mostrar información del usuario
+    st.markdown(f"""
+    <div class="user-info-display">
+        <strong>👤 Reservando como:</strong><br>
+        {current_user['full_name']}<br>
+        <small>{current_user['email']}</small>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Mostrar reservas existentes del usuario
+    show_user_existing_reservations(today, tomorrow, user_today_reservations, user_tomorrow_reservations)
+
+    # Mostrar reglas de reserva
+    with st.expander("📋 Reglas de Reserva"):
+        st.markdown("""
+        • **Solo se puede hacer reservar para hoy y para mañana**<br>
+        • **Máximo 2 horas** por persona por día<br>
+        • **Horas consecutivas** requeridas si se reservan 2 horas<br>
+        • No se permite reservar la cancha en **los mismos horarios dos días consecutivos**<br>
+        • **Horario de cancha:** 6:00 AM - 9:00 PM
+        """, unsafe_allow_html=True)
+
+    st.divider()
+
+    # PARTE 2: Vista de calendario (MEDIO)
+    show_calendar_view(today, tomorrow, today_reservations, tomorrow_reservations, current_hour, current_user)
+
+    st.divider()
+
+    # PARTE 3: Confirmación de reserva (ABAJO)
+    show_mobile_confirmation_section(current_user)
+
+
+def show_mobile_confirmation_section(current_user):
+    """Mostrar sección de confirmación para vista móvil"""
+    selected_hours = st.session_state.get('selected_hours', [])
+    selected_date = st.session_state.get('selected_date', None)
+
+    if selected_hours and selected_date is not None:
+        st.markdown("### Nueva Selección")
+
+        st.write(f"**Fecha:** {format_date_full(selected_date)}")
+        st.write(f"**Slots de Tiempo:** {len(selected_hours)} hora(s)")
+
+        for hour in sorted(selected_hours):
+            st.write(f"• {format_hour(hour)} - {format_hour(hour + 1)}")
+
+        if len(selected_hours) > 1:
+            start_time = format_hour(min(selected_hours))
+            end_time = format_hour(max(selected_hours) + 1)
+            st.write(f"**Tiempo Total:** {start_time} - {end_time}")
+
+        st.divider()
+
+        # Formulario simplificado (sin nombre y email)
+        st.markdown("### Confirmar Reserva")
+
+        # Mostrar resumen de la reserva
+        st.info(f"Reservando para: **{current_user['full_name']}** ({current_user['email']})")
+
+        # Add visual emphasis and bigger button
+        st.markdown('<div class="big-confirm-button">', unsafe_allow_html=True)
+        if st.button(r"$\textsf{\normalsize  ✅ Confirmar Reserva}$", type="primary", use_container_width=True,
+                     key="mobile_big_confirm_btn"):
+            handle_reservation_submission(current_user, selected_date, selected_hours)
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    else:
+        st.info("Selecciona los horarios disponibles en el calendario para continuar")
+
+        st.markdown("### Cómo Reservar")
+        st.write("1. **Selecciona los horarios disponibles** que desees entre hoy y mañana (hasta 2 horas)")
+        st.write("2. **Confirma tu reserva** con un click")
+
 def show_reservation_details(today_date, tomorrow_date, current_user, user_today_reservations, user_tomorrow_reservations):
     """Mostrar panel de detalles de reserva"""
+
+    if st.session_state.get('mobile_layout', False):
+        return
+
     st.subheader("Detalles de la Reserva")
 
     # Mostrar información del usuario
@@ -335,7 +420,6 @@ def show_user_existing_reservations(today_date, tomorrow_date, user_today_reserv
                 st.write(f"  • {format_hour(hour)} - {format_hour(hour + 1)}")
 
         st.divider()
-
 
 def handle_reservation_submission(current_user, date, selected_hours):
     """Manejar el envío de la reserva con validación en tiempo real"""
