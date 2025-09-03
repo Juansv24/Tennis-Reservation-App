@@ -179,12 +179,12 @@ class SupabaseManager:
     def save_verification_code(self, email: str, code: str) -> bool:
         """Guardar código de verificación de email"""
         try:
-            from timezone_utils import get_colombia_now
-            expires_at = get_colombia_now().replace(tzinfo=None) + timedelta(minutes=10)
+            import datetime
+            expires_at = datetime.datetime.utcnow() + timedelta(minutes=10)
 
             # Limpiar códigos expirados primero
             self.client.table('email_verifications').delete().lt(
-                'expires_at', datetime.now().isoformat()
+                'expires_at', datetime.datetime.utcnow().isoformat()
             ).execute()
 
             result = self.client.table('email_verifications').insert({
@@ -193,6 +193,8 @@ class SupabaseManager:
                 'expires_at': expires_at.isoformat(),
                 'is_used': False
             }).execute()
+
+            print(f"DEBUG - Código guardado: {code} para {email}, expira: {expires_at.isoformat()}")
             return len(result.data) > 0
         except Exception as e:
             st.error(f"Error guardando código de verificación: {e}")
@@ -201,12 +203,22 @@ class SupabaseManager:
     def verify_email_code(self, email: str, code: str) -> bool:
         """Verificar código de email y marcarlo como usado"""
         try:
+            import datetime
+            current_time = datetime.datetime.utcnow().isoformat()
+
+            print(f"DEBUG - Verificando código: {code} para email: {email}")
+            print(f"DEBUG - Hora actual UTC: {current_time}")
+
             # Buscar código válido
-            result = self.client.table('email_verifications').select('id').eq(
+            result = self.client.table('email_verifications').select('id, expires_at').eq(
                 'email', email.strip().lower()
             ).eq('code', code.strip().upper()).eq('is_used', False).gt(
-                'expires_at', datetime.now().isoformat()
+                'expires_at', current_time
             ).execute()
+
+            print(f"DEBUG - Resultados encontrados: {len(result.data)}")
+            if result.data:
+                print(f"DEBUG - Código expira: {result.data[0]['expires_at']}")
 
             if result.data:
                 # Marcar como usado
@@ -216,6 +228,7 @@ class SupabaseManager:
                 return True
             return False
         except Exception as e:
+            print(f"DEBUG - Error verificando código: {e}")
             st.error(f"Error verificando código: {e}")
             return False
 

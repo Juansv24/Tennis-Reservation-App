@@ -171,7 +171,6 @@ def apply_custom_css():
     </style>
     """, unsafe_allow_html=True)
 
-
 def show_reservation_tab():
     """Mostrar la pestaña de reservas con caché optimizado"""
     apply_custom_css()
@@ -251,7 +250,6 @@ def show_reservation_tab():
         with right_col:
             show_calendar_view(today, tomorrow, today_reservations, tomorrow_reservations, current_hour, current_user)
 
-
 def show_mobile_layout(today, tomorrow, today_reservations, tomorrow_reservations, current_hour, current_user,
                        user_today_reservations, user_tomorrow_reservations):
     """Mostrar layout móvil optimizado"""
@@ -290,7 +288,6 @@ def show_mobile_layout(today, tomorrow, today_reservations, tomorrow_reservation
 
     # PARTE 3: Confirmación de reserva (ABAJO)
     show_mobile_confirmation_section(current_user)
-
 
 def show_mobile_confirmation_section(current_user):
     """Mostrar sección de confirmación para vista móvil"""
@@ -695,7 +692,6 @@ def show_day_schedule(date, reservations_dict, current_user, is_today=False, cur
         ):
             handle_time_slot_click(hour, date, current_user)
 
-
 def handle_time_slot_click(hour, date, current_user):
     """Manejar clic en un slot de tiempo usando datos cacheados"""
     selected_hours = st.session_state.get('selected_hours', [])
@@ -761,7 +757,6 @@ def handle_time_slot_click(hour, date, current_user):
     st.session_state.selected_date = selected_date
     st.rerun()
 
-
 def validate_consecutive_days_conflict(hour, date, current_user):
     """Validate that user doesn't reserve same time slot on consecutive days"""
     today, tomorrow = get_today_tomorrow()
@@ -800,7 +795,6 @@ def init_reservation_session_state():
     if 'selected_date' not in st.session_state:
         st.session_state.selected_date = None
 
-
 def invalidate_reservation_cache():
     """Force cache refresh"""
     today, tomorrow = get_today_tomorrow()
@@ -811,7 +805,6 @@ def invalidate_reservation_cache():
         del st.session_state[cache_key]
     if cache_timestamp_key in st.session_state:
         del st.session_state[cache_timestamp_key]
-
 
 def get_cache_age():
     """Get age of current cache in seconds"""
