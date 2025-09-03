@@ -473,6 +473,25 @@ def handle_reservation_submission(current_user, date, selected_hours):
         invalidate_reservation_cache()
         return
 
+    # Validar si las reservas son consecutivas
+
+    today, tomorrow = get_today_tomorrow()
+    other_date = tomorrow if date == today else today
+    user_other_day_hours = db_manager.get_user_reservations_for_date(current_user['email'], other_date)
+
+    conflicting_hours = []
+    for hour in selected_hours:
+        if hour in user_other_day_hours:
+            conflicting_hours.append(hour)
+
+    if conflicting_hours:
+        conflict_times = ", ".join([format_hour(h) for h in conflicting_hours])
+        other_day_name = "mañana" if date == today else "hoy"
+        st.error(
+            f"No puedes reservar a las {conflict_times} porque ya tienes esos horarios reservados {other_day_name}. No se permite reservar el mismo horario dos días seguidos.")
+        invalidate_reservation_cache()
+        return
+
     # Proceed with reservation attempt
     success_count = 0
     failed_hours = []
@@ -720,6 +739,10 @@ def handle_time_slot_click(hour, date, current_user):
             st.error(f"Máximo 2 horas por día. Ya tienes {len(user_existing_hours)} hora(s) reservada(s).")
             return
 
+        # Validar si las horas son consecutivas con el día anterior
+        if validate_consecutive_days_conflict(hour, date, current_user):
+            return
+
         # Seleccionar (verificar límites)
         if len(selected_hours) >= 2:
             st.error("Máximo 2 horas por selección")
@@ -737,6 +760,38 @@ def handle_time_slot_click(hour, date, current_user):
     st.session_state.selected_hours = selected_hours
     st.session_state.selected_date = selected_date
     st.rerun()
+
+
+def validate_consecutive_days_conflict(hour, date, current_user):
+    """Validate that user doesn't reserve same time slot on consecutive days"""
+    today, tomorrow = get_today_tomorrow()
+
+    # Get cached data to avoid database calls
+    cache_key = f"reservations_cache_{today}_{tomorrow}"
+
+    if cache_key in st.session_state:
+        cached_data = st.session_state[cache_key]
+        user_today_reservations = cached_data['user_today_reservations']
+        user_tomorrow_reservations = cached_data['user_tomorrow_reservations']
+    else:
+        # Fallback if no cache
+        summary = db_manager.get_date_reservations_summary([today, tomorrow], current_user['email'])
+        today_str = today.strftime('%Y-%m-%d')
+        tomorrow_str = tomorrow.strftime('%Y-%m-%d')
+        user_today_reservations = summary['user_reservations'].get(today_str, [])
+        user_tomorrow_reservations = summary['user_reservations'].get(tomorrow_str, [])
+
+    # Check if trying to book same hour on consecutive days
+    if date == today and hour in user_tomorrow_reservations:
+        st.error(
+            f"No puedes reservar a las {format_hour(hour)} hoy porque ya lo tienes reservado mañana. No se permite reservar el mismo horario dos días seguidos.")
+        return True
+    elif date == tomorrow and hour in user_today_reservations:
+        st.error(
+            f"No puedes reservar a las {format_hour(hour)} mañana porque ya lo tienes reservado hoy. No se permite reservar el mismo horario dos días seguidos.")
+        return True
+
+    return False
 
 def init_reservation_session_state():
     """Inicializar estado de sesión para reservas"""
