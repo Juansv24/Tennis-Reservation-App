@@ -235,7 +235,8 @@ class SupabaseManager:
     def cleanup_expired_data(self):
         """Limpiar datos expirados del sistema"""
         try:
-            now = get_colombia_now().replace(tzinfo=None).isoformat()
+            import datetime
+            now = datetime.datetime.utcnow().isoformat()  # FIX: usar UTC
 
             # Limpiar códigos de verificación expirados
             self.client.table('email_verifications').delete().lt('expires_at', now).execute()

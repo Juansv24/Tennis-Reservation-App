@@ -427,14 +427,20 @@ class SupabaseAuthManager:
 
             user_id = result.data[0]['id']
 
+            # Usar UTC para evitar problemas de timezone
+            import datetime
+            current_utc = datetime.datetime.utcnow()
+
             # Limpiar tokens expirados
             self.client.table('password_reset_tokens').delete().lt(
-                'expires_at', datetime.now().isoformat()
+                'expires_at', current_utc.isoformat()
             ).execute()
 
             # Generar token único
             token = secrets.token_urlsafe(32)
-            expires_at = datetime.now() + timedelta(minutes=30)
+            expires_at = current_utc + timedelta(minutes=30)
+
+            print(f"DEBUG - Creando token que expira: {expires_at.isoformat()}")
 
             # Guardar token
             token_result = self.client.table('password_reset_tokens').insert({
@@ -464,12 +470,20 @@ class SupabaseAuthManager:
             token_data = result.data[0]
             user_email = token_data['users']['email']
 
-            # Verificar expiración
+            # FIX: Verificar expiración usando UTC
             try:
-                expires_at = datetime.fromisoformat(token_data['expires_at'].replace('Z', ''))
-                if expires_at < datetime.now():
+                import datetime
+                expires_at_str = token_data['expires_at'].replace('Z', '')
+                expires_at = datetime.datetime.fromisoformat(expires_at_str)
+                current_utc = datetime.datetime.utcnow()
+
+                print(f"DEBUG - Token expira: {expires_at.isoformat()}")
+                print(f"DEBUG - Hora actual: {current_utc.isoformat()}")
+
+                if expires_at < current_utc:
                     return False, "Token expirado", None
-            except ValueError:
+            except ValueError as e:
+                print(f"DEBUG - Error parseando fecha: {e}")
                 return False, "Token inválido", None
 
             return True, f"Token válido para {user_email}", token_data['user_id']

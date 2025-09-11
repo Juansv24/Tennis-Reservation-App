@@ -687,9 +687,8 @@ def handle_forgot_password(email: str):
             return
 
         user_data = result.data[0]
-        user_id, user_name = user_data['id'], user_data['full_name']
-
-        user_id, user_name = user_data
+        user_id = user_data['id']
+        user_name = user_data['full_name']
 
         # Crear token de recuperación solo si el usuario existe
         success, message, reset_token = auth_manager.create_password_reset_token(email)
