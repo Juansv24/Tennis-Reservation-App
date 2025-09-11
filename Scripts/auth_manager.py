@@ -422,12 +422,11 @@ class SupabaseAuthManager:
             result = self.client.table('users').select('id').eq('email', email).eq('is_active', True).execute()
 
             if not result.data:
-                # No revelar que el email no existe por seguridad
                 return False, "Error al procesar solicitud", None
 
             user_id = result.data[0]['id']
 
-            # Usar UTC para evitar problemas de timezone
+            # FIX: Usar UTC para evitar problemas de timezone
             import datetime
             current_utc = datetime.datetime.utcnow()
 
@@ -441,6 +440,7 @@ class SupabaseAuthManager:
             expires_at = current_utc + timedelta(minutes=30)
 
             print(f"DEBUG - Creando token que expira: {expires_at.isoformat()}")
+            print(f"DEBUG - Hora actual UTC: {current_utc.isoformat()}")
 
             # Guardar token
             token_result = self.client.table('password_reset_tokens').insert({
@@ -470,18 +470,31 @@ class SupabaseAuthManager:
             token_data = result.data[0]
             user_email = token_data['users']['email']
 
-            # FIX: Verificar expiración usando UTC
+            # Verificar expiración usando UTC consistentemente
             try:
                 import datetime
-                expires_at_str = token_data['expires_at'].replace('Z', '')
+                expires_at_str = token_data['expires_at']
+
+                # Remover 'Z' y '+00:00' si existen
+                if expires_at_str.endswith('Z'):
+                    expires_at_str = expires_at_str[:-1]
+                elif '+00:00' in expires_at_str:
+                    expires_at_str = expires_at_str.replace('+00:00', '')
+
                 expires_at = datetime.datetime.fromisoformat(expires_at_str)
                 current_utc = datetime.datetime.utcnow()
 
                 print(f"DEBUG - Token expira: {expires_at.isoformat()}")
-                print(f"DEBUG - Hora actual: {current_utc.isoformat()}")
+                print(f"DEBUG - Hora actual UTC: {current_utc.isoformat()}")
+                print(f"DEBUG - Diferencia en minutos: {(expires_at - current_utc).total_seconds() / 60}")
 
                 if expires_at < current_utc:
+                    print(f"DEBUG - Token expirado: {expires_at} < {current_utc}")
                     return False, "Token expirado", None
+                else:
+                    print(
+                        f"DEBUG - Token válido, expira en {(expires_at - current_utc).total_seconds() / 60:.1f} minutos")
+
             except ValueError as e:
                 print(f"DEBUG - Error parseando fecha: {e}")
                 return False, "Token inválido", None
