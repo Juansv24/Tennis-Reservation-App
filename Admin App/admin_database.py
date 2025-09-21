@@ -44,6 +44,181 @@ class AdminDatabaseManager:
                 'total_credits_issued': 0
             }
 
+    def search_users_for_reservations(self, search_term: str) -> List[Dict]:
+        """Buscar usuarios por nombre o email para gestión de reservas"""
+        try:
+            # Buscar por email o nombre
+            result = self.client.table('users').select('id, email, full_name').or_(
+                f'email.ilike.%{search_term}%,full_name.ilike.%{search_term}%'
+            ).eq('is_active', True).execute()
+
+            return [{'id': u['id'], 'email': u['email'], 'name': u['full_name']} for u in result.data]
+        except Exception:
+            return []
+
+    def get_user_reservations_history(self, user_email: str) -> List[Dict]:
+        """Obtener historial completo de reservas de un usuario"""
+        try:
+            result = self.client.table('reservations').select('*').eq(
+                'email', user_email
+            ).order('date', desc=True).order('hour').execute()
+
+            return result.data
+        except Exception:
+            return []
+
+    def cancel_reservation_with_notification(self, reservation_id: int, user_email: str) -> bool:
+        """Cancelar reserva y enviar notificación"""
+        try:
+            # Obtener datos de la reserva
+            reservation_result = self.client.table('reservations').select('*').eq('id', reservation_id).execute()
+            if not reservation_result.data:
+                return False
+
+            reservation = reservation_result.data[0]
+
+            # Cancelar reserva (reutilizar función existente)
+            success = self.cancel_reservation(reservation_id)
+
+            if success:
+                # Enviar email de notificación
+                self._send_cancellation_notification(user_email, reservation)
+
+            return success
+        except Exception:
+            return False
+
+    def _send_cancellation_notification(self, user_email: str, reservation: Dict):
+        """Enviar notificación de cancelación"""
+        try:
+            from email_config import email_manager
+
+            if email_manager.is_configured():
+                subject = "🎾 Reserva Cancelada - Sistema de Reservas"
+
+                html_body = f"""
+                <h2>Reserva Cancelada</h2>
+                <p>Tu reserva ha sido cancelada por el administrador:</p>
+                <ul>
+                    <li><strong>Fecha:</strong> {reservation['date']}</li>
+                    <li><strong>Hora:</strong> {reservation['hour']}:00</li>
+                </ul>
+                <p>Se ha reembolsado 1 crédito a tu cuenta.</p>
+                <p>Si tienes preguntas, contacta al administrador.</p>
+                """
+
+                email_manager.send_email(user_email, subject, html_body)
+        except Exception as e:
+            print(f"Error sending cancellation email: {e}")
+
+    def search_users_detailed(self, search_term: str) -> List[Dict]:
+        """Búsqueda detallada de usuarios"""
+        try:
+            result = self.client.table('users').select('*').or_(
+                f'email.ilike.%{search_term}%,full_name.ilike.%{search_term}%'
+            ).execute()
+
+            return result.data
+        except Exception:
+            return []
+
+    def get_user_stats(self, user_id: int) -> Dict:
+        """Obtener estadísticas de un usuario específico"""
+        try:
+            user_result = self.client.table('users').select('email').eq('id', user_id).execute()
+            if not user_result.data:
+                return {'total_reservations': 0, 'active_reservations': 0, 'last_reservation': None}
+
+            email = user_result.data[0]['email']
+
+            # Total de reservas
+            total_result = self.client.table('reservations').select('id').eq('email', email).execute()
+            total_reservations = len(total_result.data)
+
+            # Reservas futuras
+            today = get_colombia_today().strftime('%Y-%m-%d')
+            future_result = self.client.table('reservations').select('id').eq('email', email).gte('date',
+                                                                                                  today).execute()
+            active_reservations = len(future_result.data)
+
+            # Última reserva
+            last_result = self.client.table('reservations').select('date').eq('email', email).order('date',
+                                                                                                    desc=True).limit(
+                1).execute()
+            last_reservation = last_result.data[0]['date'] if last_result.data else None
+
+            return {
+                'total_reservations': total_reservations,
+                'active_reservations': active_reservations,
+                'last_reservation': last_reservation
+            }
+        except Exception:
+            return {'total_reservations': 0, 'active_reservations': 0, 'last_reservation': None}
+
+    def toggle_user_status_with_notification(self, user_id: int) -> bool:
+        """Cambiar estado de usuario y notificar"""
+        try:
+            # Obtener info del usuario
+            user_result = self.client.table('users').select('email, full_name, is_active').eq('id', user_id).execute()
+            if not user_result.data:
+                return False
+
+            user = user_result.data[0]
+            success = self.toggle_user_status(user_id)
+
+            if success:
+                # Enviar notificación
+                new_status = "activada" if not user['is_active'] else "desactivada"
+                self._send_status_change_notification(user['email'], user['full_name'], new_status)
+
+            return success
+        except Exception:
+            return False
+
+    def _send_status_change_notification(self, email: str, name: str, status: str):
+        """Enviar notificación de cambio de estado"""
+        try:
+            from email_config import email_manager
+
+            if email_manager.is_configured():
+                subject = f"🎾 Cuenta {status.title()} - Sistema de Reservas"
+
+                html_body = f"""
+                <h2>Estado de Cuenta Actualizado</h2>
+                <p>Hola {name},</p>
+                <p>Tu cuenta ha sido <strong>{status}</strong> por el administrador.</p>
+                <p>Si tienes preguntas, contacta al administrador.</p>
+                """
+
+                email_manager.send_email(email, subject, html_body)
+        except Exception as e:
+            print(f"Error sending status change email: {e}")
+
+    def get_user_reservation_statistics(self) -> List[Dict]:
+        """Obtener estadísticas de reservas por usuario"""
+        try:
+            result = self.client.table('reservations').select('email, name').execute()
+
+            # Contar reservas por usuario
+            user_counts = {}
+            for reservation in result.data:
+                email = reservation['email']
+                name = reservation['name']
+                if email in user_counts:
+                    user_counts[email]['count'] += 1
+                else:
+                    user_counts[email] = {'name': name, 'count': 1}
+
+            # Convertir a lista y ordenar
+            user_stats = [
+                {'email': email, 'name': data['name'], 'reservations': data['count']}
+                for email, data in user_counts.items()
+            ]
+
+            return sorted(user_stats, key=lambda x: x['reservations'], reverse=True)[:10]
+        except Exception:
+            return []
+
     def get_daily_reservation_stats(self, days: int = 7) -> List[Dict]:
         """Obtener estadísticas de reservas por día"""
         try:
@@ -100,8 +275,9 @@ class AdminDatabaseManager:
     def cancel_reservation(self, reservation_id: int) -> bool:
         """Cancelar una reserva específica"""
         try:
-            # Obtener datos de la reserva antes de cancelar para reembolso de créditos
-            reservation_result = self.client.table('reservations').select('email, date, hour').eq('id', reservation_id).execute()
+            # Obtener datos de la reserva antes de cancelar
+            reservation_result = self.client.table('reservations').select('email, date, hour').eq('id',
+                                                                                                  reservation_id).execute()
 
             if not reservation_result.data:
                 return False
@@ -112,17 +288,22 @@ class AdminDatabaseManager:
             delete_result = self.client.table('reservations').delete().eq('id', reservation_id).execute()
 
             if delete_result.data:
-                # Reembolsar crédito al usuario
-                user_result = self.client.table('users').select('id').eq('email', reservation['email']).execute()
+                # Obtener usuario para reembolso
+                user_result = self.client.table('users').select('id, credits').eq('email',
+                                                                                  reservation['email']).execute()
                 if user_result.data:
-                    user_id = user_result.data[0]['id']
+                    user = user_result.data[0]
+                    current_credits = user['credits'] or 0
+                    new_credits = current_credits + 1
 
-                    # Actualizar créditos del usuario
-                    self.client.table('users').update({'credits': db_manager.client.rpc('increment_credits', {'user_id': user_id, 'amount': 1})}).eq('id', user_id).execute()
+                    # Actualizar créditos directamente (sin RPC)
+                    self.client.table('users').update({
+                        'credits': new_credits
+                    }).eq('id', user['id']).execute()
 
                     # Registrar transacción de reembolso
                     self.client.table('credit_transactions').insert({
-                        'user_id': user_id,
+                        'user_id': user['id'],
                         'amount': 1,
                         'transaction_type': 'reservation_refund',
                         'description': f'Reembolso por cancelación admin - {reservation["date"]} {reservation["hour"]}:00',
@@ -202,6 +383,47 @@ class AdminDatabaseManager:
             print(f"Error adding credits: {e}")
             return False
 
+    def remove_credits_from_user(self, email: str, credits_amount: int, reason: str, admin_username: str) -> bool:
+        """Quitar créditos a un usuario"""
+        try:
+            # Buscar usuario por email
+            user_result = self.client.table('users').select('id, credits').eq('email', email.strip().lower()).execute()
+
+            if not user_result.data:
+                return False
+
+            user = user_result.data[0]
+            user_id = user['id']
+            current_credits = user['credits'] or 0
+
+            # Verificar que tenga suficientes créditos
+            if current_credits < credits_amount:
+                return False
+
+            new_credits = current_credits - credits_amount
+
+            # Actualizar créditos del usuario
+            update_result = self.client.table('users').update({
+                'credits': new_credits
+            }).eq('id', user_id).execute()
+
+            if update_result.data:
+                # Registrar transacción
+                self.client.table('credit_transactions').insert({
+                    'user_id': user_id,
+                    'amount': -credits_amount,
+                    'transaction_type': 'admin_deduct',
+                    'description': reason,
+                    'admin_user': admin_username,
+                    'created_at': datetime.now().isoformat()
+                }).execute()
+
+                return True
+            return False
+        except Exception as e:
+            print(f"Error removing credits: {e}")
+            return False
+
     def get_credit_statistics(self) -> Dict:
         """Obtener estadísticas de créditos"""
         try:
@@ -272,6 +494,18 @@ class AdminDatabaseManager:
 
             return result.data
         except Exception:
+            return []
+
+    def get_user_recent_reservations(self, user_email: str, limit: int = 10) -> List[Dict]:
+        """Obtener reservas recientes de un usuario"""
+        try:
+            result = self.client.table('reservations').select(
+                'date, hour, created_at'
+            ).eq('email', user_email).order('date', desc=True).limit(limit).execute()
+
+            return result.data
+        except Exception as e:
+            print(f"Error getting user recent reservations: {e}")
             return []
 
     def use_credit_for_reservation(self, user_email: str, date: str, hour: int) -> bool:

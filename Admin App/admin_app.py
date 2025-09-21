@@ -188,35 +188,24 @@ def show_admin_dashboard():
             st.rerun()
 
     # Control de navegación segmentado
-    if 'admin_selected_section' not in st.session_state:
-        st.session_state.admin_selected_section = "Dashboard"
-
-    selected_section = st.segmented_control(
-        label="Navegación",
-        options=[
-            "Dashboard",
-            "Reservas",
-            "Usuarios",
-            "Créditos"
-        ],
-        default=st.session_state.admin_selected_section,
-        key="admin_navigation"
+    tab = st.segmented_control(
+        "Navegación Admin",
+        ["📊 Dashboard", "📅 Reservas", "👥 Usuarios", "💰 Créditos"],
+        selection_mode="single",
+        default="📊 Dashboard",
+        label_visibility="collapsed",
     )
-
-    # Actualizar estado si cambió la selección
-    if selected_section != st.session_state.admin_selected_section:
-        st.session_state.admin_selected_section = selected_section
 
     st.divider()
 
     # Mostrar sección correspondiente
-    if selected_section == "Dashboard":
+    if tab == "📊 Dashboard":
         show_dashboard_tab()
-    elif selected_section == "Reservas":
+    elif tab == "📅 Reservas":
         show_reservations_management_tab()
-    elif selected_section == "Usuarios":
+    elif tab == "👥 Usuarios":
         show_users_management_tab()
-    elif selected_section == "Créditos":
+    elif tab == "💰 Créditos":
         show_credits_management_tab()
 
 
@@ -285,138 +274,169 @@ def show_dashboard_tab():
         else:
             st.info("No hay datos de horarios disponibles")
 
+    st.divider()
 
-def show_reservations_management_tab():
-    """Gestión de reservas"""
-    st.subheader("📅 Gestión de Reservas")
-
-    # Filtros
-    col1, col2, col3 = st.columns(3)
+    # Estadísticas de usuarios
+    col1, col2 = st.columns(2)
 
     with col1:
-        date_filter = st.date_input(
-            "Fecha",
-            value=get_colombia_today(),
-            min_value=get_colombia_today() - timedelta(days=30),
-            max_value=get_colombia_today() + timedelta(days=30)
+        st.subheader("🏆 Usuarios Más Activos")
+        user_stats = admin_db_manager.get_user_reservation_statistics()
+        if user_stats:
+            for i, user in enumerate(user_stats[:5], 1):
+                st.write(f"{i}. **{user['name']}** - {user['reservations']} reservas")
+        else:
+            st.info("No hay datos de usuarios disponibles")
+
+
+def show_reservations_management_tab():
+    """Gestión de reservas por usuario"""
+    st.subheader("📅 Gestión de Reservas por Usuario")
+
+    # Buscador de usuario
+    col1, col2 = st.columns([3, 1])
+
+    with col1:
+        search_term = st.text_input(
+            "🔍 Buscar usuario por nombre o email:",
+            placeholder="Ingresa nombre o email del usuario"
         )
 
     with col2:
-        status_filter = st.selectbox(
-            "Estado",
-            ["Todas", "Activas", "Futuras", "Pasadas"]
-        )
+        search_button = st.button("🔍 Buscar", type="primary")
 
-    with col3:
-        if st.button("🔄 Actualizar", type="primary"):
-            st.rerun()
+    if search_term and search_button:
+        # Buscar usuarios que coincidan
+        matching_users = admin_db_manager.search_users_for_reservations(search_term)
 
-    # Obtener reservas
-    reservations = admin_db_manager.get_reservations_for_admin(date_filter, status_filter)
-
-    if reservations:
-        st.write(f"**Total: {len(reservations)} reservas**")
-
-        # Mostrar reservas en tabla
-        df = pd.DataFrame(reservations)
-        df.columns = ['ID', 'Fecha', 'Hora', 'Usuario', 'Email', 'Creada']
-
-        # Hacer la tabla interactiva
-        selected_reservation = st.selectbox(
-            "Seleccionar reserva para gestionar:",
-            options=range(len(df)),
-            format_func=lambda x: f"{df.iloc[x]['Fecha']} - {df.iloc[x]['Hora']}:00 - {df.iloc[x]['Usuario']}"
-        )
-
-        if selected_reservation is not None:
-            reservation = df.iloc[selected_reservation]
-
-            col1, col2 = st.columns(2)
-
-            with col1:
-                if st.button("❌ Cancelar Reserva", type="secondary"):
-                    if admin_db_manager.cancel_reservation(reservation['ID']):
-                        # Enviar email de notificación
-                        send_cancellation_email(reservation)
-                        st.success("Reserva cancelada exitosamente")
+        if matching_users:
+            if len(matching_users) == 1:
+                st.session_state.selected_user_for_reservations = matching_users[0]
+            else:
+                # Múltiples usuarios encontrados
+                st.write("**Usuarios encontrados:**")
+                for i, user in enumerate(matching_users):
+                    if st.button(f"{user['name']} ({user['email']})", key=f"user_{i}"):
+                        st.session_state.selected_user_for_reservations = user
                         st.rerun()
-                    else:
-                        st.error("Error al cancelar la reserva")
+        else:
+            st.warning("No se encontraron usuarios con ese criterio")
 
-            with col2:
-                if st.button("📧 Enviar Recordatorio"):
-                    send_reminder_email(reservation)
-                    st.success("Recordatorio enviado")
+    # Mostrar reservas del usuario seleccionado
+    if 'selected_user_for_reservations' in st.session_state:
+        user = st.session_state.selected_user_for_reservations
 
-        # Mostrar tabla completa
-        st.dataframe(df, use_container_width=True)
-    else:
-        st.info("No hay reservas para los filtros seleccionados")
+        st.markdown(f"### 📋 Reservas de {user['name']}")
+        st.info(f"**Email:** {user['email']}")
 
+        # Obtener reservas del usuario
+        user_reservations = admin_db_manager.get_user_reservations_history(user['email'])
+
+        if user_reservations:
+            # Mostrar cada reserva con opciones
+            for i, reservation in enumerate(user_reservations):
+                with st.expander(f"Reserva: {reservation['date']} - {reservation['hour']}:00"):
+                    col1, col2, col3 = st.columns(3)
+
+                    with col1:
+                        st.write(f"**Fecha:** {reservation['date']}")
+                        st.write(f"**Hora:** {reservation['hour']}:00")
+                        st.write(f"**Creada:** {reservation['created_at'][:10]}")
+
+                    with col2:
+                        if st.button("📝 Modificar", key=f"modify_{reservation['id']}"):
+                            st.session_state.modifying_reservation = reservation
+                            st.rerun()
+
+                    with col3:
+                        if st.button("❌ Cancelar", key=f"cancel_{reservation['id']}", type="secondary"):
+                            if admin_db_manager.cancel_reservation(reservation['id']):
+                                st.success("Reserva cancelada exitosamente")
+                                # Invalidar cache si existe
+                                if 'selected_user_for_reservations' in st.session_state:
+                                    del st.session_state['selected_user_for_reservations']
+                                st.rerun()
+                            else:
+                                st.error("Error al cancelar reserva")
+        else:
+            st.info("Este usuario no tiene reservas")
+
+
+def show_user_detailed_info(user):
+    """Mostrar información detallada del usuario"""
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.markdown(f"""
+        **📊 Información General:**
+        - **Nombre:** {user['full_name']}
+        - **Email:** {user['email']}
+        - **Créditos:** {user['credits'] or 0}
+        - **Estado:** {'✅ Activo' if user['is_active'] else '❌ Inactivo'}
+        - **Último login:** {user['last_login'][:10] if user['last_login'] else 'Nunca'}
+        - **Registrado:** {user['created_at'][:10]}
+        """)
+
+    with col2:
+        # Obtener estadísticas del usuario
+        stats = admin_db_manager.get_user_stats(user['id'])
+        st.markdown(f"""
+        **📈 Estadísticas:**
+        - **Total reservas:** {stats['total_reservations']}
+        - **Reservas activas:** {stats['active_reservations']}
+        - **Última reserva:** {stats['last_reservation'] or 'Nunca'}
+        """)
+
+    # Acciones
+    col1, col2 = st.columns(2)
+
+    with col1:
+        status_text = "Desactivar" if user['is_active'] else "Activar"
+        if st.button(f"🔄 {status_text} Usuario", key=f"toggle_{user['id']}"):
+            if admin_db_manager.toggle_user_status_with_notification(user['id']):
+                st.success(f"Usuario {status_text.lower()}do y notificado")
+                # Actualizar lista
+                if 'found_users' in st.session_state:
+                    del st.session_state.found_users
+                st.rerun()
+
+    with col2:
+        if st.button("📧 Enviar Email", key=f"email_{user['id']}"):
+            st.session_state[f"show_email_form_{user['id']}"] = True
+
+    # Mostrar reservas recientes
+    recent_reservations = admin_db_manager.get_user_recent_reservations(user['email'])
+    if recent_reservations:
+        st.write("**🕐 Reservas Recientes:**")
+        for res in recent_reservations[:5]:
+            st.write(f"• {res['date']} - {res['hour']}:00")
 
 def show_users_management_tab():
-    """Gestión de usuarios"""
+    """Gestión mejorada de usuarios"""
     st.subheader("👥 Gestión de Usuarios")
 
-    # Obtener usuarios
-    users = admin_db_manager.get_all_users()
+    # Buscador
+    col1, col2 = st.columns([3, 1])
 
-    if users:
-        df_users = pd.DataFrame(users)
-        df_users.columns = ['ID', 'Email', 'Nombre', 'Créditos', 'Activo', 'Último Login', 'Creado']
+    with col1:
+        search_user = st.text_input("🔍 Buscar usuario por nombre o email:")
 
-        # Filtros
-        col1, col2 = st.columns(2)
-        with col1:
-            search_email = st.text_input("🔍 Buscar por email:")
-        with col2:
-            status_filter = st.selectbox("Estado:", ["Todos", "Activos", "Inactivos"])
+    with col2:
+        if st.button("🔍 Buscar Usuario", type="primary"):
+            if search_user:
+                found_users = admin_db_manager.search_users_detailed(search_user)
+                if found_users:
+                    st.session_state.found_users = found_users
+                else:
+                    st.warning("No se encontraron usuarios")
 
-        # Aplicar filtros
-        if search_email:
-            df_users = df_users[df_users['Email'].str.contains(search_email, case=False, na=False)]
+    # Mostrar usuarios encontrados
+    if 'found_users' in st.session_state and st.session_state.found_users:
+        st.write("**Usuarios encontrados:**")
 
-        if status_filter != "Todos":
-            is_active = status_filter == "Activos"
-            df_users = df_users[df_users['Activo'] == is_active]
-
-        st.write(f"**Total: {len(df_users)} usuarios**")
-
-        # Seleccionar usuario para gestionar
-        if len(df_users) > 0:
-            selected_user_idx = st.selectbox(
-                "Seleccionar usuario:",
-                options=range(len(df_users)),
-                format_func=lambda x: f"{df_users.iloc[x]['Nombre']} ({df_users.iloc[x]['Email']})"
-            )
-
-            if selected_user_idx is not None:
-                user = df_users.iloc[selected_user_idx]
-
-                col1, col2, col3 = st.columns(3)
-
-                with col1:
-                    new_status = "Inactivo" if user['Activo'] else "Activo"
-                    if st.button(f"🔄 {new_status}"):
-                        if admin_db_manager.toggle_user_status(user['ID']):
-                            st.success(f"Usuario marcado como {new_status.lower()}")
-                            st.rerun()
-                        else:
-                            st.error("Error al cambiar estado")
-
-                with col2:
-                    if st.button("📧 Enviar Email"):
-                        show_send_email_form(user)
-
-                with col3:
-                    if st.button("📊 Ver Historial"):
-                        show_user_history(user['ID'])
-
-        # Mostrar tabla de usuarios
-        st.dataframe(df_users, use_container_width=True)
-    else:
-        st.info("No hay usuarios registrados")
-
+        for user in st.session_state.found_users:
+            with st.expander(f"👤 {user['full_name']} ({user['email']})"):
+                show_user_detailed_info(user)
 
 def show_credits_management_tab():
     """Gestión de créditos"""
@@ -453,38 +473,48 @@ def show_credits_management_tab():
 
     st.divider()
 
-    # Sección para agregar créditos
-    st.subheader("➕ Agregar Créditos a Usuario")
+    # Sección para gestionar créditos
+    st.subheader("💰 Gestionar Créditos de Usuario")
 
-    with st.form("add_credits_form"):
-        col1, col2, col3 = st.columns(3)
+    with st.form("manage_credits_form"):
+        col1, col2, col3, col4 = st.columns(4)
 
         with col1:
             user_email = st.text_input("Email del usuario:")
 
         with col2:
-            credits_amount = st.number_input("Cantidad de créditos:", min_value=1, max_value=100, value=1)
+            operation = st.selectbox("Operación:", ["Agregar", "Quitar"])
 
         with col3:
-            reason = st.text_input("Motivo:", placeholder="Ej: Promoción mensual")
+            credits_amount = st.number_input("Cantidad:", min_value=1, max_value=100, value=1)
 
-        if st.form_submit_button("💰 Agregar Créditos", type="primary"):
+        with col4:
+            reason = st.text_input("Motivo:", placeholder="Ej: Nueva Tiquetera")
+
+        if st.form_submit_button("💰 Aplicar Cambio", type="primary"):
             if user_email and credits_amount:
                 admin_user = st.session_state.get('admin_user', {})
-                success = admin_db_manager.add_credits_to_user(
-                    user_email,
-                    credits_amount,
-                    reason or "Créditos agregados por administrador",
-                    admin_user.get('username', 'admin')
-                )
+
+                if operation == "Agregar":
+                    success = admin_db_manager.add_credits_to_user(
+                        user_email, credits_amount, reason or "Créditos agregados por administrador",
+                        admin_user.get('username', 'admin')
+                    )
+                    action_msg = f"agregados a"
+                else:
+                    success = admin_db_manager.remove_credits_from_user(
+                        user_email, credits_amount, reason or "Créditos removidos por administrador",
+                        admin_user.get('username', 'admin')
+                    )
+                    action_msg = f"removidos de"
 
                 if success:
-                    st.success(f"✅ {credits_amount} créditos agregados a {user_email}")
-                    # Enviar email de notificación
-                    send_credits_notification_email(user_email, credits_amount, reason)
+                    st.success(f"✅ {credits_amount} créditos {action_msg} {user_email}")
+                    send_credits_notification_email(user_email, credits_amount, reason, operation.lower())
                     st.rerun()
                 else:
-                    st.error("❌ Error: Usuario no encontrado o error en la base de datos")
+                    error_msg = "créditos insuficientes" if operation == "Quitar" else "error en la base de datos"
+                    st.error(f"❌ Error: Usuario no encontrado o {error_msg}")
             else:
                 st.error("Por favor completa todos los campos")
 
@@ -522,12 +552,21 @@ def send_reminder_email(reservation):
         st.warning(f"Error enviando recordatorio: {e}")
 
 
-def send_credits_notification_email(user_email, credits_amount, reason):
-    """Enviar notificación de créditos agregados"""
+def send_credits_notification_email(user_email, credits_amount, reason, operation):
+    """Enviar notificación de cambio de créditos"""
     try:
         if email_manager.is_configured():
-            # Implementar notificación de créditos
-            pass
+            action = "agregados" if operation == "agregar" else "removidos"
+            subject = f"🎾 Créditos {action.title()} - Sistema de Reservas"
+
+            html_body = f"""
+            <h2>Actualización de Créditos</h2>
+            <p>Se han <strong>{action} {credits_amount} crédito(s)</strong> {'a' if operation == 'agregar' else 'de'} tu cuenta.</p>
+            <p><strong>Motivo:</strong> {reason}</p>
+            <p>Revisa tu saldo actual en la aplicación.</p>
+            """
+
+            email_manager.send_email(user_email, subject, html_body)
     except Exception as e:
         st.warning(f"Error enviando notificación: {e}")
 
