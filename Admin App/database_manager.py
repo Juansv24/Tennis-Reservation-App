@@ -54,6 +54,57 @@ class SupabaseManager:
         self.set_session_context(None)
         self._current_session_token = None
 
+
+    def get_user_credits(self, email: str) -> int:
+        """Obtener créditos disponibles del usuario"""
+        try:
+            result = self.client.table('users').select('credits').eq('email', email.strip().lower()).execute()
+            if result.data:
+                return result.data[0]['credits'] or 0
+            return 0
+        except Exception:
+            return 0
+
+    def has_sufficient_credits(self, email: str, required_credits: int) -> bool:
+        """Verificar si el usuario tiene suficientes créditos"""
+        return self.get_user_credits(email) >= required_credits
+
+    def use_credits_for_reservation(self, email: str, credits_needed: int, date: str, hour: int) -> bool:
+        """Usar créditos para una reserva"""
+        try:
+            # Obtener usuario
+            user_result = self.client.table('users').select('id, credits').eq('email', email.strip().lower()).execute()
+            if not user_result.data:
+                return False
+
+            user = user_result.data[0]
+            current_credits = user['credits'] or 0
+
+            if current_credits < credits_needed:
+                return False
+
+            # Descontar créditos
+            new_credits = current_credits - credits_needed
+            update_result = self.client.table('users').update({
+                'credits': new_credits
+            }).eq('id', user['id']).execute()
+
+            if update_result.data:
+                # Registrar transacción
+                self.client.table('credit_transactions').insert({
+                    'user_id': user['id'],
+                    'amount': -credits_needed,
+                    'transaction_type': 'reservation_use',
+                    'description': f'Reserva {date} {hour}:00',
+                    'created_at': datetime.now().isoformat()
+                }).execute()
+                return True
+
+            return False
+        except Exception as e:
+            print(f"Error using credits: {e}")
+            return False
+
     def save_reservation(self, date: datetime.date, hour: int, name: str, email: str) -> bool:
         """Guardar nueva reserva"""
         try:
