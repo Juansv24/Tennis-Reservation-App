@@ -171,6 +171,24 @@ def apply_custom_css():
     </style>
     """, unsafe_allow_html=True)
 
+
+def show_user_controls_bar():
+    """Mostrar barra de controles para usuario - versión minimalista"""
+    from auth_utils import logout_user
+
+    # Crear 2 columnas iguales para los botones
+    col1, col2 = st.columns(2)
+
+    with col1:
+        if st.button("🔄 Actualizar Datos", type="secondary", use_container_width=True, key="user_refresh_btn"):
+            invalidate_reservation_cache()
+            st.success("✅ Datos actualizados")
+            st.rerun()
+
+    with col2:
+        if st.button("🚪 Cerrar Sesión", type="secondary", use_container_width=True, key="user_logout_btn"):
+            logout_user()
+
 def show_reservation_tab():
     """Mostrar la pestaña de reservas con caché optimizado"""
     apply_custom_css()
@@ -189,6 +207,7 @@ def show_reservation_tab():
     if not current_user:
         st.error("Error de autenticación. Por favor actualiza la página.")
         return
+
 
     today, tomorrow = get_today_tomorrow()
     current_hour = get_current_hour()
@@ -243,14 +262,19 @@ def show_reservation_tab():
     if cache_age < 30:
         st.caption(f"🕐 Datos actualizados hace {int(cache_age)}s")
 
-    # Rest of the layout code remains the same
-    use_mobile_layout = st.checkbox("📱 Usar vista móvil", key="mobile_layout",
-                                    help="Activa para pantallas pequeñas")
+    # Mostrar barra de controles
+    show_user_controls_bar()
 
-    if use_mobile_layout:
-        show_mobile_layout(today, tomorrow, today_reservations, tomorrow_reservations, current_hour, current_user,
-                           user_today_reservations, user_tomorrow_reservations)
-    else:
+    st.divider()
+
+    st.markdown(" ")
+
+    # Rest of the layout code remains the same
+    use_desktop_layout = st.checkbox("🖥️ Usar vista desktop", key="desktop_layout",
+                                     help="Activa para pantallas grandes")
+
+    if use_desktop_layout:
+        # Layout desktop
         left_col, right_col = st.columns([1, 2])
 
         with left_col:
@@ -258,6 +282,11 @@ def show_reservation_tab():
 
         with right_col:
             show_calendar_view(today, tomorrow, today_reservations, tomorrow_reservations, current_hour, current_user)
+    else:
+        # Layout móvil (default)
+        show_mobile_layout(today, tomorrow, today_reservations, tomorrow_reservations, current_hour, current_user,
+                           user_today_reservations, user_tomorrow_reservations)
+
 
 def show_mobile_layout(today, tomorrow, today_reservations, tomorrow_reservations, current_hour, current_user,
                        user_today_reservations, user_tomorrow_reservations):
@@ -278,6 +307,11 @@ def show_mobile_layout(today, tomorrow, today_reservations, tomorrow_reservation
     # Mostrar reservas existentes del usuario
     show_user_existing_reservations(today, tomorrow, user_today_reservations, user_tomorrow_reservations)
 
+    # PARTE 2: Cómo Reservar (DESPUÉS DE RESERVAS ACTUALES)
+    st.markdown("### Cómo Reservar")
+    st.write("1. **Selecciona los horarios disponibles** que desees entre hoy y mañana (hasta 2 horas)")
+    st.write("2. **Confirma tu reserva** con un click")
+
     # Mostrar reglas de reserva
     with st.expander("📋 Reglas de Reserva"):
         st.markdown("""
@@ -290,21 +324,15 @@ def show_mobile_layout(today, tomorrow, today_reservations, tomorrow_reservation
 
     st.divider()
 
-    # PARTE 2: Vista de calendario (MEDIO)
+    # PARTE 3: Vista de calendario (MEDIO)
     show_calendar_view(today, tomorrow, today_reservations, tomorrow_reservations, current_hour, current_user)
 
-    st.divider()
-
-    # PARTE 3: Confirmación de reserva (ABAJO)
-    show_mobile_confirmation_section(current_user)
-
-def show_mobile_confirmation_section(current_user):
-    """Mostrar sección de confirmación para vista móvil"""
+    # PARTE 4: SOLO Confirmación de reserva (ABAJO DEL CALENDARIO)
     selected_hours = st.session_state.get('selected_hours', [])
     selected_date = st.session_state.get('selected_date', None)
 
     if selected_hours and selected_date is not None:
-        st.markdown("### Nueva Selección")
+        st.markdown("### Confirmar Reserva")
 
         st.write(f"**Fecha:** {format_date_full(selected_date)}")
         st.write(f"**Slots de Tiempo:** {len(selected_hours)} hora(s)")
@@ -317,15 +345,9 @@ def show_mobile_confirmation_section(current_user):
             end_time = format_hour(max(selected_hours) + 1)
             st.write(f"**Tiempo Total:** {start_time} - {end_time}")
 
-        st.divider()
-
-        # Formulario simplificado (sin nombre y email)
-        st.markdown("### Confirmar Reserva")
-
         # Mostrar resumen de la reserva
         st.info(f"Reservando para: **{current_user['full_name']}** ({current_user['email']})")
 
-        # Add visual emphasis and bigger button
         # Add visual emphasis and bigger button
         st.markdown('<div class="big-confirm-button">', unsafe_allow_html=True)
         st.button(
@@ -340,7 +362,6 @@ def show_mobile_confirmation_section(current_user):
 
         # Show feedback form if reservation was confirmed
         if st.session_state.get("show_feedback_form", False):
-            st.divider()
             st.markdown("### ¿Cómo fue tu experiencia de reserva?")
             feedback = st.text_area("Comentarios opcionales:", height=100, placeholder="Comparte tu experiencia...")
 
@@ -356,14 +377,9 @@ def show_mobile_confirmation_section(current_user):
                           on_click=skip_feedback_callback,
                           type="secondary",
                           key="mobile_feedback_skip")
-
     else:
         st.info("Selecciona los horarios disponibles en el calendario para continuar")
-
-        st.markdown("### Cómo Reservar")
-        st.write("1. **Selecciona los horarios disponibles** que desees entre hoy y mañana (hasta 2 horas)")
-        st.write("2. **Confirma tu reserva** con un click")
-
+        
 def show_reservation_details(today_date, tomorrow_date, current_user, user_today_reservations, user_tomorrow_reservations):
     """Mostrar panel de detalles de reserva"""
 
@@ -416,7 +432,6 @@ def show_reservation_details(today_date, tomorrow_date, current_user, user_today
             end_time = format_hour(max(selected_hours) + 1)
             st.write(f"**Tiempo Total:** {start_time} - {end_time}")
 
-        st.divider()
 
         # Formulario simplificado (sin nombre y email)
         st.markdown("### Confirmar Reserva")
@@ -438,7 +453,6 @@ def show_reservation_details(today_date, tomorrow_date, current_user, user_today
 
         # Show feedback form if reservation was confirmed
         if st.session_state.get("show_feedback_form", False):
-            st.divider()
             st.markdown("### ¿Cómo fue tu experiencia de reserva?")
             feedback = st.text_area("Comentarios opcionales:", height=100, placeholder="Comparte tu experiencia...")
 
@@ -477,7 +491,6 @@ def show_user_existing_reservations(today_date, tomorrow_date, user_today_reserv
             for hour in sorted(user_tomorrow_reservations):
                 st.write(f"  • {format_hour(hour)} - {format_hour(hour + 1)}")
 
-        st.divider()
 
 
 def confirm_reservation_callback(current_user, selected_date, selected_hours):
@@ -724,6 +737,8 @@ def show_calendar_view(today, tomorrow, today_reservations, tomorrow_reservation
         """, unsafe_allow_html=True)
 
         show_day_schedule(tomorrow, tomorrow_reservations, current_user, is_today=False, current_hour=current_hour)
+
+    st.divider()
 
 def show_day_schedule(date, reservations_dict, current_user, is_today=False, current_hour=None):
     """Mostrar horarios para un día específico"""

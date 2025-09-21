@@ -67,8 +67,6 @@ def show_header():
         st.success("✅ **Sesión iniciada automáticamente** - ¡Tu sesión fue restaurada!")
         st.session_state.show_auto_login_notice = False
 
-    st.markdown("---")
-
 def show_footer():
     """Mostrar pie de página"""
     st.markdown("---")
