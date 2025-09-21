@@ -162,16 +162,6 @@ def show_admin_login():
                 else:
                     st.error("❌ Credenciales incorrectas")
 
-        # Credenciales de prueba
-        with st.expander("💡 Credenciales de prueba"):
-            st.info("""
-            **Para fines de demostración:**
-
-            👤 **Usuario:** `admin`
-
-            🔑 **Contraseña:** `tennis123`
-            """)
-
 
 def show_admin_dashboard():
     """Mostrar el panel principal de administración"""
