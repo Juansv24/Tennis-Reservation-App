@@ -491,15 +491,12 @@ def show_user_existing_reservations(today_date, tomorrow_date, user_today_reserv
             for hour in sorted(user_tomorrow_reservations):
                 st.write(f"  • {format_hour(hour)} - {format_hour(hour + 1)}")
 
-
-
 def confirm_reservation_callback(current_user, selected_date, selected_hours):
     """Callback for reservation confirmation"""
     success = handle_reservation_submission(current_user, selected_date, selected_hours)
     if success:
         st.session_state.reservation_confirmed = True
         st.session_state.show_feedback_form = True
-
 
 def submit_feedback_callback(feedback_text):
     """Callback for feedback submission"""
@@ -511,12 +508,10 @@ def submit_feedback_callback(feedback_text):
     st.session_state.reservation_confirmed = False
     st.success("¡Gracias por tu feedback!")
 
-
 def skip_feedback_callback():
     """Callback for skipping feedback"""
     st.session_state.show_feedback_form = False
     st.session_state.reservation_confirmed = False
-
 
 def handle_reservation_submission(current_user, date, selected_hours):
     """Manejar el envío de la reserva con validación en tiempo real"""
@@ -738,7 +733,6 @@ def show_calendar_view(today, tomorrow, today_reservations, tomorrow_reservation
 
         show_day_schedule(tomorrow, tomorrow_reservations, current_user, is_today=False, current_hour=current_hour)
 
-    st.divider()
 
 def show_day_schedule(date, reservations_dict, current_user, is_today=False, current_hour=None):
     """Mostrar horarios para un día específico"""
