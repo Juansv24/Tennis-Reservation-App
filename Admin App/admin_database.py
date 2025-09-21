@@ -13,6 +13,51 @@ class AdminDatabaseManager:
     def __init__(self):
         self.client = db_manager.client
 
+    def sync_database(self) -> Dict[str, any]:
+        """Sincronizar y limpiar base de datos"""
+        try:
+            results = {
+                'expired_sessions_cleaned': 0,
+                'expired_tokens_cleaned': 0,
+                'expired_verifications_cleaned': 0,
+                'orphaned_records_cleaned': 0,
+                'success': True,
+                'message': 'Base de datos sincronizada exitosamente'
+            }
+
+            import datetime
+            now = datetime.datetime.utcnow().isoformat()
+
+            # 1. Limpiar sesiones expiradas
+            expired_sessions = self.client.table('user_sessions').delete().lt('expires_at', now).execute()
+            results['expired_sessions_cleaned'] = len(expired_sessions.data) if expired_sessions.data else 0
+
+            # 2. Limpiar tokens de reset expirados
+            expired_tokens = self.client.table('password_reset_tokens').delete().lt('expires_at', now).execute()
+            results['expired_tokens_cleaned'] = len(expired_tokens.data) if expired_tokens.data else 0
+
+            # 3. Limpiar verificaciones de email expiradas
+            expired_verifications = self.client.table('email_verifications').delete().lt('expires_at', now).execute()
+            results['expired_verifications_cleaned'] = len(
+                expired_verifications.data) if expired_verifications.data else 0
+
+            # 4. Marcar sesiones expiradas como inactivas (por si las anteriores fallan)
+            self.client.table('user_sessions').update({
+                'is_active': False
+            }).lt('expires_at', now).eq('is_active', True).execute()
+
+            return results
+
+        except Exception as e:
+            return {
+                'success': False,
+                'message': f'Error sincronizando base de datos: {str(e)}',
+                'expired_sessions_cleaned': 0,
+                'expired_tokens_cleaned': 0,
+                'expired_verifications_cleaned': 0,
+                'orphaned_records_cleaned': 0
+            }
+
     def get_system_statistics(self) -> Dict:
         """Obtener estadísticas generales del sistema"""
         try:
@@ -541,6 +586,114 @@ class AdminDatabaseManager:
         except Exception as e:
             print(f"Error using credit: {e}")
             return False
+
+    def get_user_by_email(self, email: str) -> Optional[Dict]:
+        """Obtener información básica de usuario por email"""
+        try:
+            result = self.client.table('users').select('id, email, full_name, credits').eq(
+                'email', email.strip().lower()
+            ).execute()
+
+            return result.data[0] if result.data else None
+        except Exception as e:
+            print(f"Error getting user by email: {e}")
+            return None
+
+    def get_all_users_for_export(self) -> List[Dict]:
+        """Obtener todos los usuarios para exportación"""
+        try:
+            result = self.client.table('users').select(
+                'id, email, full_name, credits, is_active, last_login, created_at'
+            ).order('created_at', desc=True).execute()
+
+            # Formatear datos para Excel
+            formatted_users = []
+            for user in result.data:
+                formatted_users.append({
+                    'ID': user['id'],
+                    'Nombre Completo': user['full_name'],
+                    'Email': user['email'],
+                    'Créditos': user['credits'] or 0,
+                    'Estado': 'Activo' if user['is_active'] else 'Inactivo',
+                    'Último Login': user['last_login'][:10] if user['last_login'] else 'Nunca',
+                    'Fecha Registro': user['created_at'][:10]
+                })
+
+            return formatted_users
+        except Exception as e:
+            print(f"Error getting users for export: {e}")
+            return []
+
+    def get_all_reservations_for_export(self) -> List[Dict]:
+        """Obtener todas las reservas para exportación"""
+        try:
+            result = self.client.table('reservations').select(
+                'id, date, hour, name, email, created_at'
+            ).order('date', desc=True).order('hour').execute()
+
+            # Formatear datos para Excel
+            formatted_reservations = []
+            for reservation in result.data:
+                # Formatear fecha más legible
+                try:
+                    from datetime import datetime
+                    fecha_obj = datetime.strptime(reservation['date'], '%Y-%m-%d')
+                    fecha_formateada = fecha_obj.strftime('%d/%m/%Y')
+                    dia_semana = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'][fecha_obj.weekday()]
+                    fecha_display = f"{dia_semana} {fecha_formateada}"
+                except:
+                    fecha_display = reservation['date']
+
+                formatted_reservations.append({
+                    'ID Reserva': reservation['id'],
+                    'Fecha': fecha_display,
+                    'Hora': f"{reservation['hour']}:00 - {reservation['hour'] + 1}:00",
+                    'Nombre Usuario': reservation['name'],
+                    'Email Usuario': reservation['email'],
+                    'Fecha Creación': reservation['created_at'][:10]
+                })
+
+            return formatted_reservations
+        except Exception as e:
+            print(f"Error getting reservations for export: {e}")
+            return []
+
+    def get_credit_transactions_for_export(self) -> List[Dict]:
+        """Obtener transacciones de créditos para exportación"""
+        try:
+            result = self.client.table('credit_transactions').select(
+                'users(full_name, email), amount, transaction_type, description, admin_user, created_at'
+            ).order('created_at', desc=True).execute()
+
+            # Formatear datos para Excel
+            formatted_transactions = []
+            for transaction in result.data:
+                user_name = transaction['users']['full_name'] if transaction['users'] else 'Usuario eliminado'
+                user_email = transaction['users']['email'] if transaction['users'] else 'N/A'
+
+                # Traducir tipos de transacción
+                transaction_types = {
+                    'admin_grant': 'Otorgado por Admin',
+                    'admin_deduct': 'Deducido por Admin',
+                    'reservation_use': 'Usado en Reserva',
+                    'reservation_refund': 'Reembolso de Reserva'
+                }
+
+                formatted_transactions.append({
+                    'Usuario': user_name,
+                    'Email': user_email,
+                    'Cantidad': transaction['amount'],
+                    'Tipo': transaction_types.get(transaction['transaction_type'], transaction['transaction_type']),
+                    'Descripción': transaction['description'],
+                    'Administrador': transaction['admin_user'] or 'Sistema',
+                    'Fecha': transaction['created_at'][:10]
+                })
+
+            return formatted_transactions
+        except Exception as e:
+            print(f"Error getting credit transactions for export: {e}")
+            return []
+
 
 # Instancia global
 admin_db_manager = AdminDatabaseManager()

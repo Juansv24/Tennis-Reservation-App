@@ -108,6 +108,16 @@ def apply_admin_styles():
         color: white !important;
         font-weight: bold !important;
     }}
+    
+    /* Mejorar estilo de expanders */
+    .streamlit-expanderHeader {{
+        font-size: 1.1rem !important;
+        font-weight: 600 !important;
+    }}
+    
+    .streamlit-expanderContent {{
+        padding: 12px 16px !important;
+    }}
     </style>
     """, unsafe_allow_html=True)
 
@@ -175,19 +185,90 @@ def show_admin_dashboard():
     </div>
     """, unsafe_allow_html=True)
 
-    # Barra superior con logout
-    col1, col2, col3 = st.columns([3, 2, 1])
+    # Barra superior mejorada
+    st.markdown("""
+    <div style="background: rgba(255,255,255,0.1); border-radius: 12px; padding: 15px; margin: 15px 0; 
+                backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.2);">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div style="color: white; opacity: 0.9;">
+                <i class="fas fa-clock"></i> <span style="font-size: 14px;">Última actualización: {}</span>
+            </div>
+        </div>
+    </div>
+    """.format(get_colombia_now().strftime('%d/%m/%Y %H:%M:%S')), unsafe_allow_html=True)
+
+    # Controles de acción
+    col1, col2, col3, col4 = st.columns([2, 1, 1, 1])
 
     with col2:
-        current_time = get_colombia_now()
-        st.caption(f"🕐 {current_time.strftime('%d/%m/%Y %H:%M:%S')}")
+        if st.button("🔄 Actualizar", type="secondary", use_container_width=True):
+            st.cache_data.clear()
+            st.success("✅ Datos actualizados")
+            st.rerun()
 
     with col3:
-        if st.button("🚪 Cerrar Sesión", type="secondary"):
+        if st.button("📊 Exportar", type="secondary", use_container_width=True):
+            with st.spinner("📊 Generando archivo Excel..."):
+                try:
+                    # Obtener datos
+                    users_data = admin_db_manager.get_all_users_for_export()
+                    reservations_data = admin_db_manager.get_all_reservations_for_export()
+                    credits_data = admin_db_manager.get_credit_transactions_for_export()
+
+                    # Crear archivo Excel
+                    import pandas as pd
+                    from io import BytesIO
+
+                    # Crear buffer en memoria
+                    buffer = BytesIO()
+
+                    # Crear archivo Excel con múltiples hojas
+                    with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+                        # Hoja de usuarios
+                        if users_data:
+                            df_users = pd.DataFrame(users_data)
+                            df_users.to_excel(writer, sheet_name='Usuarios', index=False)
+
+                        # Hoja de reservas
+                        if reservations_data:
+                            df_reservations = pd.DataFrame(reservations_data)
+                            df_reservations.to_excel(writer, sheet_name='Reservas', index=False)
+
+                        # Hoja de créditos
+                        if credits_data:
+                            df_credits = pd.DataFrame(credits_data)
+                            df_credits.to_excel(writer, sheet_name='Créditos', index=False)
+
+                    buffer.seek(0)
+
+                    # Generar nombre de archivo con fecha
+                    from datetime import datetime
+                    fecha_actual = datetime.now().strftime('%Y%m%d_%H%M%S')
+                    filename = f"reservas_tenis_export_{fecha_actual}.xlsx"
+
+                    # Botón de descarga
+                    st.download_button(
+                        label="📥 Descargar Excel",
+                        data=buffer.getvalue(),
+                        file_name=filename,
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        type="primary"
+                    )
+
+                    st.success(
+                        f"✅ Archivo generado: {len(users_data)} usuarios, {len(reservations_data)} reservas, {len(credits_data)} transacciones")
+
+                except Exception as e:
+                    st.error(f"❌ Error generando archivo: {str(e)}")
+
+    with col4:
+        if st.button("🚪 Cerrar Sesión", type="primary", use_container_width=True):
             admin_auth_manager.logout_admin()
             st.rerun()
 
     # Control de navegación segmentado
+    previous_tab = st.session_state.get('admin_current_tab', "📊 Dashboard")
+
     tab = st.segmented_control(
         "Navegación Admin",
         ["📊 Dashboard", "📅 Reservas", "👥 Usuarios", "💰 Créditos"],
@@ -195,6 +276,17 @@ def show_admin_dashboard():
         default="📊 Dashboard",
         label_visibility="collapsed",
     )
+
+    # Limpiar búsquedas si cambió de pestaña
+    if tab != previous_tab:
+        # Limpiar estados de búsqueda
+        if 'selected_user_for_reservations' in st.session_state:
+            del st.session_state.selected_user_for_reservations
+        if 'found_users' in st.session_state:
+            del st.session_state.found_users
+
+        # Guardar pestaña actual
+        st.session_state.admin_current_tab = tab
 
     st.divider()
 
@@ -284,9 +376,61 @@ def show_dashboard_tab():
         user_stats = admin_db_manager.get_user_reservation_statistics()
         if user_stats:
             for i, user in enumerate(user_stats[:5], 1):
-                st.write(f"{i}. **{user['name']}** - {user['reservations']} reservas")
+                # Crear expander con título más prominente y ancho completo
+                expander_title = f"**{i}. {user['name']}** • {user['reservations']} reservas"
+
+                with st.expander(expander_title, expanded=False):
+                    # Obtener datos detallados del usuario
+                    user_detail = admin_db_manager.search_users_detailed(user['email'])
+                    if user_detail:
+                        user_info = user_detail[0]
+
+                        # Card con información organizada
+                        st.markdown(f"""
+                        <div style="
+                            background: white;
+                            border: 1px solid #e0e0e0;
+                            border-radius: 8px;
+                            padding: 16px;
+                            margin: 8px 0;
+                            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                        ">
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+                                <div>
+                                    <p style="margin: 4px 0;"><strong>📧 Email:</strong> {user_info['email']}</p>
+                                    <p style="margin: 4px 0;"><strong>🎯 Estado:</strong> {'✅ Activo' if user_info['is_active'] else '❌ Inactivo'}</p>
+                                    <p style="margin: 4px 0;"><strong>💰 Créditos:</strong> {user_info.get('credits', 0)}</p>
+                                </div>
+                                <div>
+                                    <p style="margin: 4px 0;"><strong>🕒 Último login:</strong> {user_info['last_login'][:10] if user_info.get('last_login') else 'Nunca'}</p>
+                                    <p style="margin: 4px 0;"><strong>📅 Registrado:</strong> {user_info['created_at'][:10]}</p>
+                                    <p style="margin: 4px 0;"><strong>🎾 Total reservas:</strong> {user['reservations']}</p>
+                                </div>
+                            </div>
+                        </div>
+                        """, unsafe_allow_html=True)
+                    else:
+                        st.warning("⚠️ No se pudieron cargar los detalles del usuario")
         else:
-            st.info("No hay datos de usuarios disponibles")
+            st.info("📊 No hay datos de usuarios disponibles")
+
+
+
+def mostrar_feedback_reserva(reservation_id):
+    """Mostrar feedback de actualización de reserva"""
+    feedback_key = f'actualizado_recientemente_{reservation_id}'
+    if feedback_key in st.session_state:
+        feedback = st.session_state[feedback_key]
+        tiempo_transcurrido = (get_colombia_now() - feedback['timestamp']).total_seconds()
+
+        if tiempo_transcurrido < 15:  # Mostrar por 15 segundos
+            if feedback['accion'] == 'cancelada':
+                st.success("✅ Reserva cancelada exitosamente y usuario notificado")
+            return True
+        else:
+            # Limpiar feedback expirado
+            del st.session_state[feedback_key]
+    return False
 
 
 def show_reservations_management_tab():
@@ -299,7 +443,8 @@ def show_reservations_management_tab():
     with col1:
         search_term = st.text_input(
             "🔍 Buscar usuario por nombre o email:",
-            placeholder="Ingresa nombre o email del usuario"
+            placeholder="Ingresa nombre o email del usuario",
+            key="search_reservations_user"
         )
 
     with col2:
@@ -312,15 +457,27 @@ def show_reservations_management_tab():
         if matching_users:
             if len(matching_users) == 1:
                 st.session_state.selected_user_for_reservations = matching_users[0]
+                st.session_state.matching_users_list = None  # Limpiar lista
             else:
-                # Múltiples usuarios encontrados
-                st.write("**Usuarios encontrados:**")
-                for i, user in enumerate(matching_users):
-                    if st.button(f"{user['name']} ({user['email']})", key=f"user_{i}"):
-                        st.session_state.selected_user_for_reservations = user
-                        st.rerun()
+                # Múltiples usuarios encontrados - guardar en session_state
+                st.session_state.matching_users_list = matching_users
+                # Limpiar selección anterior
+                if 'selected_user_for_reservations' in st.session_state:
+                    del st.session_state.selected_user_for_reservations
         else:
             st.warning("No se encontraron usuarios con ese criterio")
+            st.session_state.matching_users_list = None
+
+    # Mostrar lista de usuarios encontrados si hay múltiples
+    if st.session_state.get('matching_users_list'):
+        st.write("**Usuarios encontrados:**")
+        for user in st.session_state.matching_users_list:
+            # Usar email como parte de la key para hacer cada botón único
+            button_key = f"select_user_{user['email'].replace('@', '_').replace('.', '_')}"
+            if st.button(f"{user['name']} ({user['email']})", key=button_key):
+                st.session_state.selected_user_for_reservations = user
+                st.session_state.matching_users_list = None  # Limpiar lista después de seleccionar
+                st.rerun()
 
     # Mostrar reservas del usuario seleccionado
     if 'selected_user_for_reservations' in st.session_state:
@@ -332,38 +489,120 @@ def show_reservations_management_tab():
         # Obtener reservas del usuario
         user_reservations = admin_db_manager.get_user_reservations_history(user['email'])
 
-        if user_reservations:
-            # Mostrar cada reserva con opciones
-            for i, reservation in enumerate(user_reservations):
-                with st.expander(f"Reserva: {reservation['date']} - {reservation['hour']}:00"):
-                    col1, col2, col3 = st.columns(3)
+        for i, reservation in enumerate(user_reservations):
+            # Formatear fecha más legible
+            from datetime import datetime
+            try:
+                fecha_obj = datetime.strptime(reservation['date'], '%Y-%m-%d')
+                fecha_formateada = fecha_obj.strftime('%d/%m/%Y')
+                dia_semana = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'][fecha_obj.weekday()]
+                fecha_display = f"{dia_semana} {fecha_formateada}"
+            except:
+                fecha_display = reservation['date']
 
-                    with col1:
-                        st.write(f"**Fecha:** {reservation['date']}")
-                        st.write(f"**Hora:** {reservation['hour']}:00")
-                        st.write(f"**Creada:** {reservation['created_at'][:10]}")
+            # Crear título del expander más claro
+            titulo_expander = f"📅 {fecha_display} • 🕐 {reservation['hour']}:00"
 
-                    with col2:
-                        if st.button("📝 Modificar", key=f"modify_{reservation['id']}"):
-                            st.session_state.modifying_reservation = reservation
-                            st.rerun()
+            with st.expander(titulo_expander, expanded=False):
+                # Info organizada en columnas
+                col1, col2 = st.columns(2)
 
-                    with col3:
-                        if st.button("❌ Cancelar", key=f"cancel_{reservation['id']}", type="secondary"):
-                            if admin_db_manager.cancel_reservation(reservation['id']):
-                                st.success("Reserva cancelada exitosamente")
-                                # Invalidar cache si existe
-                                if 'selected_user_for_reservations' in st.session_state:
-                                    del st.session_state['selected_user_for_reservations']
-                                st.rerun()
-                            else:
-                                st.error("Error al cancelar reserva")
+                with col1:
+                    st.markdown(f"""
+                    **📅 Fecha:** {fecha_display}  
+                    **🕐 Hora:** {reservation['hour']}:00 - {reservation['hour'] + 1}:00  
+                    **📝 Creada:** {reservation['created_at'][:10]}
+                    """)
+
+                with col2:
+                    if st.button("❌ Cancelar Reserva",
+                                 key=f"cancel_{reservation['id']}",
+                                 type="secondary",
+                                 use_container_width=True):
+                            with st.spinner("🔄 Cancelando reserva..."):
+                                if admin_db_manager.cancel_reservation(reservation['id']):
+                                    # Obtener datos del usuario para el email
+                                    user_data = admin_db_manager.get_user_by_email(reservation['email'])
+
+                                    # Enviar email de cancelación
+                                    try:
+                                        if email_manager.is_configured() and user_data:
+                                            subject = "🎾 Reserva Cancelada - Sistema de Reservas"
+                                            html_body = f"""
+                                            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                                                <div style="background: linear-gradient(135deg, #001854 0%, #2478CC 100%); color: white; padding: 20px; text-align: center; border-radius: 10px;">
+                                                    <h1>🎾 Reserva Cancelada</h1>
+                                                </div>
+
+                                                <div style="background: #f9f9f9; padding: 20px; border-radius: 10px; margin: 20px 0;">
+                                                    <h2>Hola {user_data['full_name']},</h2>
+                                                    <p>Tu reserva ha sido <strong>cancelada por el administrador</strong>:</p>
+
+                                                    <div style="background: white; padding: 15px; border-radius: 8px; border-left: 5px solid #FFD400;">
+                                                        <p><strong>📅 Fecha:</strong> {reservation['date']}</p>
+                                                        <p><strong>🕐 Hora:</strong> {reservation['hour']}:00</p>
+                                                    </div>
+
+                                                    <p>✅ <strong>Se ha reembolsado 1 crédito</strong> a tu cuenta automáticamente.</p>
+                                                    <p>Si tienes preguntas, contacta al administrador.</p>
+                                                </div>
+                                            </div>
+                                            """
+
+                                            success, message = email_manager.send_email(reservation['email'], subject,
+                                                                                        html_body)
+                                            if success:
+                                                st.success(
+                                                    "✅ Reserva cancelada exitosamente y usuario notificado por email")
+                                            else:
+                                                st.success("✅ Reserva cancelada exitosamente")
+                                                st.warning(f"⚠️ Error enviando email: {message}")
+                                        else:
+                                            st.success("✅ Reserva cancelada exitosamente (email no configurado)")
+
+                                    except Exception as e:
+                                        st.success("✅ Reserva cancelada exitosamente")
+                                        st.warning(f"⚠️ Error enviando notificación: {str(e)}")
+
+                                    # Limpiar y recargar la lista
+                                    if 'selected_user_for_reservations' in st.session_state:
+                                        del st.session_state['selected_user_for_reservations']
+
+                                    # Pequeña pausa para que el usuario vea el mensaje
+                                    import time
+                                    time.sleep(2)
+                                    st.rerun()
+                                else:
+                                    st.error("❌ Error al cancelar reserva")
+
+def mantener_expander_abierto_admin(item_id, accion='actualizacion', duracion=15):
+    """Mantener expander abierto después de una acción administrativa"""
+    key = f"expander_admin_{item_id}"
+    st.session_state[key] = {
+        'timestamp': get_colombia_now(),
+        'accion': accion,
+        'duracion': duracion
+    }
+
+def verificar_expander_abierto_admin(item_id):
+    """Verificar si un expander debe mantenerse abierto"""
+    key = f"expander_admin_{item_id}"
+    if key in st.session_state:
+        estado = st.session_state[key]
+        tiempo_transcurrido = (get_colombia_now() - estado['timestamp']).total_seconds()
+        if tiempo_transcurrido < estado['duracion']:
+            return True
         else:
-            st.info("Este usuario no tiene reservas")
+            del st.session_state[key]
+    return False
 
 
 def show_user_detailed_info(user):
-    """Mostrar información detallada del usuario"""
+    """Mostrar información detallada del usuario con feedback mejorado"""
+
+    # Mostrar feedback si existe
+    mostrar_feedback_usuario(user['id'])
+
     col1, col2 = st.columns(2)
 
     with col1:
@@ -387,29 +626,15 @@ def show_user_detailed_info(user):
         - **Última reserva:** {stats['last_reservation'] or 'Nunca'}
         """)
 
-    # Acciones
-    col1, col2 = st.columns(2)
-
-    with col1:
-        status_text = "Desactivar" if user['is_active'] else "Activar"
-        if st.button(f"🔄 {status_text} Usuario", key=f"toggle_{user['id']}"):
-            if admin_db_manager.toggle_user_status_with_notification(user['id']):
-                st.success(f"Usuario {status_text.lower()}do y notificado")
-                # Actualizar lista
-                if 'found_users' in st.session_state:
-                    del st.session_state.found_users
+    # Botón con callback
+    status_text = "Desactiva" if user['is_active'] else "Activa"
+    if st.button(f"🔄 {status_text} Usuario", key=f"toggle_{user['id']}"):
+        with st.spinner(f"🔄 {status_text.lower()}ndo usuario..."):
+            success = toggle_user_status_callback(user['id'], user['is_active'])
+            if not success:
+                st.error(f"❌ Error al {status_text.lower()} usuario")
+            else:
                 st.rerun()
-
-    with col2:
-        if st.button("📧 Enviar Email", key=f"email_{user['id']}"):
-            st.session_state[f"show_email_form_{user['id']}"] = True
-
-    # Mostrar reservas recientes
-    recent_reservations = admin_db_manager.get_user_recent_reservations(user['email'])
-    if recent_reservations:
-        st.write("**🕐 Reservas Recientes:**")
-        for res in recent_reservations[:5]:
-            st.write(f"• {res['date']} - {res['hour']}:00")
 
 def show_users_management_tab():
     """Gestión mejorada de usuarios"""
@@ -419,7 +644,9 @@ def show_users_management_tab():
     col1, col2 = st.columns([3, 1])
 
     with col1:
-        search_user = st.text_input("🔍 Buscar usuario por nombre o email:")
+        search_user = st.text_input("🔍 Buscar usuario por nombre o email:",
+                                    placeholder="Ingresa nombre o email del usuario",
+                                    key="search_users")
 
     with col2:
         if st.button("🔍 Buscar Usuario", type="primary"):
@@ -435,7 +662,10 @@ def show_users_management_tab():
         st.write("**Usuarios encontrados:**")
 
         for user in st.session_state.found_users:
-            with st.expander(f"👤 {user['full_name']} ({user['email']})"):
+            # Verificar si debe mantenerse abierto
+            expandido = verificar_expander_abierto_admin(user['id'])
+
+            with st.expander(f"👤 {user['full_name']} ({user['email']})", expanded=expandido):
                 show_user_detailed_info(user)
 
 def show_credits_management_tab():
@@ -531,7 +761,6 @@ def show_credits_management_tab():
     else:
         st.info("No hay transacciones de créditos")
 
-
 def send_cancellation_email(reservation):
     """Enviar email de cancelación de reserva"""
     try:
@@ -541,7 +770,6 @@ def send_cancellation_email(reservation):
     except Exception as e:
         st.warning(f"Error enviando email: {e}")
 
-
 def send_reminder_email(reservation):
     """Enviar email recordatorio"""
     try:
@@ -550,7 +778,6 @@ def send_reminder_email(reservation):
             pass
     except Exception as e:
         st.warning(f"Error enviando recordatorio: {e}")
-
 
 def send_credits_notification_email(user_email, credits_amount, reason, operation):
     """Enviar notificación de cambio de créditos"""
@@ -582,6 +809,66 @@ def show_user_history(user_id):
     st.subheader("📊 Historial de Usuario")
     # Implementar vista de historial
 
+def mantener_expander_abierto_admin(item_id, accion='actualizacion', duracion=15):
+    """Mantener expander abierto después de una acción administrativa"""
+    key = f"expander_admin_{item_id}"
+    st.session_state[key] = {
+        'timestamp': get_colombia_now(),
+        'accion': accion,
+        'duracion': duracion
+    }
+
+def verificar_expander_abierto_admin(item_id):
+    """Verificar si un expander debe mantenerse abierto"""
+    key = f"expander_admin_{item_id}"
+    if key in st.session_state:
+        estado = st.session_state[key]
+        tiempo_transcurrido = (get_colombia_now() - estado['timestamp']).total_seconds()
+        if tiempo_transcurrido < estado['duracion']:
+            return True
+        else:
+            del st.session_state[key]
+    return False
+
+def toggle_user_status_callback(user_id, current_status):
+    """Callback para cambiar estado de usuario"""
+    status_text = "desactivado" if current_status else "activado"
+
+    if admin_db_manager.toggle_user_status_with_notification(user_id):
+        # Marcar que se actualizó recientemente
+        st.session_state[f'usuario_actualizado_recientemente_{user_id}'] = {
+            'timestamp': get_colombia_now(),
+            'accion': 'cambio_estado',
+            'mensaje': f"Usuario {status_text} y notificado por email"
+        }
+
+        # Marcar expander para mantenerlo abierto
+        mantener_expander_abierto_admin(user_id, 'cambio_estado', 15)
+
+        # Actualizar lista
+        if 'found_users' in st.session_state:
+            for i, u in enumerate(st.session_state.found_users):
+                if u['id'] == user_id:
+                    st.session_state.found_users[i]['is_active'] = not current_status
+                    break
+
+        return True
+    return False
+
+def mostrar_feedback_usuario(user_id):
+    """Mostrar feedback de actualización de usuario"""
+    feedback_key = f'usuario_actualizado_recientemente_{user_id}'
+    if feedback_key in st.session_state:
+        feedback = st.session_state[feedback_key]
+        tiempo_transcurrido = (get_colombia_now() - feedback['timestamp']).total_seconds()
+
+        if tiempo_transcurrido < 15:  # Mostrar por 15 segundos
+            st.success(f"✅ {feedback['mensaje']}")
+            return True
+        else:
+            # Limpiar feedback expirado
+            del st.session_state[feedback_key]
+    return False
 
 def main():
     """Función principal de la aplicación de administración"""
