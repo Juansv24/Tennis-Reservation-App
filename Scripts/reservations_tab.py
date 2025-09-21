@@ -183,11 +183,9 @@ def show_reservation_tab():
     if "feedback_submitted" not in st.session_state:
         st.session_state.feedback_submitted = False
 
-    # Obtener información del usuario actual (existing code continues...)
-    current_user = get_current_user()
-
     # Obtener información del usuario actual
     current_user = get_current_user()
+
     if not current_user:
         st.error("Error de autenticación. Por favor actualiza la página.")
         return
