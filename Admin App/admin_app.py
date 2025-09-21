@@ -149,7 +149,7 @@ def show_admin_login():
             )
 
             login_button = st.form_submit_button(
-                "🚪 Iniciar Sesión",
+                "Iniciar Sesión",
                 type="primary",
                 use_container_width=True
             )
