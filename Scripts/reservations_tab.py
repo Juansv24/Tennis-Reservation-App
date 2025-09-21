@@ -175,6 +175,17 @@ def show_reservation_tab():
     """Mostrar la pestaña de reservas con caché optimizado"""
     apply_custom_css()
 
+    # Initialize reservation workflow state
+    if "reservation_confirmed" not in st.session_state:
+        st.session_state.reservation_confirmed = False
+    if "show_feedback_form" not in st.session_state:
+        st.session_state.show_feedback_form = False
+    if "feedback_submitted" not in st.session_state:
+        st.session_state.feedback_submitted = False
+
+    # Obtener información del usuario actual (existing code continues...)
+    current_user = get_current_user()
+
     # Obtener información del usuario actual
     current_user = get_current_user()
     if not current_user:
@@ -317,11 +328,36 @@ def show_mobile_confirmation_section(current_user):
         st.info(f"Reservando para: **{current_user['full_name']}** ({current_user['email']})")
 
         # Add visual emphasis and bigger button
+        # Add visual emphasis and bigger button
         st.markdown('<div class="big-confirm-button">', unsafe_allow_html=True)
-        if st.button(r"$\textsf{\normalsize  ✅ Confirmar Reserva}$", type="primary", use_container_width=True,
-                     key="mobile_big_confirm_btn"):
-            handle_reservation_submission(current_user, selected_date, selected_hours)
+        st.button(
+            r"$\textsf{\normalsize  ✅ Confirmar Reserva}$",
+            type="primary",
+            use_container_width=True,
+            key="mobile_big_confirm_btn",
+            on_click=confirm_reservation_callback,
+            args=(current_user, selected_date, selected_hours)
+        )
         st.markdown('</div>', unsafe_allow_html=True)
+
+        # Show feedback form if reservation was confirmed
+        if st.session_state.get("show_feedback_form", False):
+            st.divider()
+            st.markdown("### ¿Cómo fue tu experiencia de reserva?")
+            feedback = st.text_area("Comentarios opcionales:", height=100, placeholder="Comparte tu experiencia...")
+
+            col1, col2 = st.columns(2)
+            with col1:
+                st.button("Enviar Feedback",
+                          on_click=submit_feedback_callback,
+                          args=[feedback],
+                          type="primary",
+                          key="mobile_feedback_submit")
+            with col2:
+                st.button("Omitir",
+                          on_click=skip_feedback_callback,
+                          type="secondary",
+                          key="mobile_feedback_skip")
 
     else:
         st.info("Selecciona los horarios disponibles en el calendario para continuar")
@@ -388,9 +424,32 @@ def show_reservation_details(today_date, tomorrow_date, current_user, user_today
 
         # Add visual emphasis and bigger button
         st.markdown('<div class="big-confirm-button">', unsafe_allow_html=True)
-        if st.button(r"$\textsf{\normalsize  ✅ Confirmar Reserva}$", type="primary", use_container_width=True, key="big_confirm_btn"):
-            handle_reservation_submission(current_user, selected_date, selected_hours)
+        st.button(
+            r"$\textsf{\normalsize  ✅ Confirmar Reserva}$",
+            type="primary",
+            use_container_width=True,
+            key="big_confirm_btn",
+            on_click=confirm_reservation_callback,
+            args=(current_user, selected_date, selected_hours)
+        )
         st.markdown('</div>', unsafe_allow_html=True)
+
+        # Show feedback form if reservation was confirmed
+        if st.session_state.get("show_feedback_form", False):
+            st.divider()
+            st.markdown("### ¿Cómo fue tu experiencia de reserva?")
+            feedback = st.text_area("Comentarios opcionales:", height=100, placeholder="Comparte tu experiencia...")
+
+            col1, col2 = st.columns(2)
+            with col1:
+                st.button("Enviar Feedback",
+                          on_click=submit_feedback_callback,
+                          args=[feedback],
+                          type="primary")
+            with col2:
+                st.button("Omitir",
+                          on_click=skip_feedback_callback,
+                          type="secondary")
 
     else:
         st.info("Selecciona los horarios disponibles en el calendario para continuar")
@@ -418,13 +477,38 @@ def show_user_existing_reservations(today_date, tomorrow_date, user_today_reserv
 
         st.divider()
 
+
+def confirm_reservation_callback(current_user, selected_date, selected_hours):
+    """Callback for reservation confirmation"""
+    success = handle_reservation_submission(current_user, selected_date, selected_hours)
+    if success:
+        st.session_state.reservation_confirmed = True
+        st.session_state.show_feedback_form = True
+
+
+def submit_feedback_callback(feedback_text):
+    """Callback for feedback submission"""
+    # You can save feedback to database here if needed
+    # db_manager.save_feedback(feedback_text, current_user['email'])
+
+    st.session_state.feedback_submitted = True
+    st.session_state.show_feedback_form = False
+    st.session_state.reservation_confirmed = False
+    st.success("¡Gracias por tu feedback!")
+
+
+def skip_feedback_callback():
+    """Callback for skipping feedback"""
+    st.session_state.show_feedback_form = False
+    st.session_state.reservation_confirmed = False
+
 def handle_reservation_submission(current_user, date, selected_hours):
     """Manejar el envío de la reserva con validación en tiempo real"""
 
     # Validar límite de horas
     if len(selected_hours) > 2:
         st.error("Máximo 2 horas por día")
-        return
+        return False
 
     # Verificar que las horas sean consecutivas (si hay más de una)
     if len(selected_hours) > 1:
@@ -432,7 +516,7 @@ def handle_reservation_submission(current_user, date, selected_hours):
         for i in range(1, len(sorted_hours)):
             if sorted_hours[i] - sorted_hours[i - 1] != 1:
                 st.error("Las horas seleccionadas deben ser consecutivas")
-                return
+                return False
 
     # REAL-TIME VALIDATION - Check availability right before booking
     with st.spinner("Verificando disponibilidad..."):
@@ -460,7 +544,7 @@ def handle_reservation_submission(current_user, date, selected_hours):
         # Force cache refresh to show current state
         invalidate_reservation_cache()
         st.rerun()
-        return
+        return False
 
     # Real-time check for user's existing reservations
     user_existing_hours = db_manager.get_user_reservations_for_date(current_user['email'], date)
@@ -468,7 +552,7 @@ def handle_reservation_submission(current_user, date, selected_hours):
         st.error(f"Solo puedes reservar 2 horas por día. Ya tienes {len(user_existing_hours)} hora(s) reservada(s).")
         # Refresh cache in case user's reservations changed
         invalidate_reservation_cache()
-        return
+        return False
 
     # Validar si las reservas son consecutivas
 
@@ -487,7 +571,7 @@ def handle_reservation_submission(current_user, date, selected_hours):
         st.error(
             f"No puedes reservar a las {conflict_times} porque ya tienes esos horarios reservados {other_day_name}. No se permite reservar el mismo horario dos días seguidos.")
         invalidate_reservation_cache()
-        return
+        return False
 
     # Proceed with reservation attempt
     success_count = 0
@@ -516,6 +600,8 @@ def handle_reservation_submission(current_user, date, selected_hours):
         send_reservation_confirmation_email(current_user, date, selected_hours)
         st.balloons()
 
+        return True
+
     elif success_count > 0:
         # Éxito parcial
         st.warning(
@@ -523,6 +609,7 @@ def handle_reservation_submission(current_user, date, selected_hours):
         st.session_state.selected_hours = failed_hours
         # Invalidate cache to show updated state
         invalidate_reservation_cache()
+        return False
 
     else:
         # Falló completamente
@@ -531,6 +618,7 @@ def handle_reservation_submission(current_user, date, selected_hours):
         invalidate_reservation_cache()
         st.session_state.selected_hours = []
         st.session_state.selected_date = None
+        return False
 
 def send_reservation_confirmation_email(current_user, date, selected_hours):
     """Enviar email de confirmación de reserva"""
@@ -813,4 +901,4 @@ def get_cache_age():
 
     if cache_timestamp_key in st.session_state:
         return time.time() - st.session_state[cache_timestamp_key]
-    return float('inf')  # Very old if no cache
+    return float('inf')

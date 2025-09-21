@@ -110,6 +110,25 @@ def apply_styles():
         margin: 12px 0;
         color: #001854;
     }
+    
+    /* Style the actual Streamlit buttons to look like cards */
+    div[data-testid="stButton"] > button {
+        border-radius: 12px !important;
+        padding: 16px !important;
+        margin: 6px 0 !important;
+        text-align: center !important;
+        transition: all 0.3s ease !important;
+        min-height: 60px !important;
+        border: 2px solid #2478CC !important;
+        background: linear-gradient(135deg, #ffffff 0%, #f8f9ff 100%) !important;
+        color: #001854 !important;
+        font-weight: normal !important;
+    }
+    
+    div[data-testid="stButton"] > button:hover {
+        transform: translateY(-2px) !important;
+        box-shadow: 0 6px 16px rgba(36, 120, 204, 0.3) !important;
+    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -174,19 +193,15 @@ def create_time_slot_card(hour, date, reservations, user_reservations, current_h
         subtitle = "Disponible"
         clickable = True
 
-    # Create card HTML
-    card_html = f"""
-    <div class="time-card {card_type}" onclick="document.getElementById('slot_{date}_{hour}').click()">
-        <div style="font-size: 16px; font-weight: bold;">{format_hour(hour)}</div>
-        <div style="font-size: 12px; opacity: 0.8;">{subtitle}</div>
-    </div>
-    """
-
-    st.markdown(card_html, unsafe_allow_html=True)
-
-    # Hidden button for functionality
+    # Make the card clickable using st.button with custom styling
     if clickable:
-        if st.button("", key=f"slot_{date}_{hour}", help=f"Click para {'deseleccionar' if is_selected else 'seleccionar'}"):
+        button_label = f"{format_hour(hour)} - {subtitle}"
+        if st.button(
+                button_label,
+                key=f"slot_{date}_{hour}",
+                use_container_width=True,
+                help=f"Click para {'deseleccionar' if is_selected else 'seleccionar'}"
+        ):
             handle_slot_click(hour, date)
 
 def handle_slot_click(hour, date):
