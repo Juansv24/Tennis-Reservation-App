@@ -247,7 +247,7 @@ def show_reservation_tab():
         st.session_state[cache_timestamp_key] = current_time
 
         # Show cache refresh indicator
-        st.success("✅ Datos actualizados", icon="🔄")
+        #st.success("✅ Datos actualizados", icon="🔄")
 
     else:
         # Use cached data (fast)
@@ -379,7 +379,7 @@ def show_mobile_layout(today, tomorrow, today_reservations, tomorrow_reservation
                           key="mobile_feedback_skip")
     else:
         st.info("Selecciona los horarios disponibles en el calendario para continuar")
-        
+
 def show_reservation_details(today_date, tomorrow_date, current_user, user_today_reservations, user_tomorrow_reservations):
     """Mostrar panel de detalles de reserva"""
 
