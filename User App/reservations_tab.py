@@ -291,12 +291,15 @@ def show_mobile_layout(today, tomorrow, today_reservations, tomorrow_reservation
     # PARTE 1: Información del usuario y reservas existentes (ARRIBA)
     st.subheader("Detalles de la Reserva")
 
+    user_credits = db_manager.get_user_credits(current_user['email'])
+
     # Mostrar información del usuario
     st.markdown(f"""
     <div class="user-info-display">
         <strong>👤 Reservando como:</strong><br>
         {current_user['full_name']}<br>
         <small>{current_user['email']}</small>
+        <strong> 🪙 Créditos disponibles: {user_credits}</strong>
     </div>
     """, unsafe_allow_html=True)
 
