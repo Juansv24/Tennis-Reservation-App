@@ -1,17 +1,79 @@
 """
 Gestor de Base de Datos para Funciones de Administración
+VERSIÓN ACTUALIZADA con formateo de fechas y horas en zona horaria de Colombia
 """
 
 from database_manager import db_manager
-from timezone_utils import get_colombia_today, get_colombia_now
+from timezone_utils import get_colombia_today, COLOMBIA_TZ
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional
+import pytz
 
 class AdminDatabaseManager:
     """Gestor de base de datos para funciones administrativas"""
 
     def __init__(self):
         self.client = db_manager.client
+
+    def _format_colombia_datetime(self, utc_datetime_str: str) -> str:
+        """Convertir datetime UTC a formato Colombia DD/MM/YYYY HH:MM"""
+        try:
+            if not utc_datetime_str:
+                return 'N/A'
+
+            # Limpiar el string de fecha
+            if utc_datetime_str.endswith('Z'):
+                utc_datetime_str = utc_datetime_str[:-1]
+            elif '+00:00' in utc_datetime_str:
+                utc_datetime_str = utc_datetime_str.replace('+00:00', '')
+
+            # Parsear la fecha
+            utc_dt = datetime.fromisoformat(utc_datetime_str)
+
+            # Asegurar que tenga timezone UTC
+            if utc_dt.tzinfo is None:
+                utc_dt = pytz.UTC.localize(utc_dt)
+
+            # Convertir a zona horaria de Colombia
+            colombia_dt = utc_dt.astimezone(COLOMBIA_TZ)
+
+            # Formatear como "DD/MM/YYYY HH:MM"
+            return colombia_dt.strftime('%d/%m/%Y %H:%M')
+
+        except Exception as e:
+            print(f"Error formatting datetime: {e}")
+            # Fallback: devolver solo los primeros 16 caracteres
+            return utc_datetime_str[:16] if utc_datetime_str else 'N/A'
+
+    def _format_colombia_date(self, utc_datetime_str: str) -> str:
+        """Convertir datetime UTC a formato de fecha Colombia DD/MM/YYYY"""
+        try:
+            if not utc_datetime_str:
+                return 'N/A'
+
+            # Limpiar el string de fecha
+            if utc_datetime_str.endswith('Z'):
+                utc_datetime_str = utc_datetime_str[:-1]
+            elif '+00:00' in utc_datetime_str:
+                utc_datetime_str = utc_datetime_str.replace('+00:00', '')
+
+            # Parsear la fecha
+            utc_dt = datetime.fromisoformat(utc_datetime_str)
+
+            # Asegurar que tenga timezone UTC
+            if utc_dt.tzinfo is None:
+                utc_dt = pytz.UTC.localize(utc_dt)
+
+            # Convertir a zona horaria de Colombia
+            colombia_dt = utc_dt.astimezone(COLOMBIA_TZ)
+
+            # Formatear como "DD/MM/YYYY"
+            return colombia_dt.strftime('%d/%m/%Y')
+
+        except Exception as e:
+            print(f"Error formatting date: {e}")
+            # Fallback: devolver solo los primeros 10 caracteres
+            return utc_datetime_str[:10] if utc_datetime_str else 'N/A'
 
     def sync_database(self) -> Dict[str, any]:
         """Sincronizar y limpiar base de datos"""
@@ -26,7 +88,7 @@ class AdminDatabaseManager:
             }
 
             import datetime
-            now = get_colombia_now().replace(tzinfo=None).isoformat()
+            now = datetime.datetime.utcnow().isoformat()
 
             # 1. Limpiar sesiones expiradas
             expired_sessions = self.client.table('user_sessions').delete().lt('expires_at', now).execute()
@@ -108,94 +170,34 @@ class AdminDatabaseManager:
                 'email', user_email
             ).order('date', desc=True).order('hour').execute()
 
+            # Formatear fechas de creación
+            for reservation in result.data:
+                if 'created_at' in reservation:
+                    reservation['created_at'] = self._format_colombia_datetime(reservation['created_at'])
+
             return result.data
         except Exception:
             return []
 
-    def cancel_reservation_with_notification(self, reservation_id: int) -> bool:
-        """Cancel a reservation with transaction safety"""
+    def cancel_reservation_with_notification(self, reservation_id: int, user_email: str) -> bool:
+        """Cancelar reserva y enviar notificación"""
         try:
-            # Get reservation data first
-            reservation_result = self.client.table('reservations').select('email, date, hour, name').eq('id',
-                                                                                                        reservation_id).execute()
-
+            # Obtener datos de la reserva
+            reservation_result = self.client.table('reservations').select('*').eq('id', reservation_id).execute()
             if not reservation_result.data:
-                print(f"❌ Reservation {reservation_id} not found")
                 return False
 
             reservation = reservation_result.data[0]
-            user_email = reservation['email']
 
-            # Get user data
-            user_result = self.client.table('users').select('id, credits').eq('email', user_email).execute()
-            if not user_result.data:
-                print(f"❌ User {user_email} not found")
-                return False
+            # Cancelar reserva (reutilizar función existente)
+            success = self.cancel_reservation(reservation_id)
 
-            user = user_result.data[0]
-            user_id = user['id']
-            current_credits = user['credits'] or 0
-            new_credits = current_credits + 1
+            if success:
+                # Enviar email de notificación
+                self._send_cancellation_notification(user_email, reservation)
 
-            print(f"🔄 Starting transaction: Cancel reservation {reservation_id} for {user_email}")
-
-            # TRANSACTION BLOCK - All operations must succeed or all fail
-            try:
-                # Step 1: Delete the reservation
-                delete_result = self.client.table('reservations').delete().eq('id', reservation_id).execute()
-
-                if not delete_result.data:
-                    raise Exception("Failed to delete reservation from database")
-
-                print(f"✅ Step 1: Reservation deleted")
-
-                # Step 2: Update user credits
-                credit_update_result = self.client.table('users').update({
-                    'credits': new_credits
-                }).eq('id', user_id).execute()
-
-                if not credit_update_result.data:
-                    # ROLLBACK: Re-insert the reservation
-                    rollback_result = self.client.table('reservations').insert({
-                        'date': reservation['date'],
-                        'hour': reservation['hour'],
-                        'name': reservation['name'],
-                        'email': reservation['email']
-                    }).execute()
-
-                    if rollback_result.data:
-                        print("🔄 Rollback successful: Reservation restored")
-                    else:
-                        print("❌ CRITICAL: Rollback failed - manual intervention required")
-
-                    raise Exception("Failed to update user credits")
-
-                print(f"✅ Step 2: Credits updated ({current_credits} → {new_credits})")
-
-                # Step 3: Log the transaction
-                transaction_result = self.client.table('credit_transactions').insert({
-                    'user_id': user_id,
-                    'amount': 1,
-                    'transaction_type': 'reservation_refund',
-                    'description': f'Refund for admin cancellation - {reservation["date"]} {reservation["hour"]}:00',
-                    'admin_user': 'admin',
-                    'created_at': datetime.now().isoformat()
-                }).execute()
-
-                if not transaction_result.data:
-                    print("⚠️ Warning: Transaction logged failed, but reservation and credits updated successfully")
-                else:
-                    print(f"✅ Step 3: Transaction logged")
-
-                print(f"✅ Transaction completed successfully")
-                return True
-
-            except Exception as transaction_error:
-                print(f"❌ Transaction failed: {transaction_error}")
-                return False
-
-        except Exception as e:
-            print(f"❌ Error in cancel_reservation: {e}")
+            return success
+        except Exception:
             return False
 
     def _send_cancellation_notification(self, user_email: str, reservation: Dict):
@@ -227,6 +229,13 @@ class AdminDatabaseManager:
             result = self.client.table('users').select('*').or_(
                 f'email.ilike.%{search_term}%,full_name.ilike.%{search_term}%'
             ).execute()
+
+            # Formatear fechas para cada usuario
+            for user in result.data:
+                if 'last_login' in user:
+                    user['last_login'] = self._format_colombia_datetime(user['last_login'])
+                if 'created_at' in user:
+                    user['created_at'] = self._format_colombia_datetime(user['created_at'])
 
             return result.data
         except Exception:
@@ -378,9 +387,60 @@ class AdminDatabaseManager:
                 query = query.eq('date', date_filter.strftime('%Y-%m-%d'))
 
             result = query.order('date', desc=True).order('hour').execute()
+
+            # Formatear fechas de creación
+            for reservation in result.data:
+                if 'created_at' in reservation:
+                    reservation['created_at'] = self._format_colombia_datetime(reservation['created_at'])
+
             return result.data
         except Exception:
             return []
+
+    def cancel_reservation(self, reservation_id: int) -> bool:
+        """Cancelar una reserva específica"""
+        try:
+            # Obtener datos de la reserva antes de cancelar
+            reservation_result = self.client.table('reservations').select('email, date, hour').eq('id',
+                                                                                                  reservation_id).execute()
+
+            if not reservation_result.data:
+                return False
+
+            reservation = reservation_result.data[0]
+
+            # Eliminar la reserva
+            delete_result = self.client.table('reservations').delete().eq('id', reservation_id).execute()
+
+            if delete_result.data:
+                # Obtener usuario para reembolso
+                user_result = self.client.table('users').select('id, credits').eq('email',
+                                                                                  reservation['email']).execute()
+                if user_result.data:
+                    user = user_result.data[0]
+                    current_credits = user['credits'] or 0
+                    new_credits = current_credits + 1
+
+                    # Actualizar créditos directamente (sin RPC)
+                    self.client.table('users').update({
+                        'credits': new_credits
+                    }).eq('id', user['id']).execute()
+
+                    # Registrar transacción de reembolso
+                    self.client.table('credit_transactions').insert({
+                        'user_id': user['id'],
+                        'amount': 1,
+                        'transaction_type': 'reservation_refund',
+                        'description': f'Reembolso por cancelación admin - {reservation["date"]} {reservation["hour"]}:00',
+                        'admin_user': 'admin',
+                        'created_at': datetime.now().isoformat()
+                    }).execute()
+
+                return True
+            return False
+        except Exception as e:
+            print(f"Error canceling reservation: {e}")
+            return False
 
     def get_all_users(self) -> List:
         """Obtener todos los usuarios del sistema"""
@@ -388,6 +448,14 @@ class AdminDatabaseManager:
             result = self.client.table('users').select(
                 'id, email, full_name, credits, is_active, last_login, created_at'
             ).order('created_at', desc=True).execute()
+
+            # Formatear fechas para cada usuario
+            for user in result.data:
+                if 'last_login' in user:
+                    user['last_login'] = self._format_colombia_datetime(user['last_login'])
+                if 'created_at' in user:
+                    user['created_at'] = self._format_colombia_datetime(user['created_at'])
+
             return result.data
         except Exception:
             return []
@@ -413,23 +481,12 @@ class AdminDatabaseManager:
             return False
 
     def add_credits_to_user(self, email: str, credits_amount: int, reason: str, admin_username: str) -> bool:
-        """Add credits to user with transaction safety"""
+        """Agregar créditos a un usuario"""
         try:
-            # Validate inputs
-            if credits_amount <= 0 or credits_amount > 100:
-                print(f"❌ Invalid credit amount: {credits_amount}")
-                return False
-
-            if not reason or len(reason.strip()) < 3:
-                print("❌ Reason is required and must be at least 3 characters")
-                return False
-
-            # Get user data
-            user_result = self.client.table('users').select('id, credits, full_name').eq('email',
-                                                                                         email.strip().lower()).execute()
+            # Buscar usuario por email
+            user_result = self.client.table('users').select('id, credits').eq('email', email.strip().lower()).execute()
 
             if not user_result.data:
-                print(f"❌ User not found: {email}")
                 return False
 
             user = user_result.data[0]
@@ -437,54 +494,26 @@ class AdminDatabaseManager:
             current_credits = user['credits'] or 0
             new_credits = current_credits + credits_amount
 
-            print(f"🔄 Adding {credits_amount} credits to {user['full_name']} ({email})")
-            print(f"🔄 Credits: {current_credits} → {new_credits}")
+            # Actualizar créditos del usuario
+            update_result = self.client.table('users').update({
+                'credits': new_credits
+            }).eq('id', user_id).execute()
 
-            # TRANSACTION BLOCK
-            try:
-                # Step 1: Update user credits
-                credit_update_result = self.client.table('users').update({
-                    'credits': new_credits
-                }).eq('id', user_id).execute()
-
-                if not credit_update_result.data:
-                    raise Exception("Failed to update user credits")
-
-                print(f"✅ Step 1: User credits updated")
-
-                # Step 2: Log the transaction
-                transaction_result = self.client.table('credit_transactions').insert({
+            if update_result.data:
+                # Registrar transacción
+                self.client.table('credit_transactions').insert({
                     'user_id': user_id,
                     'amount': credits_amount,
                     'transaction_type': 'admin_grant',
-                    'description': reason.strip(),
+                    'description': reason,
                     'admin_user': admin_username,
-                    'created_at': get_colombia_now().replace(tzinfo=None).isoformat()
+                    'created_at': datetime.now().isoformat()
                 }).execute()
 
-                if not transaction_result.data:
-                    # ROLLBACK: Restore original credits
-                    rollback_result = self.client.table('users').update({
-                        'credits': current_credits
-                    }).eq('id', user_id).execute()
-
-                    if rollback_result.data:
-                        print("🔄 Rollback successful: Credits restored")
-                    else:
-                        print("❌ CRITICAL: Rollback failed - manual intervention required")
-
-                    raise Exception("Failed to log credit transaction")
-
-                print(f"✅ Step 2: Transaction logged")
-                print(f"✅ Credit addition completed successfully")
                 return True
-
-            except Exception as transaction_error:
-                print(f"❌ Transaction failed: {transaction_error}")
-                return False
-
+            return False
         except Exception as e:
-            print(f"❌ Error in add_credits_to_user: {e}")
+            print(f"Error adding credits: {e}")
             return False
 
     def remove_credits_from_user(self, email: str, credits_amount: int, reason: str, admin_username: str) -> bool:
@@ -519,7 +548,7 @@ class AdminDatabaseManager:
                     'transaction_type': 'admin_deduct',
                     'description': reason,
                     'admin_user': admin_username,
-                    'created_at': get_colombia_now().replace(tzinfo=None).isoformat()
+                    'created_at': datetime.now().isoformat()
                 }).execute()
 
                 return True
@@ -575,7 +604,7 @@ class AdminDatabaseManager:
                     transaction['transaction_type'],
                     transaction['description'],
                     transaction['admin_user'],
-                    transaction['created_at']
+                    self._format_colombia_datetime(transaction['created_at'])  # FORMATEADO A COLOMBIA
                 ])
 
             return formatted_transactions
@@ -596,6 +625,11 @@ class AdminDatabaseManager:
                 'date, hour, created_at'
             ).eq('email', email).order('date', desc=True).execute()
 
+            # Formatear fechas de creación
+            for reservation in result.data:
+                if 'created_at' in reservation:
+                    reservation['created_at'] = self._format_colombia_datetime(reservation['created_at'])
+
             return result.data
         except Exception:
             return []
@@ -606,6 +640,11 @@ class AdminDatabaseManager:
             result = self.client.table('reservations').select(
                 'date, hour, created_at'
             ).eq('email', user_email).order('date', desc=True).limit(limit).execute()
+
+            # Formatear fechas de creación
+            for reservation in result.data:
+                if 'created_at' in reservation:
+                    reservation['created_at'] = self._format_colombia_datetime(reservation['created_at'])
 
             return result.data
         except Exception as e:
@@ -674,8 +713,8 @@ class AdminDatabaseManager:
                     'Email': user['email'],
                     'Créditos': user['credits'] or 0,
                     'Estado': 'Activo' if user['is_active'] else 'Inactivo',
-                    'Último Login': user['last_login'][:10] if user['last_login'] else 'Nunca',
-                    'Fecha Registro': user['created_at'][:10]
+                    'Último Login': self._format_colombia_datetime(user['last_login']),  # FORMATEADO A COLOMBIA
+                    'Fecha Registro': self._format_colombia_datetime(user['created_at'])  # FORMATEADO A COLOMBIA
                 })
 
             return formatted_users
@@ -709,7 +748,7 @@ class AdminDatabaseManager:
                     'Hora': f"{reservation['hour']}:00 - {reservation['hour'] + 1}:00",
                     'Nombre Usuario': reservation['name'],
                     'Email Usuario': reservation['email'],
-                    'Fecha Creación': reservation['created_at'][:10]
+                    'Fecha Creación': self._format_colombia_datetime(reservation['created_at'])  # FORMATEADO A COLOMBIA
                 })
 
             return formatted_reservations
@@ -745,7 +784,7 @@ class AdminDatabaseManager:
                     'Tipo': transaction_types.get(transaction['transaction_type'], transaction['transaction_type']),
                     'Descripción': transaction['description'],
                     'Administrador': transaction['admin_user'] or 'Sistema',
-                    'Fecha': transaction['created_at'][:10]
+                    'Fecha y Hora': self._format_colombia_datetime(transaction['created_at'])  # FORMATEADO A COLOMBIA
                 })
 
             return formatted_transactions

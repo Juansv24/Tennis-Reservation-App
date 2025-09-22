@@ -743,7 +743,7 @@ def show_credits_management_tab():
     transactions = admin_db_manager.get_credit_transactions()
     if transactions:
         df_transactions = pd.DataFrame(transactions)
-        df_transactions.columns = ['Usuario', 'Cantidad', 'Tipo', 'Descripción', 'Admin', 'Fecha']
+        df_transactions.columns = ['Usuario', 'Cantidad', 'Tipo', 'Descripción', 'Admin', 'Fecha y Hora']
         st.dataframe(df_transactions, use_container_width=True)
     else:
         st.info("No hay transacciones de créditos")
