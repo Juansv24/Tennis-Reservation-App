@@ -169,7 +169,6 @@ class EmailManager:
         # Al inicio del método, después de obtener la información básica:
         lock_code = admin_db_manager.get_current_lock_code() or "Contactar admin"
 
-
         html_body = f"""
         <!DOCTYPE html>
         <html>
@@ -201,48 +200,48 @@ class EmailManager:
                         <p><strong>Hora:</strong> {start_time} - {end_time}</p>
                         <p><strong>Duración:</strong> {len(hours)} hora(s)</p>
                         <p><strong>Ubicación:</strong> Cancha de Tenis Colina Campestre</p>
+                    </div>
+
+                    <div style="
+                        background: linear-gradient(135deg, #FFD400 0%, #FFC107 100%);
+                        border: 3px solid #FF6F00;
+                        border-radius: 15px;
+                        padding: 25px;
+                        margin: 25px 0;
+                        text-align: center;
+                        box-shadow: 0 8px 16px rgba(255, 111, 0, 0.3);
+                    ">
+                        <h2 style="
+                            margin: 0 0 15px 0; 
+                            color: #B71C1C; 
+                            font-size: 1.5rem;
+                            text-shadow: 1px 1px 2px rgba(0,0,0,0.3);
+                        ">
+                            🔒 CÓDIGO DEL CANDADO
+                        </h2>
                         <div style="
-    background: linear-gradient(135deg, #FFD400 0%, #FFC107 100%);
-    border: 3px solid #FF6F00;
-    border-radius: 15px;
-    padding: 25px;
-    margin: 25px 0;
-    text-align: center;
-    box-shadow: 0 8px 16px rgba(255, 111, 0, 0.3);
-">
-    <h2 style="
-        margin: 0 0 15px 0; 
-        color: #B71C1C; 
-        font-size: 1.5rem;
-        text-shadow: 1px 1px 2px rgba(0,0,0,0.3);
-    ">
-        🔒 CÓDIGO DEL CANDADO
-    </h2>
-    <div style="
-        font-size: 3.5rem;
-        font-weight: bold;
-        color: #B71C1C;
-        margin: 20px 0;
-        font-family: 'Courier New', monospace;
-        background: white;
-        border-radius: 12px;
-        padding: 20px;
-        box-shadow: inset 0 4px 8px rgba(0,0,0,0.2);
-        border: 2px solid #D32F2F;
-        letter-spacing: 8px;
-    ">
-        {lock_code}
-    </div>
-    <p style="
-        margin: 0; 
-        color: #B71C1C; 
-        font-weight: bold;
-        font-size: 1.1rem;
-    ">
-        ¡Anota este código para abrir el candado!
-    </p>
-</div>
-                        
+                            font-size: 3.5rem;
+                            font-weight: bold;
+                            color: #B71C1C;
+                            margin: 20px 0;
+                            font-family: 'Courier New', monospace;
+                            background: white;
+                            border-radius: 12px;
+                            padding: 20px;
+                            box-shadow: inset 0 4px 8px rgba(0,0,0,0.2);
+                            border: 2px solid #D32F2F;
+                            letter-spacing: 8px;
+                        ">
+                            {lock_code}
+                        </div>
+                        <p style="
+                            margin: 0; 
+                            color: #B71C1C; 
+                            font-weight: bold;
+                            font-size: 1.1rem;
+                        ">
+                            ¡Anota este código para abrir el candado!
+                        </p>
                     </div>
 
                     <p style="text-align: center;">
@@ -263,15 +262,7 @@ class EmailManager:
         </html>
         """
 
-        # Nombres de meses en español
-        months_es = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
-                     'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
-        days_es = ['lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado', 'domingo']
-
-        day_name = days_es[date.weekday()]
-        month_name = months_es[date.month - 1]
-        formatted_date = f"{day_name}, {date.day} de {month_name} de {date.year}"
-
+        # Nombres de meses en español (duplicado removido)
         text_body = f"""
         ¡Reserva de Cancha de Tenis Confirmada!
 
@@ -285,7 +276,8 @@ class EmailManager:
         - Hora: {start_time} - {end_time}
         - Duración: {len(hours)} hora(s)
         - Ubicación: Cancha de Tenis Colina Campestre
-        - 🔒🔒🔒 CÓDIGO DEL CANDADO: {lock_code} 🔒🔒🔒
+
+        🔒🔒🔒 CÓDIGO DEL CANDADO: {lock_code} 🔒🔒🔒
 
         Agregar a Google Calendar: {calendar_link}
 
