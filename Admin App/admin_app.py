@@ -27,7 +27,6 @@ def setup_admin_page_config():
         initial_sidebar_state="expanded"
     )
 
-
 def apply_admin_styles():
     """Aplicar estilos CSS para la interfaz de administración"""
     st.markdown(f"""
@@ -121,7 +120,6 @@ def apply_admin_styles():
     </style>
     """, unsafe_allow_html=True)
 
-
 def show_admin_login():
     """Mostrar interfaz de login de administrador"""
     st.markdown("""
@@ -161,7 +159,6 @@ def show_admin_login():
                     st.rerun()
                 else:
                     st.error("❌ Credenciales incorrectas")
-
 
 def show_admin_dashboard():
     """Mostrar el panel principal de administración"""
@@ -256,12 +253,15 @@ def show_admin_dashboard():
             admin_auth_manager.logout_admin()
             st.rerun()
 
+    st.divider()
+
+
     # Control de navegación segmentado
     previous_tab = st.session_state.get('admin_current_tab', "📊 Dashboard")
 
     tab = st.segmented_control(
         "Navegación Admin",
-        ["📊 Dashboard", "📅 Reservas", "👥 Usuarios", "💰 Créditos"],
+        ["📊 Dashboard", "📅 Reservas", "👥 Usuarios", "💰 Créditos", "⚙️ Config"],
         selection_mode="single",
         default="📊 Dashboard",
         label_visibility="collapsed",
@@ -278,7 +278,7 @@ def show_admin_dashboard():
         # Guardar pestaña actual
         st.session_state.admin_current_tab = tab
 
-    st.divider()
+
 
     # Mostrar sección correspondiente
     if tab == "📊 Dashboard":
@@ -289,7 +289,8 @@ def show_admin_dashboard():
         show_users_management_tab()
     elif tab == "💰 Créditos":
         show_credits_management_tab()
-
+    elif tab == "⚙️ Config":
+        show_config_tab()
 
 def show_dashboard_tab():
     """Mostrar estadísticas y dashboard"""
@@ -404,8 +405,6 @@ def show_dashboard_tab():
         else:
             st.info("📊 No hay datos de usuarios disponibles")
 
-
-
 def mostrar_feedback_reserva(reservation_id):
     """Mostrar feedback de actualización de reserva"""
     feedback_key = f'actualizado_recientemente_{reservation_id}'
@@ -421,7 +420,6 @@ def mostrar_feedback_reserva(reservation_id):
             # Limpiar feedback expirado
             del st.session_state[feedback_key]
     return False
-
 
 def show_reservations_management_tab():
     """Gestión de reservas por usuario"""
@@ -585,7 +583,6 @@ def verificar_expander_abierto_admin(item_id):
         else:
             del st.session_state[key]
     return False
-
 
 def show_user_detailed_info(user):
     """Mostrar información detallada del usuario con feedback mejorado"""
@@ -787,12 +784,10 @@ def send_credits_notification_email(user_email, credits_amount, reason, operatio
     except Exception as e:
         st.warning(f"Error enviando notificación: {e}")
 
-
 def show_send_email_form(user):
     """Mostrar formulario para enviar email a usuario"""
     st.subheader(f"📧 Enviar Email a {user['Nombre']}")
     # Implementar formulario de email
-
 
 def show_user_history(user_id):
     """Mostrar historial de usuario"""
@@ -859,6 +854,168 @@ def mostrar_feedback_usuario(user_id):
             # Limpiar feedback expirado
             del st.session_state[feedback_key]
     return False
+
+def show_config_tab():
+    """Mostrar pestaña de configuración del sistema"""
+    st.subheader("⚙️ Configuración del Sistema")
+
+    # Header estilizado
+    st.markdown("""
+    <div style="
+        background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+        border: 2px solid #dee2e6;
+        border-radius: 15px;
+        padding: 20px;
+        margin: 20px 0;
+        text-align: center;
+    ">
+        <h3 style="margin: 0; color: #495057;">🔐 Gestión de Contraseña del Candado</h3>
+        <p style="margin: 10px 0 0 0; color: #6c757d;">Esta contraseña se enviará en los emails de confirmación de reserva</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Layout principal
+    col1, col2, col3 = st.columns([1, 2, 1])
+
+    with col2:
+        # MOVER LA OBTENCIÓN FUERA DEL FORMULARIO
+        current_lock_code = admin_db_manager.get_current_lock_code()
+
+        # Card para mostrar contraseña actual - FUERA del formulario
+        if current_lock_code:
+            st.markdown(f"""
+            <div style="
+                background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%);
+                border: 2px solid #28a745;
+                border-radius: 12px;
+                padding: 20px;
+                margin: 20px 0;
+                text-align: center;
+                box-shadow: 0 4px 8px rgba(40, 167, 69, 0.2);
+            ">
+                <h4 style="margin: 0; color: #155724;">
+                    <i class="fas fa-lock"></i> Contraseña Actual
+                </h4>
+                <div style="
+                    font-size: 2.5rem;
+                    font-weight: bold;
+                    color: #155724;
+                    margin: 15px 0;
+                    font-family: 'Courier New', monospace;
+                    background: white;
+                    border-radius: 8px;
+                    padding: 15px;
+                    box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);
+                ">
+                    {current_lock_code}
+                </div>
+                <small style="color: #155724; opacity: 0.8;">
+                    Esta contraseña se incluye en los emails de confirmación
+                </small>
+            </div>
+            """, unsafe_allow_html=True)
+        else:
+            st.markdown("""
+            <div style="
+                background: linear-gradient(135deg, #f8d7da 0%, #f5c6cb 100%);
+                border: 2px solid #dc3545;
+                border-radius: 12px;
+                padding: 20px;
+                margin: 20px 0;
+                text-align: center;
+                box-shadow: 0 4px 8px rgba(220, 53, 69, 0.2);
+            ">
+                <h4 style="margin: 0; color: #721c24;">
+                    <i class="fas fa-exclamation-triangle"></i> Sin Contraseña
+                </h4>
+                <p style="margin: 10px 0 0 0; color: #721c24;">
+                    No hay contraseña configurada para el candado
+                </p>
+            </div>
+            """, unsafe_allow_html=True)
+
+        st.markdown("---")
+
+        # Formulario SOLO para actualizar - SIN mostrar contraseña actual
+        with st.form("advanced_lock_code_form", clear_on_submit=True):  # clear_on_submit=True
+            st.markdown("**Actualizar contraseña del candado:**")
+
+            # Input con estilo mejorado
+            new_lock_code = st.text_input(
+                "Nueva contraseña del candado",
+                placeholder="Ingresa 4 dígitos (ej: 1234)",
+                max_chars=4,
+                help="La contraseña debe ser exactamente 4 dígitos numéricos",
+                label_visibility="collapsed"
+            )
+
+            # Validación en tiempo real
+            if new_lock_code:
+                if len(new_lock_code) == 4 and new_lock_code.isdigit():
+                    st.success("✅ Formato válido")
+                else:
+                    if len(new_lock_code) < 4:
+                        st.warning(f"⚠️ Faltan {4 - len(new_lock_code)} dígito(s)")
+                    elif len(new_lock_code) > 4:
+                        st.error("❌ Máximo 4 dígitos")
+                    elif not new_lock_code.isdigit():
+                        st.error("❌ Solo se permiten números")
+
+            st.markdown("<br>", unsafe_allow_html=True)
+
+            # Botón de actualización estilizado
+            col_btn1, col_btn2, col_btn3 = st.columns([1, 2, 1])
+            with col_btn2:
+                submit_button = st.form_submit_button(
+                    "🔄 Actualizar Contraseña",
+                    type="primary",
+                    use_container_width=True
+                )
+
+            if submit_button:
+                if not new_lock_code:
+                    st.error("❌ Por favor ingresa una contraseña")
+                elif len(new_lock_code) != 4:
+                    st.error("❌ La contraseña debe tener exactamente 4 dígitos")
+                elif not new_lock_code.isdigit():
+                    st.error("❌ La contraseña solo puede contener números")
+                else:
+                    # Intentar actualizar
+                    admin_user = st.session_state.get('admin_user', {})
+
+                    with st.spinner("🔄 Actualizando contraseña..."):
+                        success = admin_db_manager.update_lock_code(
+                            new_lock_code,
+                            admin_user.get('username', 'admin')
+                        )
+
+                    if success:
+                        st.success("✅ Contraseña actualizada exitosamente")
+                        st.balloons()
+
+                        # Forzar actualización completa
+                        st.cache_data.clear()
+                        st.rerun()
+                    else:
+                        st.error("❌ Error al actualizar la contraseña. Intenta de nuevo.")
+
+        # Información adicional
+        with st.expander("ℹ️ Información sobre la contraseña del candado", expanded=False):
+            st.markdown("""
+            **¿Para qué sirve esta contraseña?**
+            - Se incluye en todos los emails de confirmación de reserva
+            - Los usuarios la necesitan para abrir el candado de la cancha
+            - Es importante mantenerla actualizada y comunicarla cuando sea necesario
+
+            **Recomendaciones:**
+            - Usa 4 dígitos fáciles de recordar pero no obvios
+            - Cambia la contraseña periódicamente por seguridad
+            - Evita secuencias simples como 1234 o 0000
+
+            **Historial de cambios:**
+            - Los cambios quedan registrados con fecha y administrador
+            - Puedes ver el historial en la base de datos si es necesario
+            """)
 
 def main():
     """Función principal de la aplicación de administración"""

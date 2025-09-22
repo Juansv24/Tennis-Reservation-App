@@ -726,6 +726,5 @@ class AdminDatabaseManager:
         except Exception as e:
             print(f"Error updating lock code: {e}")
             return False
-
 # Instancia global
 admin_db_manager = AdminDatabaseManager()

@@ -11,6 +11,7 @@ from email.mime.multipart import MIMEMultipart
 from datetime import datetime
 from typing import Optional, Tuple
 import streamlit as st
+from admin_database import admin_db_manager
 
 # Configuración de email
 SMTP_SERVER = "smtp.gmail.com"
@@ -165,6 +166,10 @@ class EmailManager:
         # Enlace de Google Calendar
         calendar_link = f"https://calendar.google.com/calendar/render?action=TEMPLATE&text=Reserva%20Cancha%20de%20Tenis&dates={cal_start}/{cal_end}&details=Reserva%20de%20Cancha%20de%20Tenis%20en%20Colina%20Campestre%0A%0AReservado%20por:%20{user_name}%0AEmail:%20{to_email}&location=Cancha%20de%20Tenis%20Colina%20Campestre"
 
+        # Al inicio del método, después de obtener la información básica:
+        lock_code = admin_db_manager.get_current_lock_code() or "Contactar admin"
+
+
         html_body = f"""
         <!DOCTYPE html>
         <html>
@@ -196,6 +201,7 @@ class EmailManager:
                         <p><strong>Hora:</strong> {start_time} - {end_time}</p>
                         <p><strong>Duración:</strong> {len(hours)} hora(s)</p>
                         <p><strong>Ubicación:</strong> Cancha de Tenis Colina Campestre</p>
+                        <p><strong>🔒 Contraseña del Candado:</strong> {lock_code}</p>
                     </div>
 
                     <p style="text-align: center;">
@@ -238,6 +244,7 @@ class EmailManager:
         - Hora: {start_time} - {end_time}
         - Duración: {len(hours)} hora(s)
         - Ubicación: Cancha de Tenis Colina Campestre
+        - 🔒 Contraseña del Candado: {lock_code}
 
         Agregar a Google Calendar: {calendar_link}
 
