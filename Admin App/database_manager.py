@@ -303,6 +303,26 @@ class SupabaseManager:
         except Exception as e:
             st.warning(f"Error en limpieza automática: {e}")
 
+    def log_critical_operation(self, operation_type: str, details: dict, success: bool):
+        """Log critical database operations for audit trail"""
+        try:
+            log_entry = {
+                'operation_type': operation_type,
+                'details': str(details),
+                'success': success,
+                'timestamp': get_colombia_now().isoformat(),
+                'user_agent': 'streamlit_app'
+            }
+
+            # Try to log to a system_logs table (create if needed)
+            try:
+                self.client.table('system_logs').insert(log_entry).execute()
+            except Exception:
+                # If logging fails, at least print to console
+                print(f"🔍 AUDIT: {operation_type} - Success: {success} - Details: {details}")
+
+        except Exception as e:
+            print(f"⚠️ Failed to log operation: {e}")
 
 # Instancia global
 db_manager = SupabaseManager()

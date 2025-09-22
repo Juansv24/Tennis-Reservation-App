@@ -112,25 +112,90 @@ class AdminDatabaseManager:
         except Exception:
             return []
 
-    def cancel_reservation_with_notification(self, reservation_id: int, user_email: str) -> bool:
-        """Cancelar reserva y enviar notificación"""
+    def cancel_reservation_with_notification(self, reservation_id: int) -> bool:
+        """Cancel a reservation with transaction safety"""
         try:
-            # Obtener datos de la reserva
-            reservation_result = self.client.table('reservations').select('*').eq('id', reservation_id).execute()
+            # Get reservation data first
+            reservation_result = self.client.table('reservations').select('email, date, hour, name').eq('id',
+                                                                                                        reservation_id).execute()
+
             if not reservation_result.data:
+                print(f"❌ Reservation {reservation_id} not found")
                 return False
 
             reservation = reservation_result.data[0]
+            user_email = reservation['email']
 
-            # Cancelar reserva (reutilizar función existente)
-            success = self.cancel_reservation(reservation_id)
+            # Get user data
+            user_result = self.client.table('users').select('id, credits').eq('email', user_email).execute()
+            if not user_result.data:
+                print(f"❌ User {user_email} not found")
+                return False
 
-            if success:
-                # Enviar email de notificación
-                self._send_cancellation_notification(user_email, reservation)
+            user = user_result.data[0]
+            user_id = user['id']
+            current_credits = user['credits'] or 0
+            new_credits = current_credits + 1
 
-            return success
-        except Exception:
+            print(f"🔄 Starting transaction: Cancel reservation {reservation_id} for {user_email}")
+
+            # TRANSACTION BLOCK - All operations must succeed or all fail
+            try:
+                # Step 1: Delete the reservation
+                delete_result = self.client.table('reservations').delete().eq('id', reservation_id).execute()
+
+                if not delete_result.data:
+                    raise Exception("Failed to delete reservation from database")
+
+                print(f"✅ Step 1: Reservation deleted")
+
+                # Step 2: Update user credits
+                credit_update_result = self.client.table('users').update({
+                    'credits': new_credits
+                }).eq('id', user_id).execute()
+
+                if not credit_update_result.data:
+                    # ROLLBACK: Re-insert the reservation
+                    rollback_result = self.client.table('reservations').insert({
+                        'date': reservation['date'],
+                        'hour': reservation['hour'],
+                        'name': reservation['name'],
+                        'email': reservation['email']
+                    }).execute()
+
+                    if rollback_result.data:
+                        print("🔄 Rollback successful: Reservation restored")
+                    else:
+                        print("❌ CRITICAL: Rollback failed - manual intervention required")
+
+                    raise Exception("Failed to update user credits")
+
+                print(f"✅ Step 2: Credits updated ({current_credits} → {new_credits})")
+
+                # Step 3: Log the transaction
+                transaction_result = self.client.table('credit_transactions').insert({
+                    'user_id': user_id,
+                    'amount': 1,
+                    'transaction_type': 'reservation_refund',
+                    'description': f'Refund for admin cancellation - {reservation["date"]} {reservation["hour"]}:00',
+                    'admin_user': 'admin',
+                    'created_at': datetime.now().isoformat()
+                }).execute()
+
+                if not transaction_result.data:
+                    print("⚠️ Warning: Transaction logged failed, but reservation and credits updated successfully")
+                else:
+                    print(f"✅ Step 3: Transaction logged")
+
+                print(f"✅ Transaction completed successfully")
+                return True
+
+            except Exception as transaction_error:
+                print(f"❌ Transaction failed: {transaction_error}")
+                return False
+
+        except Exception as e:
+            print(f"❌ Error in cancel_reservation: {e}")
             return False
 
     def _send_cancellation_notification(self, user_email: str, reservation: Dict):
@@ -317,51 +382,6 @@ class AdminDatabaseManager:
         except Exception:
             return []
 
-    def cancel_reservation(self, reservation_id: int) -> bool:
-        """Cancelar una reserva específica"""
-        try:
-            # Obtener datos de la reserva antes de cancelar
-            reservation_result = self.client.table('reservations').select('email, date, hour').eq('id',
-                                                                                                  reservation_id).execute()
-
-            if not reservation_result.data:
-                return False
-
-            reservation = reservation_result.data[0]
-
-            # Eliminar la reserva
-            delete_result = self.client.table('reservations').delete().eq('id', reservation_id).execute()
-
-            if delete_result.data:
-                # Obtener usuario para reembolso
-                user_result = self.client.table('users').select('id, credits').eq('email',
-                                                                                  reservation['email']).execute()
-                if user_result.data:
-                    user = user_result.data[0]
-                    current_credits = user['credits'] or 0
-                    new_credits = current_credits + 1
-
-                    # Actualizar créditos directamente (sin RPC)
-                    self.client.table('users').update({
-                        'credits': new_credits
-                    }).eq('id', user['id']).execute()
-
-                    # Registrar transacción de reembolso
-                    self.client.table('credit_transactions').insert({
-                        'user_id': user['id'],
-                        'amount': 1,
-                        'transaction_type': 'reservation_refund',
-                        'description': f'Reembolso por cancelación admin - {reservation["date"]} {reservation["hour"]}:00',
-                        'admin_user': 'admin',
-                        'created_at': datetime.now().isoformat()
-                    }).execute()
-
-                return True
-            return False
-        except Exception as e:
-            print(f"Error canceling reservation: {e}")
-            return False
-
     def get_all_users(self) -> List:
         """Obtener todos los usuarios del sistema"""
         try:
@@ -393,12 +413,23 @@ class AdminDatabaseManager:
             return False
 
     def add_credits_to_user(self, email: str, credits_amount: int, reason: str, admin_username: str) -> bool:
-        """Agregar créditos a un usuario"""
+        """Add credits to user with transaction safety"""
         try:
-            # Buscar usuario por email
-            user_result = self.client.table('users').select('id, credits').eq('email', email.strip().lower()).execute()
+            # Validate inputs
+            if credits_amount <= 0 or credits_amount > 100:
+                print(f"❌ Invalid credit amount: {credits_amount}")
+                return False
+
+            if not reason or len(reason.strip()) < 3:
+                print("❌ Reason is required and must be at least 3 characters")
+                return False
+
+            # Get user data
+            user_result = self.client.table('users').select('id, credits, full_name').eq('email',
+                                                                                         email.strip().lower()).execute()
 
             if not user_result.data:
+                print(f"❌ User not found: {email}")
                 return False
 
             user = user_result.data[0]
@@ -406,26 +437,54 @@ class AdminDatabaseManager:
             current_credits = user['credits'] or 0
             new_credits = current_credits + credits_amount
 
-            # Actualizar créditos del usuario
-            update_result = self.client.table('users').update({
-                'credits': new_credits
-            }).eq('id', user_id).execute()
+            print(f"🔄 Adding {credits_amount} credits to {user['full_name']} ({email})")
+            print(f"🔄 Credits: {current_credits} → {new_credits}")
 
-            if update_result.data:
-                # Registrar transacción
-                self.client.table('credit_transactions').insert({
+            # TRANSACTION BLOCK
+            try:
+                # Step 1: Update user credits
+                credit_update_result = self.client.table('users').update({
+                    'credits': new_credits
+                }).eq('id', user_id).execute()
+
+                if not credit_update_result.data:
+                    raise Exception("Failed to update user credits")
+
+                print(f"✅ Step 1: User credits updated")
+
+                # Step 2: Log the transaction
+                transaction_result = self.client.table('credit_transactions').insert({
                     'user_id': user_id,
                     'amount': credits_amount,
                     'transaction_type': 'admin_grant',
-                    'description': reason,
+                    'description': reason.strip(),
                     'admin_user': admin_username,
                     'created_at': datetime.now().isoformat()
                 }).execute()
 
+                if not transaction_result.data:
+                    # ROLLBACK: Restore original credits
+                    rollback_result = self.client.table('users').update({
+                        'credits': current_credits
+                    }).eq('id', user_id).execute()
+
+                    if rollback_result.data:
+                        print("🔄 Rollback successful: Credits restored")
+                    else:
+                        print("❌ CRITICAL: Rollback failed - manual intervention required")
+
+                    raise Exception("Failed to log credit transaction")
+
+                print(f"✅ Step 2: Transaction logged")
+                print(f"✅ Credit addition completed successfully")
                 return True
-            return False
+
+            except Exception as transaction_error:
+                print(f"❌ Transaction failed: {transaction_error}")
+                return False
+
         except Exception as e:
-            print(f"Error adding credits: {e}")
+            print(f"❌ Error in add_credits_to_user: {e}")
             return False
 
     def remove_credits_from_user(self, email: str, credits_amount: int, reason: str, admin_username: str) -> bool:
