@@ -23,12 +23,51 @@ class EmailManager:
     def __init__(self):
         self.smtp_server = SMTP_SERVER
         self.smtp_port = SMTP_PORT
+        self._configured = False
+        self.email_address = None
+        self.email_password = None
 
+        # Safely load email credentials
+        self._load_email_credentials()
+
+    def _load_email_credentials(self):
+        """Safely load email credentials from secrets"""
         try:
             self.email_address = st.secrets["email"]["address"]
             self.email_password = st.secrets["email"]["password"]
-        except KeyError:
-            st.warning("⚠️ Credenciales de email no configuradas...")
+
+            # Validate credentials format
+            if not self.email_address or not self.email_password:
+                self._configured = False
+                return
+
+            # Basic email format validation
+            import re
+            if not re.match(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$', self.email_address):
+                self._configured = False
+                st.error("❌ Invalid email address format in secrets")
+                return
+
+            # Validate app password format (Gmail app passwords are typically 16 chars)
+            if len(self.email_password) < 10:
+                self._configured = False
+                st.error("❌ Email password appears to be invalid (too short)")
+                return
+
+            self._configured = True
+
+            # Log success without exposing credentials
+            print(f"✅ Email configured for: {self.email_address[:3]}***@{self.email_address.split('@')[1]}")
+
+        except KeyError as e:
+            self._configured = False
+            # Don't log the specific missing key to avoid information leakage
+            print("⚠️ Email credentials not configured in secrets")
+        except Exception as e:
+            self._configured = False
+            # Log error without exposing sensitive information
+            print(f"❌ Error loading email configuration: {type(e).__name__}")
+            st.error("❌ Error loading email configuration")
 
     def generate_verification_code(self) -> str:
         """Generar código de verificación de 6 caracteres"""
@@ -36,15 +75,67 @@ class EmailManager:
 
     def is_configured(self) -> bool:
         """Verificar si el email está configurado correctamente"""
-        try:
-            return bool(st.secrets["email"]["address"] and st.secrets["email"]["password"])
-        except KeyError:
+        return self._configured
+
+    def get_configuration_status(self) -> dict:
+        """Get detailed configuration status for admin debugging"""
+        if not self._configured:
+            try:
+                # Check what's missing without exposing values
+                address_exists = "address" in st.secrets.get("email", {})
+                password_exists = "password" in st.secrets.get("email", {})
+
+                return {
+                    "configured": False,
+                    "address_present": address_exists,
+                    "password_present": password_exists,
+                    "smtp_server": self.smtp_server,
+                    "smtp_port": self.smtp_port
+                }
+            except Exception:
+                return {"configured": False, "error": "Cannot access secrets"}
+        else:
+            return {
+                "configured": True,
+                "email": f"{self.email_address[:3]}***@{self.email_address.split('@')[1]}",
+                "smtp_server": self.smtp_server,
+                "smtp_port": self.smtp_port
+            }
+
+    def validate_email_security(self) -> bool:
+        """Validate email configuration security"""
+        if not self._configured:
+            st.warning("⚠️ Email service not configured")
             return False
+
+        # Check for common security issues
+        warnings = []
+
+        # Check if using a secure app password (not regular password)
+        if " " not in self.email_password:
+            warnings.append("Consider using an App Password instead of regular password")
+
+        # Check email provider security
+        email_domain = self.email_address.split('@')[1].lower()
+        if email_domain not in ['gmail.com', 'outlook.com', 'hotmail.com']:
+            warnings.append(f"Using {email_domain} - ensure 2FA is enabled")
+
+        # Display warnings to admin
+        if warnings:
+            for warning in warnings:
+                st.info(f"💡 Email Security: {warning}")
+
+        return True
 
     def send_email(self, to_email: str, subject: str, body_html: str, body_text: str = None) -> Tuple[bool, str]:
         """Enviar email con HTML y texto alternativo opcional"""
         if not self.is_configured():
-            return False, "Servicio de email no configurado"
+            return False, "Email service not configured"
+
+        # Validate recipient email
+        import re
+        if not re.match(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$', to_email):
+            return False, "Invalid recipient email format"
 
         try:
             # Crear mensaje
@@ -69,10 +160,29 @@ class EmailManager:
                 server.login(self.email_address, self.email_password)
                 server.sendmail(self.email_address, to_email, message.as_string())
 
-            return True, "Email enviado exitosamente"
+            # Log success without exposing email addresses
+            recipient_masked = f"{to_email[:3]}***@{to_email.split('@')[1]}"
+            print(f"✅ Email sent successfully to {recipient_masked}")
 
+            return True, "Email sent successfully"
+
+        except smtplib.SMTPAuthenticationError:
+            error_msg = "SMTP authentication failed - check email credentials"
+            print(f"❌ {error_msg}")
+            return False, error_msg
+        except smtplib.SMTPRecipientsRefused:
+            error_msg = "Recipient email address rejected"
+            print(f"❌ {error_msg}")
+            return False, error_msg
+        except smtplib.SMTPException as e:
+            error_msg = f"SMTP error: {type(e).__name__}"
+            print(f"❌ {error_msg}")
+            return False, error_msg
         except Exception as e:
-            return False, f"Error al enviar email: {str(e)}"
+            error_msg = f"Email sending failed: {type(e).__name__}"
+            print(f"❌ {error_msg}")
+            # Don't expose the full error message to avoid information leakage
+            return False, "Email sending failed due to system error"
 
     def send_verification_email(self, to_email: str, verification_code: str, user_name: str) -> Tuple[bool, str]:
         """Enviar código de verificación por email"""
