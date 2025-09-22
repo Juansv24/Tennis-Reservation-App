@@ -792,6 +792,15 @@ def handle_time_slot_click(hour, date, current_user):
             st.error("Máximo 2 horas por selección")
             return
 
+        # Verificar créditos antes de seleccionar
+        credits_needed = len(selected_hours) + 1  # +1 porque vamos a agregar esta hora
+        user_credits = db_manager.get_user_credits(current_user['email'])
+
+        if user_credits < credits_needed:
+            st.error(f"❌ Créditos insuficientes. Necesitas {credits_needed} créditos, tienes {user_credits}.")
+            st.info("💡 Contacta al administrador para recargar créditos.")
+            return
+
         # Verificar que sea consecutiva si ya hay una hora seleccionada
         if selected_hours:
             existing_hour = selected_hours[0]

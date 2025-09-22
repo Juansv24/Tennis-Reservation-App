@@ -54,15 +54,18 @@ class SupabaseManager:
         self.set_session_context(None)
         self._current_session_token = None
 
-
-    def get_user_credits(self, email: str) -> int:
-        """Obtener créditos disponibles del usuario"""
+    def get_user_credits(self, user_email: str) -> int:
+        """Obtener créditos actuales del usuario"""
         try:
-            result = self.client.table('users').select('credits').eq('email', email.strip().lower()).execute()
+            result = self.client.table('users').select('credits').eq(
+                'email', user_email.strip().lower()
+            ).execute()
+
             if result.data:
                 return result.data[0]['credits'] or 0
             return 0
-        except Exception:
+        except Exception as e:
+            print(f"Error getting user credits: {e}")
             return 0
 
     def has_sufficient_credits(self, email: str, required_credits: int) -> bool:
