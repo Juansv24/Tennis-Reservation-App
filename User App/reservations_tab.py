@@ -196,10 +196,6 @@ def show_reservation_tab():
     # Initialize reservation workflow state
     if "reservation_confirmed" not in st.session_state:
         st.session_state.reservation_confirmed = False
-    if "show_feedback_form" not in st.session_state:
-        st.session_state.show_feedback_form = False
-    if "feedback_submitted" not in st.session_state:
-        st.session_state.feedback_submitted = False
 
     # Obtener información del usuario actual
     current_user = get_current_user()
@@ -360,23 +356,6 @@ def show_mobile_layout(today, tomorrow, today_reservations, tomorrow_reservation
         )
         st.markdown('</div>', unsafe_allow_html=True)
 
-        # Show feedback form if reservation was confirmed
-        if st.session_state.get("show_feedback_form", False):
-            st.markdown("### ¿Cómo fue tu experiencia de reserva?")
-            feedback = st.text_area("Comentarios opcionales:", height=100, placeholder="Comparte tu experiencia...")
-
-            col1, col2 = st.columns(2)
-            with col1:
-                st.button("Enviar Feedback",
-                          on_click=submit_feedback_callback,
-                          args=[feedback],
-                          type="primary",
-                          key="mobile_feedback_submit")
-            with col2:
-                st.button("Omitir",
-                          on_click=skip_feedback_callback,
-                          type="secondary",
-                          key="mobile_feedback_skip")
     else:
         st.info("Selecciona los horarios disponibles en el calendario para continuar")
 
@@ -451,22 +430,6 @@ def show_reservation_details(today_date, tomorrow_date, current_user, user_today
         )
         st.markdown('</div>', unsafe_allow_html=True)
 
-        # Show feedback form if reservation was confirmed
-        if st.session_state.get("show_feedback_form", False):
-            st.markdown("### ¿Cómo fue tu experiencia de reserva?")
-            feedback = st.text_area("Comentarios opcionales:", height=100, placeholder="Comparte tu experiencia...")
-
-            col1, col2 = st.columns(2)
-            with col1:
-                st.button("Enviar Feedback",
-                          on_click=submit_feedback_callback,
-                          args=[feedback],
-                          type="primary")
-            with col2:
-                st.button("Omitir",
-                          on_click=skip_feedback_callback,
-                          type="secondary")
-
     else:
         st.info("Selecciona los horarios disponibles en el calendario para continuar")
 
@@ -496,22 +459,7 @@ def confirm_reservation_callback(current_user, selected_date, selected_hours):
     success = handle_reservation_submission(current_user, selected_date, selected_hours)
     if success:
         st.session_state.reservation_confirmed = True
-        st.session_state.show_feedback_form = True
 
-def submit_feedback_callback(feedback_text):
-    """Callback for feedback submission"""
-    # You can save feedback to database here if needed
-    # db_manager.save_feedback(feedback_text, current_user['email'])
-
-    st.session_state.feedback_submitted = True
-    st.session_state.show_feedback_form = False
-    st.session_state.reservation_confirmed = False
-    st.success("¡Gracias por tu feedback!")
-
-def skip_feedback_callback():
-    """Callback for skipping feedback"""
-    st.session_state.show_feedback_form = False
-    st.session_state.reservation_confirmed = False
 
 def handle_reservation_submission(current_user, date, selected_hours):
     """Manejar el envío de la reserva con validación en tiempo real"""
