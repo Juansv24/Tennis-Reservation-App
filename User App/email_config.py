@@ -201,7 +201,48 @@ class EmailManager:
                         <p><strong>Hora:</strong> {start_time} - {end_time}</p>
                         <p><strong>Duración:</strong> {len(hours)} hora(s)</p>
                         <p><strong>Ubicación:</strong> Cancha de Tenis Colina Campestre</p>
-                        <p><strong>🔒 Contraseña del Candado:</strong> {lock_code}</p>
+                        <div style="
+    background: linear-gradient(135deg, #FFD400 0%, #FFC107 100%);
+    border: 3px solid #FF6F00;
+    border-radius: 15px;
+    padding: 25px;
+    margin: 25px 0;
+    text-align: center;
+    box-shadow: 0 8px 16px rgba(255, 111, 0, 0.3);
+">
+    <h2 style="
+        margin: 0 0 15px 0; 
+        color: #B71C1C; 
+        font-size: 1.5rem;
+        text-shadow: 1px 1px 2px rgba(0,0,0,0.3);
+    ">
+        🔒 CÓDIGO DEL CANDADO
+    </h2>
+    <div style="
+        font-size: 3.5rem;
+        font-weight: bold;
+        color: #B71C1C;
+        margin: 20px 0;
+        font-family: 'Courier New', monospace;
+        background: white;
+        border-radius: 12px;
+        padding: 20px;
+        box-shadow: inset 0 4px 8px rgba(0,0,0,0.2);
+        border: 2px solid #D32F2F;
+        letter-spacing: 8px;
+    ">
+        {lock_code}
+    </div>
+    <p style="
+        margin: 0; 
+        color: #B71C1C; 
+        font-weight: bold;
+        font-size: 1.1rem;
+    ">
+        ¡Anota este código para abrir el candado!
+    </p>
+</div>
+                        
                     </div>
 
                     <p style="text-align: center;">
@@ -244,7 +285,7 @@ class EmailManager:
         - Hora: {start_time} - {end_time}
         - Duración: {len(hours)} hora(s)
         - Ubicación: Cancha de Tenis Colina Campestre
-        - 🔒 Contraseña del Candado: {lock_code}
+        - 🔒🔒🔒 CÓDIGO DEL CANDADO: {lock_code} 🔒🔒🔒
 
         Agregar a Google Calendar: {calendar_link}
 
