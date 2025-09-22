@@ -2,6 +2,7 @@
 Configuración y Utilidades de Email para Sistema de Reservas de Cancha de Tenis
 """
 
+import pytz
 import smtplib
 import ssl
 import secrets
@@ -256,8 +257,9 @@ class EmailManager:
         end_time = f"{(sorted_hours[-1] + 1):02d}:00"
 
         # Crear datos del evento de calendario
-        event_start = date.replace(hour=sorted_hours[0], minute=0, second=0)
-        event_end = date.replace(hour=sorted_hours[-1] + 1, minute=0, second=0)
+        colombia_tz = pytz.timezone('America/Bogota')
+        event_start = colombia_tz.localize(date.replace(hour=sorted_hours[0], minute=0, second=0))
+        event_end = colombia_tz.localize(date.replace(hour=sorted_hours[-1] + 1, minute=0, second=0))
 
         # Formatear fechas para calendario (formato UTC)
         cal_start = event_start.strftime('%Y%m%dT%H%M%S')

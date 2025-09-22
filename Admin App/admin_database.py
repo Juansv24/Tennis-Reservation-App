@@ -3,7 +3,7 @@ Gestor de Base de Datos para Funciones de Administración
 """
 
 from database_manager import db_manager
-from timezone_utils import get_colombia_today
+from timezone_utils import get_colombia_today, get_colombia_now
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional
 
@@ -26,7 +26,7 @@ class AdminDatabaseManager:
             }
 
             import datetime
-            now = datetime.datetime.utcnow().isoformat()
+            now = get_colombia_now().replace(tzinfo=None).isoformat()
 
             # 1. Limpiar sesiones expiradas
             expired_sessions = self.client.table('user_sessions').delete().lt('expires_at', now).execute()
@@ -459,7 +459,7 @@ class AdminDatabaseManager:
                     'transaction_type': 'admin_grant',
                     'description': reason.strip(),
                     'admin_user': admin_username,
-                    'created_at': datetime.now().isoformat()
+                    'created_at': get_colombia_now().replace(tzinfo=None).isoformat()
                 }).execute()
 
                 if not transaction_result.data:
@@ -519,7 +519,7 @@ class AdminDatabaseManager:
                     'transaction_type': 'admin_deduct',
                     'description': reason,
                     'admin_user': admin_username,
-                    'created_at': datetime.now().isoformat()
+                    'created_at': get_colombia_now().replace(tzinfo=None).isoformat()
                 }).execute()
 
                 return True

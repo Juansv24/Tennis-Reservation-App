@@ -113,7 +113,7 @@ class SupabaseManager:
                 'hour': hour,
                 'name': name.strip(),
                 'email': email.strip().lower(),
-                'created_at': get_colombia_now().isoformat()
+                'created_at': get_colombia_now().replace(tzinfo=None).isoformat()
             }).execute()
             return len(result.data) > 0
         except Exception as e:
