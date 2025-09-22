@@ -202,46 +202,33 @@ class EmailManager:
                         <p><strong>Ubicación:</strong> Cancha de Tenis Colina Campestre</p>
                     </div>
 
+                    <!-- CLAVE DEL CANDADO - ESTILO MINIMALISTA -->
                     <div style="
-                        background: linear-gradient(135deg, #FFD400 0%, #FFC107 100%);
-                        border: 3px solid #FF6F00;
-                        border-radius: 15px;
+                        background: linear-gradient(135deg, #001854 0%, #2478CC 100%);
+                        border-radius: 12px;
                         padding: 25px;
                         margin: 25px 0;
                         text-align: center;
-                        box-shadow: 0 8px 16px rgba(255, 111, 0, 0.3);
+                        color: white;
                     ">
-                        <h2 style="
-                            margin: 0 0 15px 0; 
-                            color: #B71C1C; 
-                            font-size: 1.5rem;
-                            text-shadow: 1px 1px 2px rgba(0,0,0,0.3);
-                        ">
-                            🔒 CÓDIGO DEL CANDADO
-                        </h2>
                         <div style="
+                            font-size: 1rem;
+                            font-weight: normal;
+                            margin-bottom: 15px;
+                            font-family: Arial, sans-serif;
+                        ">
+                            Clave del candado:
+                        </div>
+                        <h1 style="
                             font-size: 3.5rem;
                             font-weight: bold;
-                            color: #B71C1C;
-                            margin: 20px 0;
-                            font-family: 'Courier New', monospace;
-                            background: white;
-                            border-radius: 12px;
-                            padding: 20px;
-                            box-shadow: inset 0 4px 8px rgba(0,0,0,0.2);
-                            border: 2px solid #D32F2F;
+                            font-family: Arial, sans-serif;
                             letter-spacing: 8px;
+                            margin: 0;
+                            color: white;
                         ">
                             {lock_code}
-                        </div>
-                        <p style="
-                            margin: 0; 
-                            color: #B71C1C; 
-                            font-weight: bold;
-                            font-size: 1.1rem;
-                        ">
-                            ¡Anota este código para abrir el candado!
-                        </p>
+                        </h1>
                     </div>
 
                     <p style="text-align: center;">
@@ -277,7 +264,7 @@ class EmailManager:
         - Duración: {len(hours)} hora(s)
         - Ubicación: Cancha de Tenis Colina Campestre
 
-        🔒🔒🔒 CÓDIGO DEL CANDADO: {lock_code} 🔒🔒🔒
+        CLAVE DEL CANDADO: {lock_code}
 
         Agregar a Google Calendar: {calendar_link}
 
@@ -285,7 +272,7 @@ class EmailManager:
         """
 
         return self.send_email(to_email, subject, html_body, text_body)
-
+    
     def send_password_reset_email(self, to_email: str, reset_token: str, user_name: str) -> Tuple[bool, str]:
         """Enviar email de recuperación de contraseña"""
         subject = "🔒 Recuperación de Contraseña - Sistema de Reservas"
