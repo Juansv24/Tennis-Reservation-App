@@ -298,7 +298,7 @@ def show_mobile_layout(today, tomorrow, today_reservations, tomorrow_reservation
     <div class="user-info-display">
         <strong>👤 Reservando como:</strong><br>
         {current_user['full_name']}<br>
-        <small>{current_user['email']}</small>
+        <small>{current_user['email']}</small> <br>
         <strong> 🪙 Créditos disponibles: {user_credits}</strong>
     </div>
     """, unsafe_allow_html=True)
