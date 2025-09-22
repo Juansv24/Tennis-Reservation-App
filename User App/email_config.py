@@ -272,7 +272,7 @@ class EmailManager:
         """
 
         return self.send_email(to_email, subject, html_body, text_body)
-    
+
     def send_password_reset_email(self, to_email: str, reset_token: str, user_name: str) -> Tuple[bool, str]:
         """Enviar email de recuperación de contraseña"""
         subject = "🔒 Recuperación de Contraseña - Sistema de Reservas"

@@ -23,11 +23,14 @@ class EmailManager:
         self.smtp_server = SMTP_SERVER
         self.smtp_port = SMTP_PORT
 
+        # Replace lines 25-28:
         try:
             self.email_address = st.secrets["email"]["address"]
             self.email_password = st.secrets["email"]["password"]
+            self._configured = True
         except KeyError:
-            st.warning("⚠️ Credenciales de email no configuradas...")
+            self._configured = False
+            st.warning("⚠️ Email service not configured")
 
     def generate_verification_code(self) -> str:
         """Generar código de verificación de 6 caracteres"""

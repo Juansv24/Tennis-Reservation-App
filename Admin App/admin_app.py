@@ -1022,6 +1022,16 @@ def main():
     setup_admin_page_config()
     apply_admin_styles()
 
+    # Validate admin security configuration first
+    if not admin_auth_manager.validate_admin_config():
+        st.error("🚨 Admin security configuration failed")
+        st.stop()
+
+    # Ensure admin user exists with secure credentials
+    if not admin_auth_manager.ensure_admin_user_exists():
+        st.error("🚨 Failed to initialize admin user")
+        st.stop()
+
     # Verificar autenticación
     if not require_admin_auth():
         show_admin_login()
