@@ -413,6 +413,36 @@ def show_reservation_tab():
         show_mobile_layout(today, tomorrow, today_reservations, tomorrow_reservations, current_hour, current_user,
                            user_today_reservations, user_tomorrow_reservations)
 
+
+def show_reservation_success_message():
+    """Mostrar mensaje de éxito de reserva con datos específicos"""
+    if not st.session_state.get('last_reservation_data'):
+        return
+
+    data = st.session_state.last_reservation_data
+    remaining_credits = db_manager.get_user_credits(st.session_state.user_info['email'])
+
+    sorted_hours = sorted(data['hours'])
+    start_time = format_hour(min(sorted_hours))
+    end_time = format_hour(max(sorted_hours) + 1)
+
+    st.markdown(f"""
+    <div class="success-message">
+        <h3>✅ ¡Reserva Confirmada!</h3>
+        <p><strong>Nombre:</strong> {data['name']}</p>
+        <p><strong>Fecha:</strong> {format_date_full(data['date'])}</p>
+        <p><strong>Hora:</strong> {start_time} - {end_time}</p>
+        <p><strong>Duración:</strong> {len(sorted_hours)} hora(s)</p>
+        <p><strong>💰 Créditos usados:</strong> {data['credits_used']}</p>
+        <p><strong>💳 Créditos restantes:</strong> {remaining_credits}</p>
+        <p>📧 <em>Email de confirmación enviado</em></p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Limpiar los datos después de mostrar
+    if 'last_reservation_data' in st.session_state:
+        del st.session_state['last_reservation_data']
+        
 def show_mobile_layout(today, tomorrow, today_reservations, tomorrow_reservations, current_hour, current_user,
                        user_today_reservations, user_tomorrow_reservations):
     """Mostrar layout móvil optimizado"""
@@ -437,8 +467,10 @@ def show_mobile_layout(today, tomorrow, today_reservations, tomorrow_reservation
 
     # PARTE 2: Cómo Reservar (DESPUÉS DE RESERVAS ACTUALES)
     st.markdown("### Cómo Reservar")
-    st.write("1. **Selecciona los horarios disponibles** que desees entre hoy y mañana (hasta 2 horas)")
-    st.write("2. **Confirma tu reserva** con un click")
+    st.write("1. Revisa que estés en **los horarios de reserva** y que tengas **créditos disponibles!**")
+    st.write("2. **Selecciona los horarios disponibles** que desees entre hoy y mañana (hasta 2 horas por día)")
+    st.write("3. **Confirma tu reserva** con un click")
+    st.write("4. Te llegará una **confirmación a tu correo registrado**")
 
     # Mostrar reglas de reserva
     with st.expander("📋 Reglas de Reserva"):
@@ -459,7 +491,12 @@ def show_mobile_layout(today, tomorrow, today_reservations, tomorrow_reservation
     # PARTE 3: Vista de calendario (MEDIO)
     show_calendar_view(today, tomorrow, today_reservations, tomorrow_reservations, current_hour, current_user)
 
-    # PARTE 4: SOLO Confirmación de reserva (ABAJO DEL CALENDARIO)
+    # Mostrar mensaje de éxito debajo del calendario
+    if st.session_state.get('reservation_confirmed', False):
+        show_reservation_success_message()
+        st.session_state.reservation_confirmed = False
+
+        # PARTE 4: SOLO Confirmación de reserva (ABAJO DEL CALENDARIO)
     selected_hours = st.session_state.get('selected_hours', [])
     selected_date = st.session_state.get('selected_date', None)
 
@@ -576,8 +613,10 @@ def show_reservation_details(today_date, tomorrow_date, current_user, user_today
         st.info("Selecciona los horarios disponibles en el calendario para continuar")
 
         st.markdown("### Cómo Reservar")
-        st.write("1. **Selecciona los horarios disponibles** que desees entre hoy y mañana (hasta 2 horas)")
-        st.write("2. **Confirma tu reserva** con un click")
+        st.write("1. Revisa que estés en **los horarios de reserva** y que tengas **créditos disponibles!**")
+        st.write("2. **Selecciona los horarios disponibles** que desees entre hoy y mañana (hasta 2 horas por día)")
+        st.write("3. **Confirma tu reserva** con un click")
+        st.write("4. Te llegará una **confirmación a tu correo registrado**")
 
 def show_user_existing_reservations(today_date, tomorrow_date, user_today_reservations, user_tomorrow_reservations):
     """Mostrar reservas existentes del usuario"""
@@ -633,13 +672,14 @@ def handle_reservation_submission(current_user, date, selected_hours):
 
     # Handle results
     if len(successful_reservations) == len(selected_hours):
-        # Complete success
-        show_success_message_with_credits(
-            current_user['full_name'],
-            date,
-            successful_reservations,
-            len(successful_reservations)
-        )
+        # Complete success - NO mostrar mensaje aquí, solo marcar el flag
+        st.session_state.reservation_confirmed = True
+        st.session_state.last_reservation_data = {
+            'name': current_user['full_name'],
+            'date': date,
+            'hours': successful_reservations,
+            'credits_used': len(successful_reservations)
+        }
 
         # Clear selection and refresh cache
         st.session_state.selected_hours = []
