@@ -825,5 +825,35 @@ class AdminDatabaseManager:
             print(f"Error updating lock code: {e}")
             return False
 
+    def get_vip_users(self) -> List[Dict]:
+        """Obtener lista de usuarios VIP"""
+        try:
+            result = self.client.table('vip_users').select('*').order('created_at', desc=True).execute()
+            return result.data
+        except Exception as e:
+            print(f"Error obteniendo usuarios VIP: {e}")
+            return []
+
+    def add_vip_user(self, email: str, admin_username: str) -> bool:
+        """Agregar usuario VIP"""
+        try:
+            result = self.client.table('vip_users').insert({
+                'email': email.strip().lower(),
+                'created_by': admin_username
+            }).execute()
+            return len(result.data) > 0
+        except Exception as e:
+            print(f"Error agregando usuario VIP: {e}")
+            return False
+
+    def remove_vip_user(self, email: str) -> bool:
+        """Remover usuario VIP"""
+        try:
+            result = self.client.table('vip_users').delete().eq('email', email.strip().lower()).execute()
+            return len(result.data) > 0
+        except Exception as e:
+            print(f"Error removiendo usuario VIP: {e}")
+            return False
+
 # Instancia global
 admin_db_manager = AdminDatabaseManager()

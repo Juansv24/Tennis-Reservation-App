@@ -189,6 +189,120 @@ def show_user_controls_bar():
         if st.button("🚪 Cerrar Sesión", type="secondary", use_container_width=True, key="user_logout_btn"):
             logout_user()
 
+def show_read_only_schedule_view(current_user):
+    """Mostrar vista de solo lectura cuando no se pueden hacer reservas"""
+
+    today, tomorrow = get_today_tomorrow()
+
+    # Mostrar barra de controles (solo actualizar y logout)
+    show_user_controls_bar()
+
+    st.divider()
+
+    # Mostrar información del usuario
+    st.subheader("📋 Información de tu Cuenta")
+
+    st.markdown(f"""
+    <div class="user-info-display">
+        <strong>👤 Usuario:</strong> {current_user['full_name']}<br>
+        <small>{current_user['email']}</small><br>
+        <strong>⭐ Tipo:</strong> {'Usuario VIP' if db_manager.is_vip_user(current_user['email']) else 'Usuario Regular'}
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Mostrar reservas existentes del usuario (solo lectura)
+    user_today_reservations = db_manager.get_user_reservations_for_date(current_user['email'], today)
+    user_tomorrow_reservations = db_manager.get_user_reservations_for_date(current_user['email'], tomorrow)
+
+    st.subheader("📅 Tus Reservas Actuales")
+
+    if user_today_reservations or user_tomorrow_reservations:
+        if user_today_reservations:
+            st.write(f"**Hoy ({format_date_short(today)}):** {len(user_today_reservations)} hora(s)")
+            for hour in sorted(user_today_reservations):
+                st.write(f"  • {format_hour(hour)} - {format_hour(hour + 1)}")
+
+        if user_tomorrow_reservations:
+            st.write(f"**Mañana ({format_date_short(tomorrow)}):** {len(user_tomorrow_reservations)} hora(s)")
+            for hour in sorted(user_tomorrow_reservations):
+                st.write(f"  • {format_hour(hour)} - {format_hour(hour + 1)}")
+    else:
+        st.info("No tienes reservas programadas")
+
+    # Mostrar calendario en modo de solo lectura
+    st.subheader("👁️ Vista de Disponibilidad (Solo Lectura)")
+
+    # Obtener datos de reservas para mostrar
+    today_reservations = db_manager.get_reservations_with_names_for_date(today)
+    tomorrow_reservations = db_manager.get_reservations_with_names_for_date(tomorrow)
+
+    today_col, tomorrow_col = st.columns(2)
+
+    with today_col:
+        st.markdown(f"""
+        <div class="calendar-header">
+            {format_date_short(today)}<br>
+            <small>HOY</small>
+        </div>
+        """, unsafe_allow_html=True)
+
+        show_read_only_day_schedule(today, today_reservations, current_user)
+
+    with tomorrow_col:
+        st.markdown(f"""
+        <div class="calendar-header">
+            {format_date_short(tomorrow)}<br>
+            <small>MAÑANA</small>
+        </div>
+        """, unsafe_allow_html=True)
+
+        show_read_only_day_schedule(tomorrow, tomorrow_reservations, current_user)
+
+def show_read_only_day_schedule(date, reservations_dict, current_user):
+    """Mostrar horarios en modo de solo lectura"""
+    user_reservations = db_manager.get_user_reservations_for_date(current_user['email'], date)
+
+    for hour in COURT_HOURS:
+        is_reserved = hour in reservations_dict
+        is_my_reservation = hour in user_reservations
+
+        if is_my_reservation:
+            # Mis reservas
+            st.markdown(f"""
+            <div class="time-slot-my-reservation">
+                {format_hour(hour)}<br>Tu Reserva
+            </div>
+            """, unsafe_allow_html=True)
+        elif is_reserved:
+            # Reserva de otro usuario
+            reserved_name = reservations_dict[hour]
+            if len(reserved_name) > 12:
+                displayed_name = reserved_name[:9] + "..."
+            else:
+                displayed_name = reserved_name
+
+            st.markdown(f"""
+            <div class="time-slot-reserved">
+                {format_hour(hour)}<br>{displayed_name}
+            </div>
+            """, unsafe_allow_html=True)
+        else:
+            # Disponible (pero no seleccionable)
+            st.markdown(f"""
+            <div style="
+                background-color: #f8f9fa;
+                border: 2px solid #dee2e6;
+                color: #6c757d;
+                padding: 10px;
+                border-radius: 6px;
+                text-align: center;
+                margin: 5px 0;
+                opacity: 0.7;
+            ">
+                {format_hour(hour)}<br>Disponible
+            </div>
+            """, unsafe_allow_html=True)
+
 def show_reservation_tab():
     """Mostrar la pestaña de reservas con caché optimizado"""
     apply_custom_css()
@@ -202,6 +316,22 @@ def show_reservation_tab():
 
     if not current_user:
         st.error("Error de autenticación. Por favor actualiza la página.")
+        return
+
+    # Verificar si puede hacer reservas en este momento
+    can_reserve_now, reservation_time_error = db_manager.can_user_make_reservation_now(current_user['email'])
+
+    if not can_reserve_now:
+        # Mostrar mensaje de horario restringido
+        is_vip = db_manager.is_vip_user(current_user['email'])
+        horario_permitido = "8:00 AM a 8:00 PM" if is_vip else "8:00 AM a 5:00 PM"
+        tipo_usuario = "VIP " if is_vip else ""
+
+        st.error(f"🕐 {reservation_time_error}")
+        st.info(f"💡 Como usuario {tipo_usuario}puedes hacer reservas de {horario_permitido}")
+
+        # Mostrar información pero deshabilitar funcionalidad
+        show_read_only_schedule_view(current_user)
         return
 
 
@@ -283,7 +413,6 @@ def show_reservation_tab():
         show_mobile_layout(today, tomorrow, today_reservations, tomorrow_reservations, current_hour, current_user,
                            user_today_reservations, user_tomorrow_reservations)
 
-
 def show_mobile_layout(today, tomorrow, today_reservations, tomorrow_reservations, current_hour, current_user,
                        user_today_reservations, user_tomorrow_reservations):
     """Mostrar layout móvil optimizado"""
@@ -313,15 +442,19 @@ def show_mobile_layout(today, tomorrow, today_reservations, tomorrow_reservation
 
     # Mostrar reglas de reserva
     with st.expander("📋 Reglas de Reserva"):
-        st.markdown("""
+        is_vip = db_manager.is_vip_user(current_user['email'])
+        horario_reservas = "8:00 AM - 8:00 PM" if is_vip else "8:00 AM - 5:00 PM"
+        tipo_usuario = " (Usuario VIP)" if is_vip else ""
+
+        st.markdown(f"""
         • **Solo se puede hacer reservar para hoy y para mañana**<br>
         • **Máximo 2 horas** por persona por día<br>
         • **Horas consecutivas** requeridas si se reservan 2 horas<br>
         • No se permite reservar la cancha en **los mismos horarios dos días consecutivos**<br>
-        • **Horario de cancha:** 6:00 AM - 9:00 PM
+        • **Horario para hacer reservas:** {horario_reservas}<br>
+        • **Horario de cancha:** 6:00 AM - 9:00 PM<br>
+        • ⏰ **Importante:** Solo puedes hacer reservas dentro del horario permitido
         """, unsafe_allow_html=True)
-
-    st.divider()
 
     # PARTE 3: Vista de calendario (MEDIO)
     show_calendar_view(today, tomorrow, today_reservations, tomorrow_reservations, current_hour, current_user)
@@ -391,12 +524,18 @@ def show_reservation_details(today_date, tomorrow_date, current_user, user_today
 
     # Mostrar reglas de reserva
     with st.expander("📋 Reglas de Reserva"):
-        st.markdown("""
+        is_vip = db_manager.is_vip_user(current_user['email'])
+        horario_reservas = "8:00 AM - 8:00 PM" if is_vip else "8:00 AM - 5:00 PM"
+        tipo_usuario = " (Usuario VIP)" if is_vip else ""
+
+        st.markdown(f"""
         • **Solo se puede hacer reservar para hoy y para mañana**<br>
         • **Máximo 2 horas** por persona por día<br>
         • **Horas consecutivas** requeridas si se reservan 2 horas<br>
         • No se permite reservar la cancha en **los mismos horarios dos días consecutivos**<br>
-        • **Horario de cancha:** 6:00 AM - 9:00 PM
+        • **Horario para hacer reservas:** {horario_reservas}<br>
+        • **Horario de cancha:** 6:00 AM - 9:00 PM<br>
+        • ⏰ **Importante:** Solo puedes hacer reservas dentro del horario permitido
         """, unsafe_allow_html=True)
 
     # Mostrar selección actual
@@ -670,6 +809,8 @@ def show_day_schedule(date, reservations_dict, current_user, is_today=False, cur
         is_my_reservation = hour in user_reservations
         is_selected = hour in selected_hours and selected_date == date
         is_past_hour = is_today and current_hour is not None and hour < current_hour
+
+        # Un slot es seleccionable si no está reservado y no es pasado
         is_selectable = not is_reserved and not is_past_hour
 
         # Determinar el estado del botón
@@ -677,17 +818,15 @@ def show_day_schedule(date, reservations_dict, current_user, is_today=False, cur
             # Es una reserva del usuario actual
             button_text = f"{format_hour(hour)}\nTu Reserva"
             disabled = True
-            # Usar HTML personalizado para las propias reservas del usuario
             st.markdown(f"""
-            <div class="time-slot-my-reservation">
-                {button_text}
-            </div>
-            """, unsafe_allow_html=True)
+                <div class="time-slot-my-reservation">
+                    {button_text}
+                </div>
+                """, unsafe_allow_html=True)
             continue
         elif is_reserved:
             # Obtener el nombre del usuario que reservó
             reserved_name = reservations_dict[hour]
-            # Truncar el nombre si es muy largo
             if len(reserved_name) > 12:
                 displayed_name = reserved_name[:9] + "..."
             else:
@@ -742,6 +881,7 @@ def show_day_schedule(date, reservations_dict, current_user, is_today=False, cur
 
 def handle_time_slot_click(hour, date, current_user):
     """Manejar clic en un slot de tiempo usando datos cacheados"""
+
     selected_hours = st.session_state.get('selected_hours', [])
     selected_date = st.session_state.get('selected_date', None)
 

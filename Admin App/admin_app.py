@@ -1017,6 +1017,63 @@ def show_config_tab():
             - Puedes ver el historial en la base de datos si es necesario
             """)
 
+    st.markdown("---")
+
+    # NUEVA SECCIÓN: Gestión de Usuarios VIP
+    st.markdown("""
+        <div style="
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+            border: 2px solid #dee2e6;
+            border-radius: 15px;
+            padding: 20px;
+            margin: 20px 0;
+            text-align: center;
+        ">
+            <h3 style="margin: 0; color: #495057;">⭐ Gestión de usuarios que pertenecen al comité</h3>
+            <p style="margin: 10px 0 0 0; color: #6c757d;">Los usuarios del comité pueden reservar de 8:00 AM a 8:00 PM</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+    # Mostrar usuarios VIP actuales
+    vip_users = admin_db_manager.get_vip_users()
+
+    if vip_users:
+        st.subheader("🏛️ Usuarios que pertenecen al comité")
+        for user in vip_users:
+            col1, col2 = st.columns([3, 1])
+            with col1:
+                st.write(f"📧 {user['email']}")
+            with col2:
+                if st.button("❌ Remover", key=f"remove_vip_{user['id']}"):
+                    if admin_db_manager.remove_vip_user(user['email']):
+                        st.success(f"Usuario removido del Comité: {user['email']}")
+                        st.rerun()
+                    else:
+                        st.error("Error removiendo usuario VIP")
+
+    # Formulario para agregar nuevo usuario al comité
+    with st.form("add_vip_user_form", clear_on_submit=True):
+        st.markdown("**Agregar nuevo usuario al comité:**")
+        new_vip_email = st.text_input(
+            "Email del usuario",
+            placeholder="usuario@ejemplo.com",
+            help="El usuario debe estar registrado en el sistema"
+        )
+
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col2:
+            if st.form_submit_button("⭐ Agregar al comité", type="primary", use_container_width=True):
+                if new_vip_email:
+                    admin_user = st.session_state.get('admin_user', {})
+                    if admin_db_manager.add_vip_user(new_vip_email, admin_user.get('username', 'admin')):
+                        st.success(f"✅ Usuario agregado al comité: {new_vip_email}")
+                        st.rerun()
+                    else:
+                        st.error("❌ Error agregando usuario (puede que ya sea parte del comité o no exista)")
+                else:
+                    st.error("Por favor ingresa un email válido")
+
+
 def main():
     """Función principal de la aplicación de administración"""
     setup_admin_page_config()

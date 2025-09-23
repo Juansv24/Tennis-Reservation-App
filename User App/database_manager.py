@@ -54,6 +54,59 @@ class SupabaseManager:
         self.set_session_context(None)
         self._current_session_token = None
 
+    def is_vip_user(self, email: str) -> bool:
+        """Verificar si un usuario es VIP (tiene horario extendido)"""
+        try:
+            result = self.client.table('vip_users').select('id').eq(
+                'email', email.strip().lower()
+            ).execute()
+            return len(result.data) > 0
+        except Exception as e:
+            print(f"Error verificando usuario VIP: {e}")
+            return False
+
+    def can_user_make_reservation_now(self, email: str) -> Tuple[bool, str]:
+        """
+        Verificar si un usuario puede hacer reservas en el momento actual
+        basado en la hora actual y su tipo de usuario
+        Returns: (puede_reservar, mensaje_error)
+        """
+        try:
+            from timezone_utils import get_colombia_now
+
+            # Obtener hora actual en Colombia
+            current_hour = get_colombia_now().hour
+
+            # Verificar si es usuario VIP
+            is_vip = self.is_vip_user(email)
+
+            if is_vip:
+                # Usuarios VIP: pueden reservar de 8 AM - 8 PM (20:00)
+                if 8 <= current_hour <= 20:
+                    return True, ""
+                else:
+                    if current_hour < 8:
+                        return False, "Las reservas VIP están disponibles a partir de las 8:00 AM"
+                    else:
+                        return False, "Las reservas VIP están disponibles hasta las 8:00 PM"
+            else:
+                # Usuarios regulares: pueden reservar de 8 AM - 5 PM (17:00)
+                if 8 <= current_hour <= 17:
+                    return True, ""
+                else:
+                    if current_hour < 8:
+                        return False, "Las reservas están disponibles a partir de las 8:00 AM"
+                    else:
+                        return False, "Las reservas están disponibles hasta las 5:00 PM"
+
+        except Exception as e:
+            print(f"Error verificando horario de reserva: {e}")
+            # En caso de error, permitir como fallback para usuarios regulares
+            current_hour = get_colombia_now().hour
+            if 8 <= current_hour <= 17:
+                return True, ""
+            return False, "Error verificando horarios disponibles"
+
     def get_user_credits(self, user_email: str) -> int:
         """Obtener créditos actuales del usuario"""
         try:
