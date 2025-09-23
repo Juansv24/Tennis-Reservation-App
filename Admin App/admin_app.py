@@ -1019,7 +1019,159 @@ def show_config_tab():
 
     st.markdown("---")
 
-    # NUEVA SECCIÓN: Gestión de Usuarios VIP
+    # Código de Acceso para Primer Login
+    st.markdown("""
+        <div style="
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+            border: 2px solid #dee2e6;
+            border-radius: 15px;
+            padding: 20px;
+            margin: 20px 0;
+            text-align: center;
+        ">
+            <h3 style="margin: 0; color: #495057;">🔐 Código de Acceso Primer Login</h3>
+            <p style="margin: 10px 0 0 0; color: #6c757d;">Código requerido para usuarios en su primer acceso al sistema</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+    col1, col2, col3 = st.columns([1, 2, 1])
+
+    with col2:
+        # Mostrar código actual
+        current_access_code = admin_db_manager.get_current_access_code()
+
+        if current_access_code:
+            st.markdown(f"""
+                <div style="
+                    background: linear-gradient(135deg, #d1ecf1 0%, #bee5eb 100%);
+                    border: 2px solid #17a2b8;
+                    border-radius: 12px;
+                    padding: 20px;
+                    margin: 20px 0;
+                    text-align: center;
+                    box-shadow: 0 4px 8px rgba(23, 162, 184, 0.2);
+                ">
+                    <h4 style="margin: 0; color: #0c5460;">
+                        <i class="fas fa-key"></i> Código de Acceso Actual
+                    </h4>
+                    <div style="
+                        font-size: 2.5rem;
+                        font-weight: bold;
+                        color: #0c5460;
+                        margin: 15px 0;
+                        font-family: 'Courier New', monospace;
+                        background: white;
+                        border-radius: 8px;
+                        padding: 15px;
+                        box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);
+                    ">
+                        {current_access_code}
+                    </div>
+                    <small style="color: #0c5460; opacity: 0.8;">
+                        Proporciona este código a nuevos usuarios para su primer acceso
+                    </small>
+                </div>
+                """, unsafe_allow_html=True)
+        else:
+            st.markdown("""
+                <div style="
+                    background: linear-gradient(135deg, #f8d7da 0%, #f5c6cb 100%);
+                    border: 2px solid #dc3545;
+                    border-radius: 12px;
+                    padding: 20px;
+                    margin: 20px 0;
+                    text-align: center;
+                ">
+                    <h4 style="margin: 0; color: #721c24;">
+                        <i class="fas fa-exclamation-triangle"></i> Sin Código de Acceso
+                    </h4>
+                    <p style="margin: 10px 0 0 0; color: #721c24;">
+                        No hay código de acceso configurado
+                    </p>
+                </div>
+                """, unsafe_allow_html=True)
+
+        st.markdown("---")
+
+        # Formulario para actualizar código
+        with st.form("access_code_form", clear_on_submit=True):
+            st.markdown("**Actualizar código de acceso:**")
+
+            new_access_code = st.text_input(
+                "Nuevo código de acceso",
+                placeholder="Ingresa 6 caracteres (ej: ABC123)",
+                max_chars=6,
+                help="El código debe ser exactamente 6 caracteres (letras y números)",
+                label_visibility="collapsed"
+            )
+
+            # Validación en tiempo real
+            if new_access_code:
+                if len(new_access_code) == 6:
+                    st.success("✅ Formato válido")
+                else:
+                    if len(new_access_code) < 6:
+                        st.warning(f"⚠️ Faltan {6 - len(new_access_code)} caracter(es)")
+                    else:
+                        st.error("❌ Máximo 6 caracteres")
+
+            st.markdown("<br>", unsafe_allow_html=True)
+
+            col_btn1, col_btn2, col_btn3 = st.columns([1, 2, 1])
+            with col_btn2:
+                submit_button = st.form_submit_button(
+                    "🔄 Actualizar Código",
+                    type="primary",
+                    use_container_width=True
+                )
+
+            if submit_button:
+                if not new_access_code:
+                    st.error("❌ Por favor ingresa un código")
+                elif len(new_access_code) != 6:
+                    st.error("❌ El código debe tener exactamente 6 caracteres")
+                else:
+                    admin_user = st.session_state.get('admin_user', {})
+
+                    with st.spinner("🔄 Actualizando código..."):
+                        success = admin_db_manager.update_access_code(
+                            new_access_code.upper(),
+                            admin_user.get('username', 'admin')
+                        )
+
+                    if success:
+                        st.success("✅ Código de acceso actualizado exitosamente")
+                        st.balloons()
+                        st.cache_data.clear()
+                        st.rerun()
+                    else:
+                        st.error("❌ Error al actualizar el código. Intenta de nuevo.")
+
+        # Información adicional
+        with st.expander("ℹ️ Información sobre el código de acceso", expanded=False):
+            st.markdown("""
+                **¿Para qué sirve este código?**
+                - Se requiere únicamente en el primer login de cada usuario
+                - Después del primer acceso exitoso, ya no se pedirá más
+                - Ayuda a controlar el acceso inicial al sistema
+
+                **Recomendaciones:**
+                - Usa 6 caracteres fáciles de comunicar
+                - Combina letras y números para mayor seguridad
+                - Cambia el código periódicamente
+                - Comunica el código de manera segura a nuevos usuarios
+
+                **Proceso:**
+                1. Nuevo usuario se registra normalmente
+                2. En su primer login, se le pide este código
+                3. Una vez ingresado correctamente, nunca más se le pedirá
+                """)
+
+    st.markdown("---")
+
+
+
+    # Gestión de Usuarios del comité
     st.markdown("""
         <div style="
             background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);

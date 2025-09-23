@@ -96,7 +96,9 @@ def show_auth_interface():
         return True
 
     # Mostrar formulario según el modo
-    if st.session_state.auth_mode == 'forgot_password':
+    if st.session_state.auth_mode == 'first_login_access_code':
+        show_first_login_access_code_form()
+    elif st.session_state.auth_mode == 'forgot_password':
         show_forgot_password_form()
     elif st.session_state.auth_mode == 'login':
         st.markdown('<div class="auth-header">¡Bienvenido de Vuelta!</div>', unsafe_allow_html=True)
@@ -403,10 +405,18 @@ def handle_login(email: str, password: str, remember_me: bool = True):
     success, message, user_info = auth_manager.login_user(email, password, remember_me)
 
     if success:
+        # Verificar si requiere código de acceso
+        if message == "first_login_requires_access_code":
+            st.session_state.pending_first_login_user = user_info
+            st.session_state.auth_mode = 'first_login_access_code'
+            st.info("🔐 Primer acceso detectado. Se requiere código de acceso.")
+            st.rerun()
+            return
+
+        # Login normal exitoso
         st.session_state.authenticated = True
         st.session_state.user_info = user_info
 
-        # Guardar token de sesión para persistencia
         if user_info and user_info.get('session_token'):
             save_session_token(user_info['session_token'])
 
@@ -748,3 +758,81 @@ def handle_reset_password(reset_token: str, new_password: str, confirm_password:
         st.rerun()
     else:
         st.error("❌ " + message)
+
+def show_first_login_access_code_form():
+    """Mostrar formulario de código de acceso para primer login"""
+    st.markdown('<div class="auth-header">Primer Acceso - Código Requerido</div>', unsafe_allow_html=True)
+
+    user_info = st.session_state.get('pending_first_login_user')
+    if not user_info:
+        st.error("Error en sesión. Intenta iniciar sesión nuevamente.")
+        st.session_state.auth_mode = 'login'
+        st.rerun()
+        return
+
+    st.info(
+        f"¡Bienvenido **{user_info['full_name']}**! Para completar tu primer acceso, necesitas el código proporcionado por el administrador.")
+
+    with st.form("access_code_form"):
+        st.markdown("### Código de Acceso")
+
+        access_code = st.text_input(
+            "Código de Acceso",
+            placeholder="Ingresa el código de 6 caracteres",
+            max_chars=6,
+            key="access_code_input",
+            help="Solicita este código al administrador"
+        ).upper()
+
+        submit_button = st.form_submit_button(
+            "Completar Acceso",
+            type="primary",
+            use_container_width=True
+        )
+
+        if submit_button:
+            handle_first_login_access_code(access_code)
+
+    # Botón para volver al login
+    if st.button("← Volver al Inicio de Sesión", key="back_to_login_from_access"):
+        st.session_state.auth_mode = 'login'
+        if 'pending_first_login_user' in st.session_state:
+            del st.session_state['pending_first_login_user']
+        st.rerun()
+
+def handle_first_login_access_code(access_code: str):
+    """Manejar verificación de código de acceso"""
+    if not access_code:
+        st.error("Por favor ingresa el código de acceso")
+        return
+
+    if len(access_code) != 6:
+        st.error("El código debe tener exactamente 6 caracteres")
+        return
+
+    user_info = st.session_state.get('pending_first_login_user')
+    if not user_info:
+        st.error("Error en sesión")
+        return
+
+    success, message, complete_user_info = auth_manager.complete_first_login_with_access_code(
+        user_info, access_code, True
+    )
+
+    if success:
+        st.session_state.authenticated = True
+        st.session_state.user_info = complete_user_info
+
+        # Guardar token de sesión
+        if complete_user_info and complete_user_info.get('session_token'):
+            save_session_token(complete_user_info['session_token'])
+
+        # Limpiar estado temporal
+        if 'pending_first_login_user' in st.session_state:
+            del st.session_state['pending_first_login_user']
+
+        st.success("✅ ¡Primer acceso completado! Bienvenido al sistema.")
+        st.balloons()
+        st.rerun()
+    else:
+        st.error(f"❌ {message}")

@@ -269,6 +269,52 @@ class SupabaseAuthManager:
         except Exception as e:
             return False, f"Error al crear cuenta: {str(e)}"
 
+    def complete_first_login_with_access_code(self, user_info: Dict, access_code: str, remember_me: bool = True) -> \
+    Tuple[bool, str, Optional[Dict]]:
+        """Completar primer login con código de acceso"""
+        try:
+            from admin_database import admin_db_manager
+
+            # Verificar código de acceso
+            if not admin_db_manager.verify_access_code(access_code):
+                return False, "Código de acceso incorrecto", None
+
+            # Marcar primer login como completado
+            if not admin_db_manager.mark_user_first_login_complete(user_info['id']):
+                return False, "Error actualizando registro de usuario", None
+
+            # Crear sesión normal
+            session_token = self.create_session(user_info['id'], remember_me)
+            if not session_token:
+                return False, "Error al crear sesión - por favor intenta de nuevo", None
+
+            # Configurar contexto RLS
+            try:
+                self.client.rpc('set_session_token', {'token': session_token}).execute()
+            except Exception as e:
+                print(f"Advertencia: No se pudo configurar contexto RLS: {e}")
+
+            # Actualizar último login
+            try:
+                self.client.table('users').update({
+                    'last_login': datetime.now().isoformat()
+                }).eq('id', user_info['id']).execute()
+            except Exception:
+                pass
+
+            # Preparar información del usuario completa
+            complete_user_info = {
+                'id': user_info['id'],
+                'email': user_info['email'],
+                'full_name': user_info['full_name'],
+                'session_token': session_token
+            }
+
+            return True, "Primer acceso completado exitosamente", complete_user_info
+
+        except Exception as e:
+            return False, f"Error en primer acceso: {str(e)}", None
+
     def login_user(self, email: str, password: str, remember_me: bool = True) -> Tuple[bool, str, Optional[Dict]]:
         """Iniciar sesión de usuario con validación mejorada y contexto RLS"""
         try:
@@ -294,6 +340,20 @@ class SupabaseAuthManager:
             password_hash, _ = self._hash_password(password, user['salt'])
             if password_hash != user['password_hash']:
                 return False, "Contraseña incorrecta", None
+
+            # Verificar si es primer login
+            first_login_completed = user.get('first_login_completed', False)
+
+            if not first_login_completed:
+                # Primer login - requerir código de acceso
+                user_info = {
+                    'id': user['id'],
+                    'email': user['email'],
+                    'full_name': user['full_name'],
+                    'requires_access_code': True  # Flag especial
+                }
+                return True, "first_login_requires_access_code", user_info
+
 
             # CUARTO: Crear sesión si todo está ok
             session_token = self.create_session(user['id'], remember_me)

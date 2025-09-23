@@ -855,5 +855,54 @@ class AdminDatabaseManager:
             print(f"Error removiendo usuario VIP: {e}")
             return False
 
+    def get_current_access_code(self) -> Optional[str]:
+        """Obtener el código de acceso actual"""
+        try:
+            result = self.client.table('access_codes').select('code').order('created_at', desc=True).limit(1).execute()
+            return result.data[0]['code'] if result.data else None
+        except Exception as e:
+            print(f"Error getting access code: {e}")
+            return None
+
+    def update_access_code(self, new_code: str, admin_username: str) -> bool:
+        """Actualizar código de acceso"""
+        try:
+            from datetime import datetime
+
+            result = self.client.table('access_codes').insert({
+                'code': new_code,
+                'admin_user': admin_username,
+                'created_at': datetime.now().isoformat()
+            }).execute()
+
+            if result.data and len(result.data) > 0:
+                print(f"Access code updated successfully: {new_code}")
+                return True
+            else:
+                print("Failed to insert access code")
+                return False
+
+        except Exception as e:
+            print(f"Error updating access code: {e}")
+            return False
+
+    def verify_access_code(self, code: str) -> bool:
+        """Verificar código de acceso"""
+        try:
+            current_code = self.get_current_access_code()
+            return current_code == code.strip().upper() if current_code else False
+        except Exception:
+            return False
+
+    def mark_user_first_login_complete(self, user_id: int) -> bool:
+        """Marcar que el usuario completó su primer login"""
+        try:
+            result = self.client.table('users').update({
+                'first_login_completed': True
+            }).eq('id', user_id).execute()
+            return len(result.data) > 0
+        except Exception:
+            return False
+
 # Instancia global
 admin_db_manager = AdminDatabaseManager()

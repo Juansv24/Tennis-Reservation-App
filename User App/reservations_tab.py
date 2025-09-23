@@ -202,11 +202,13 @@ def show_read_only_schedule_view(current_user):
     # Mostrar información del usuario
     st.subheader("📋 Información de tu Cuenta")
 
+    user_credits = db_manager.get_user_credits(current_user['email'])
+
     st.markdown(f"""
     <div class="user-info-display">
         <strong>👤 Usuario:</strong> {current_user['full_name']}<br>
         <small>{current_user['email']}</small><br>
-        <strong>⭐ Tipo:</strong> {'Usuario VIP' if db_manager.is_vip_user(current_user['email']) else 'Usuario Regular'}
+        <strong> 🪙 Créditos disponibles: {user_credits}</strong>
     </div>
     """, unsafe_allow_html=True)
 
@@ -442,7 +444,7 @@ def show_reservation_success_message():
     # Limpiar los datos después de mostrar
     if 'last_reservation_data' in st.session_state:
         del st.session_state['last_reservation_data']
-        
+
 def show_mobile_layout(today, tomorrow, today_reservations, tomorrow_reservations, current_hour, current_user,
                        user_today_reservations, user_tomorrow_reservations):
     """Mostrar layout móvil optimizado"""
@@ -476,7 +478,6 @@ def show_mobile_layout(today, tomorrow, today_reservations, tomorrow_reservation
     with st.expander("📋 Reglas de Reserva"):
         is_vip = db_manager.is_vip_user(current_user['email'])
         horario_reservas = "8:00 AM - 8:00 PM" if is_vip else "8:00 AM - 5:00 PM"
-        tipo_usuario = " (Usuario VIP)" if is_vip else ""
 
         st.markdown(f"""
         • **Solo se puede hacer reservar para hoy y para mañana**<br>
@@ -563,7 +564,6 @@ def show_reservation_details(today_date, tomorrow_date, current_user, user_today
     with st.expander("📋 Reglas de Reserva"):
         is_vip = db_manager.is_vip_user(current_user['email'])
         horario_reservas = "8:00 AM - 8:00 PM" if is_vip else "8:00 AM - 5:00 PM"
-        tipo_usuario = " (Usuario VIP)" if is_vip else ""
 
         st.markdown(f"""
         • **Solo se puede hacer reservar para hoy y para mañana**<br>

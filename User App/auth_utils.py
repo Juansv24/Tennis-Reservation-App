@@ -200,5 +200,9 @@ def init_auth_session_state():
     if 'auth_mode' not in st.session_state:
         st.session_state.auth_mode = 'login'
 
+    # Estados para código de acceso
+    if 'pending_first_login_user' not in st.session_state:
+        st.session_state.pending_first_login_user = None
+
     # Intentar inicio de sesión automático en inicialización
     try_auto_login()
