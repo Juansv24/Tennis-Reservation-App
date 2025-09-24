@@ -756,6 +756,23 @@ class AdminDatabaseManager:
             print(f"Error getting reservations for export: {e}")
             return []
 
+    def search_users_for_credits(self, search_term: str) -> List[Dict]:
+        """Buscar usuarios por nombre o email para gestión de créditos"""
+        try:
+            result = self.client.table('users').select('id, email, full_name, credits').or_(
+                f'email.ilike.%{search_term}%,full_name.ilike.%{search_term}%'
+            ).eq('is_active', True).order('full_name').execute()
+
+            return [{
+                'id': u['id'],
+                'email': u['email'],
+                'name': u['full_name'],
+                'credits': u['credits'] or 0
+            } for u in result.data]
+        except Exception as e:
+            print(f"Error searching users for credits: {e}")
+            return []
+
     def get_credit_transactions_for_export(self) -> List[Dict]:
         """Obtener transacciones de créditos para exportación"""
         try:

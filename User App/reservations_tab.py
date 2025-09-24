@@ -231,6 +231,52 @@ def show_read_only_schedule_view(current_user):
     else:
         st.info("No tienes reservas programadas")
 
+        # PARTE NUEVA: Cómo Reservar (igual que en vista normal)
+        st.markdown("### Cómo Reservar")
+        st.write("1. Revisa que estés en **los horarios de reserva** y que tengas **créditos disponibles!**")
+        st.write("2. **Selecciona los horarios disponibles** que desees entre hoy y mañana (hasta 2 horas por día)")
+        st.write("3. **Confirma tu reserva** con un click")
+        st.write("4. Te llegará una **confirmación a tu correo registrado**")
+
+        # PARTE NUEVA: Mostrar reglas de reserva
+        with st.expander("📋 Reglas de Reserva"):
+            is_vip = db_manager.is_vip_user(current_user['email'])
+            horario_reservas = "8:00 AM - 8:00 PM" if is_vip else "8:00 AM - 5:00 PM"
+            tipo_usuario = " (Usuario VIP)" if is_vip else ""
+
+            st.markdown(f"""
+            • **Solo se puede hacer reservar para hoy y para mañana**<br>
+            • **Máximo 2 horas** por persona por día<br>
+            • **Horas consecutivas** requeridas si se reservan 2 horas<br>
+            • No se permite reservar la cancha en **los mismos horarios dos días consecutivos**<br>
+            • **Horario para hacer reservas:** {horario_reservas}<br>
+            • **Horario de cancha:** 6:00 AM - 9:00 PM<br>
+            • ⏰ **Importante:** Solo puedes hacer reservas dentro del horario permitido
+            """, unsafe_allow_html=True)
+
+        # Mostrar info créditos
+        with st.expander("💰 ¿Cómo Adquirir Créditos?"):
+            st.markdown("""
+            **💳 Costo de Créditos:**  
+            • Cada crédito = 1 hora de cancha  
+            • Precio por crédito: **$15.000 COP**
+
+            **📞 Contacto para Recargar:**
+
+            **Orlando**  
+            **WhatsApp:** [3193368749](https://wa.me/573193368749)
+
+            **⏰ Horarios de Atención:**  
+            • **Lunes a Sábado:** 9:00 AM - 11:00 AM  
+            • **Domingos y Festivos:** 5:00 PM - 7:00 PM
+
+            **💡 Recomendaciones:**  
+            • Planifica tu recarga con anticipación para evitar quedarte sin créditos  
+            • Contacta únicamente en los horarios establecidos para una respuesta rápida  
+            • Puedes recargar múltiples créditos en una sola transacción
+            """)
+
+
     # Mostrar calendario en modo de solo lectura
     st.subheader("👁️ Vista de Disponibilidad (Solo Lectura)")
 
@@ -489,6 +535,28 @@ def show_mobile_layout(today, tomorrow, today_reservations, tomorrow_reservation
         • ⏰ **Importante:** Solo puedes hacer reservas dentro del horario permitido
         """, unsafe_allow_html=True)
 
+    # Mostrar info créditos
+    with st.expander("💰 ¿Cómo Adquirir Créditos?"):
+        st.markdown("""
+        **💳 Costo de Créditos:**  
+        • Cada crédito = 1 hora de cancha  
+        • Precio por crédito: **$15.000 COP**
+
+        **📞 Contacto para Recargar:**
+
+        **Orlando**  
+        **WhatsApp:** [3193368749](https://wa.me/573193368749)
+
+        **⏰ Horarios de Atención:**  
+        • **Lunes a Sábado:** 9:00 AM - 11:00 AM  
+        • **Domingos y Festivos:** 5:00 PM - 7:00 PM
+
+        **💡 Recomendaciones:**  
+        • Planifica tu recarga con anticipación para evitar quedarte sin créditos  
+        • Contacta únicamente en los horarios establecidos para una respuesta rápida  
+        • Puedes recargar múltiples créditos en una sola transacción
+        """)
+
     # PARTE 3: Vista de calendario (MEDIO)
     show_calendar_view(today, tomorrow, today_reservations, tomorrow_reservations, current_hour, current_user)
 
@@ -574,6 +642,28 @@ def show_reservation_details(today_date, tomorrow_date, current_user, user_today
         • **Horario de cancha:** 6:00 AM - 9:00 PM<br>
         • ⏰ **Importante:** Solo puedes hacer reservas dentro del horario permitido
         """, unsafe_allow_html=True)
+
+    # Mostrar info créditos
+    with st.expander("💰 ¿Cómo Adquirir Créditos?"):
+        st.markdown("""
+        **💳 Costo de Créditos:**  
+        • Cada crédito = 1 hora de cancha  
+        • Precio por crédito: **$15.000 COP**
+
+        **📞 Contacto para Recargar:**
+
+        **Orlando**  
+        **WhatsApp:** [3193368749](https://wa.me/573193368749)
+
+        **⏰ Horarios de Atención:**  
+        • **Lunes a Sábado:** 9:00 AM - 11:00 AM  
+        • **Domingos y Festivos:** 5:00 PM - 7:00 PM
+
+        **💡 Recomendaciones:**  
+        • Planifica tu recarga con anticipación para evitar quedarte sin créditos  
+        • Contacta únicamente en los horarios establecidos para una respuesta rápida  
+        • Puedes recargar múltiples créditos en una sola transacción
+        """)
 
     # Mostrar selección actual
     if selected_hours and selected_date is not None:

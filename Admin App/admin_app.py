@@ -655,11 +655,12 @@ def show_users_management_tab():
             with st.expander(f"👤 {user['full_name']} ({user['email']})", expanded=expandido):
                 show_user_detailed_info(user)
 
+
 def show_credits_management_tab():
     """Gestión de créditos"""
     st.subheader("💰 Gestión de Créditos")
 
-    # Estadísticas de créditos
+    # Estadísticas de créditos (mantener igual)
     credit_stats = admin_db_manager.get_credit_statistics()
 
     col1, col2, col3 = st.columns(3)
@@ -690,54 +691,154 @@ def show_credits_management_tab():
 
     st.divider()
 
-    # Sección para gestionar créditos
+    # NUEVA SECCIÓN: Gestión mejorada de créditos
     st.subheader("💰 Gestionar Créditos de Usuario")
 
-    with st.form("manage_credits_form"):
-        col1, col2, col3, col4 = st.columns(4)
+    # Inicializar session states si no existen
+    if 'selected_user_for_credits' not in st.session_state:
+        st.session_state.selected_user_for_credits = None
+    if 'matching_users_credits' not in st.session_state:
+        st.session_state.matching_users_credits = []
 
+    # Buscador de usuario
+    col1, col2 = st.columns([3, 1])
+
+    with col1:
+        search_term = st.text_input(
+            "🔍 Buscar usuario por nombre o email:",
+            placeholder="Ingresa nombre o email del usuario",
+            key="search_credits_user"
+        )
+
+    with col2:
+        if st.button("🔍 Buscar", type="primary", key="search_credits_btn"):
+            if search_term:
+                # Buscar usuarios que coincidan
+                matching_users = admin_db_manager.search_users_for_credits(search_term)
+
+                if matching_users:
+                    if len(matching_users) == 1:
+                        # Solo un usuario encontrado - seleccionar automáticamente
+                        st.session_state.selected_user_for_credits = matching_users[0]
+                        st.session_state.matching_users_credits = []
+                        st.success(f"✅ Usuario seleccionado: {matching_users[0]['name']}")
+                    else:
+                        # Múltiples usuarios - guardar para mostrar
+                        st.session_state.matching_users_credits = matching_users
+                        st.session_state.selected_user_for_credits = None
+                else:
+                    st.warning("No se encontraron usuarios con ese criterio")
+                    st.session_state.matching_users_credits = []
+                    st.session_state.selected_user_for_credits = None
+
+    # Mostrar lista de usuarios encontrados si hay múltiples
+    if st.session_state.matching_users_credits:
+        st.write("**Usuarios encontrados:**")
+
+        for i, user in enumerate(st.session_state.matching_users_credits):
+            with st.container():
+                col_user, col_info, col_select = st.columns([2, 2, 1])
+
+                with col_user:
+                    st.write(f"**{user['name']}**")
+
+                with col_info:
+                    st.write(f"📧 {user['email']}")
+                    st.write(f"🪙 {user['credits']} créditos")
+
+                with col_select:
+                    # Usar un key único y manejar la selección directamente
+                    select_key = f"select_credit_user_{user['id']}_{i}"
+                    if st.button("✅ Seleccionar", key=select_key):
+                        st.session_state.selected_user_for_credits = user
+                        st.session_state.matching_users_credits = []
+                        st.rerun()
+
+    # Mostrar usuario seleccionado y formulario de créditos
+    selected_user = st.session_state.selected_user_for_credits
+
+    if selected_user:
+        # Mostrar información del usuario seleccionado
+        st.markdown("### 👤 Usuario Seleccionado")
+
+        col1, col2, col3 = st.columns([2, 2, 1])
         with col1:
-            user_email = st.text_input("Email del usuario:")
-
+            st.info(f"**Nombre:** {selected_user['name']}")
         with col2:
-            operation = st.selectbox("Operación:", ["Agregar", "Quitar"])
-
+            st.info(f"**Email:** {selected_user['email']}")
         with col3:
-            credits_amount = st.number_input("Cantidad:", min_value=1, max_value=100, value=1)
+            st.info(f"**Créditos:** {selected_user['credits']}")
 
-        with col4:
-            reason = st.text_input("Motivo:", placeholder="Ej: Nueva Tiquetera")
+        # Formulario para gestionar créditos
+        with st.form("manage_credits_form", clear_on_submit=True):
+            col1, col2, col3 = st.columns(3)
 
-        if st.form_submit_button("💰 Aplicar Cambio", type="primary"):
-            if user_email and credits_amount:
+            with col1:
+                operation = st.selectbox("Operación:", ["Agregar", "Quitar"])
+
+            with col2:
+                credits_amount = st.number_input("Cantidad:", min_value=1, max_value=100, value=1)
+
+            with col3:
+                reason = st.text_input("Motivo:", placeholder="Ej: Nueva Tiquetera")
+
+            col_btn1, col_btn2, col_btn3 = st.columns([1, 2, 1])
+            with col_btn2:
+                submit_credits = st.form_submit_button(
+                    f"💰 Confirmar",
+                    type="primary",
+                    use_container_width=True
+                )
+
+            if submit_credits:
                 admin_user = st.session_state.get('admin_user', {})
 
                 if operation == "Agregar":
                     success = admin_db_manager.add_credits_to_user(
-                        user_email, credits_amount, reason or "Créditos agregados por administrador",
+                        selected_user['email'], credits_amount,
+                        reason or "Créditos agregados por administrador",
                         admin_user.get('username', 'admin')
                     )
                     action_msg = f"agregados a"
                 else:
                     success = admin_db_manager.remove_credits_from_user(
-                        user_email, credits_amount, reason or "Créditos removidos por administrador",
+                        selected_user['email'], credits_amount,
+                        reason or "Créditos removidos por administrador",
                         admin_user.get('username', 'admin')
                     )
                     action_msg = f"removidos de"
 
                 if success:
-                    st.success(f"✅ {credits_amount} créditos {action_msg} {user_email}")
-                    send_credits_notification_email(user_email, credits_amount, reason, operation.lower())
+                    st.success(f"✅ {credits_amount} créditos {action_msg} {selected_user['name']}")
+                    send_credits_notification_email(
+                        selected_user['email'], credits_amount, reason, operation.lower()
+                    )
+
+                    # Limpiar selección después del éxito
+                    st.session_state.selected_user_for_credits = None
+                    st.session_state.matching_users_credits = []
+
+                    # Pequeña pausa para mostrar el mensaje
+                    import time
+                    time.sleep(2)
                     st.rerun()
                 else:
                     error_msg = "créditos insuficientes" if operation == "Quitar" else "error en la base de datos"
-                    st.error(f"❌ Error: Usuario no encontrado o {error_msg}")
-            else:
-                st.error("Por favor completa todos los campos")
+                    st.error(f"❌ Error: {error_msg}")
+
+        # Botón para limpiar selección
+        if st.button("🔄 Buscar Otro Usuario", type="secondary", key="clear_selection_credits"):
+            st.session_state.selected_user_for_credits = None
+            st.session_state.matching_users_credits = []
+            st.rerun()
+
+    else:
+        # Mostrar instrucciones cuando no hay usuario seleccionado
+        st.info("💡 Usa el buscador para encontrar y seleccionar un usuario")
 
     st.divider()
 
-    # Historial de transacciones de créditos
+    # Historial de transacciones (mantener igual)
     st.subheader("📋 Historial de Transacciones")
 
     transactions = admin_db_manager.get_credit_transactions()
