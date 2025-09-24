@@ -508,7 +508,7 @@ def show_reservations_management_tab():
                                  type="secondary",
                                  use_container_width=True):
                             with st.spinner("🔄 Cancelando reserva..."):
-                                if admin_db_manager.cancel_reservation_with_notification(reservation['id']):
+                                if admin_db_manager.cancel_reservation_with_notification(reservation['id'], reservation['email']):
                                     # Obtener datos del usuario para el email
                                     user_data = admin_db_manager.get_user_by_email(reservation['email'])
 
