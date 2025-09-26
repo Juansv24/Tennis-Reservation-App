@@ -311,6 +311,26 @@ def show_read_only_day_schedule(date, reservations_dict, current_user):
     user_reservations = db_manager.get_user_reservations_for_date(current_user['email'], date)
 
     for hour in COURT_HOURS:
+
+        # Revisa si es hora de escuela de tenis
+        if is_tennis_school_hour(date, hour):
+            st.markdown(f"""
+                    <div style="
+                        background-color: #E3F2FD;
+                        border: 2px solid #1976D2;
+                        color: #0D47A1;
+                        padding: 10px;
+                        border-radius: 6px;
+                        text-align: center;
+                        margin: 5px 0;
+                        cursor: not-allowed;
+                        font-weight: bold;
+                    ">
+                        {format_hour(hour)}<br>Escuela de Tenis
+                    </div>
+                    """, unsafe_allow_html=True)
+            continue
+
         is_reserved = hour in reservations_dict
         is_my_reservation = hour in user_reservations
 
@@ -350,6 +370,14 @@ def show_read_only_day_schedule(date, reservations_dict, current_user):
                 {format_hour(hour)}<br>Disponible
             </div>
             """, unsafe_allow_html=True)
+
+def is_tennis_school_hour(date, hour):
+    """Verificar si es horario de escuela de tenis (sábados y domingos 8-12)"""
+    # Saturday (5) or Sunday (6)
+    if date.weekday() not in [5, 6]:
+        return False
+    # Hours 8-11 (8:00 AM to 11:59 AM)
+    return 8 <= hour <= 11
 
 def show_reservation_tab():
     """Mostrar la pestaña de reservas con caché optimizado"""
@@ -460,7 +488,6 @@ def show_reservation_tab():
         # Layout móvil (default)
         show_mobile_layout(today, tomorrow, today_reservations, tomorrow_reservations, current_hour, current_user,
                            user_today_reservations, user_tomorrow_reservations)
-
 
 def show_reservation_success_message():
     """Mostrar mensaje de éxito de reserva con datos específicos"""
@@ -935,6 +962,26 @@ def show_day_schedule(date, reservations_dict, current_user, is_today=False, cur
     user_reservations = db_manager.get_user_reservations_for_date(current_user['email'], date)
 
     for hour in COURT_HOURS:
+
+        # Revisar si es hora de escuela de tenis
+        if is_tennis_school_hour(date, hour):
+            st.markdown(f"""
+                    <div style="
+                        background-color: #E3F2FD;
+                        border: 2px solid #1976D2;
+                        color: #0D47A1;
+                        padding: 10px;
+                        border-radius: 6px;
+                        text-align: center;
+                        margin: 5px 0;
+                        cursor: not-allowed;
+                        font-weight: bold;
+                    ">
+                        {format_hour(hour)}<br>Escuela de Tenis
+                    </div>
+                    """, unsafe_allow_html=True)
+            continue
+
         is_reserved = hour in reservations_dict
         is_my_reservation = hour in user_reservations
         is_selected = hour in selected_hours and selected_date == date
