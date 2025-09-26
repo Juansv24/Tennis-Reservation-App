@@ -179,10 +179,11 @@ class AdminDatabaseManager:
         except Exception:
             return []
 
-    def cancel_reservation_with_notification(self, reservation_id: int, user_email: str) -> bool:
-        """Cancelar reserva y enviar notificación"""
+    def cancel_reservation_with_notification(self, reservation_id: int, user_email: str,
+                                             cancellation_reason: str = "", admin_username: str = "admin") -> bool:
+        """Cancelar reserva, enviar notificación y guardar historial"""
         try:
-            # Obtener datos de la reserva
+            # Obtener datos de la reserva ANTES de cancelar
             reservation_result = self.client.table('reservations').select('*').eq('id', reservation_id).execute()
             if not reservation_result.data:
                 return False
@@ -193,30 +194,60 @@ class AdminDatabaseManager:
             success = self.cancel_reservation(reservation_id)
 
             if success:
-                # Enviar email de notificación
-                self._send_cancellation_notification(user_email, reservation)
+                # Guardar en historial de cancelaciones
+                self.save_cancellation_record(
+                    reservation_id,
+                    reservation,
+                    cancellation_reason or "Sin motivo especificado",
+                    admin_username
+                )
+
+                # Enviar email de notificación con motivo
+                self._send_cancellation_notification(user_email, reservation, cancellation_reason)
 
             return success
-        except Exception:
+        except Exception as e:
+            print(f"Error in cancel_reservation_with_notification: {e}")
             return False
 
-    def _send_cancellation_notification(self, user_email: str, reservation: Dict):
-        """Enviar notificación de cancelación"""
+    def _send_cancellation_notification(self, user_email: str, reservation: Dict, reason: str = ""):
+        """Enviar notificación de cancelación con motivo"""
         try:
             from email_config import email_manager
 
             if email_manager.is_configured():
                 subject = "🎾 Reserva Cancelada - Sistema de Reservas"
 
+                reason_section = ""
+                if reason and reason != "Sin motivo especificado":
+                    reason_section = f"""
+                    <div style="background: #fff3cd; border: 1px solid #ffc107; border-radius: 8px; padding: 15px; margin: 15px 0;">
+                        <h4 style="margin: 0; color: #856404;">📋 Motivo de la cancelación:</h4>
+                        <p style="margin: 10px 0 0 0; color: #856404;">{reason}</p>
+                    </div>
+                    """
+
                 html_body = f"""
-                <h2>Reserva Cancelada</h2>
-                <p>Tu reserva ha sido cancelada por el administrador:</p>
-                <ul>
-                    <li><strong>Fecha:</strong> {reservation['date']}</li>
-                    <li><strong>Hora:</strong> {reservation['hour']}:00</li>
-                </ul>
-                <p>Se ha reembolsado 1 crédito a tu cuenta.</p>
-                <p>Si tienes preguntas, contacta al administrador.</p>
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                    <div style="background: linear-gradient(135deg, #001854 0%, #2478CC 100%); color: white; padding: 20px; text-align: center; border-radius: 10px;">
+                        <h1>🎾 Reserva Cancelada</h1>
+                    </div>
+
+                    <div style="background: #f9f9f9; padding: 20px; border-radius: 10px; margin: 20px 0;">
+                        <h2>Tu reserva ha sido cancelada</h2>
+                        <p>Lamentamos informarte que tu reserva ha sido <strong>cancelada por el administrador</strong>:</p>
+
+                        <div style="background: white; padding: 15px; border-radius: 8px; border-left: 5px solid #FFD400;">
+                            <p><strong>📅 Fecha:</strong> {reservation['date']}</p>
+                            <p><strong>🕐 Hora:</strong> {reservation['hour']}:00</p>
+                        </div>
+
+                        {reason_section}
+
+                        <p>✅ <strong>Se ha reembolsado 1 crédito</strong> a tu cuenta automáticamente.</p>
+                        <p>Si tienes preguntas, contacta al administrador.</p>
+                    </div>
+                </div>
                 """
 
                 email_manager.send_email(user_email, subject, html_body)
@@ -890,6 +921,176 @@ class AdminDatabaseManager:
             return len(result.data) > 0
         except Exception:
             return False
+
+    def get_weekly_calendar_data(self, week_offset: int = 0) -> Dict:
+        """Obtener datos de reservas para vista de calendario semanal"""
+        try:
+            from datetime import datetime, timedelta
+
+            # Calcular el lunes de la semana seleccionada
+            today = get_colombia_today()
+            days_to_monday = today.weekday()  # 0 = lunes, 6 = domingo
+            target_monday = today - timedelta(days=days_to_monday) + timedelta(weeks=week_offset)
+
+            # Calcular rango de fechas (lunes a domingo)
+            week_dates = []
+            for i in range(7):  # 7 días de la semana
+                day_date = target_monday + timedelta(days=i)
+                week_dates.append(day_date)
+
+            start_date = week_dates[0].strftime('%Y-%m-%d')
+            end_date = week_dates[6].strftime('%Y-%m-%d')
+
+            # Obtener reservas de la semana
+            result = self.client.table('reservations').select('date, hour, name, email').gte(
+                'date', start_date
+            ).lte('date', end_date).execute()
+
+            # Organizar datos por fecha y hora
+            reservations_grid = {}
+            for date in week_dates:
+                date_str = date.strftime('%Y-%m-%d')
+                reservations_grid[date_str] = {}
+
+            # Llenar el grid con las reservas
+            for reservation in result.data:
+                date_str = reservation['date']
+                hour = reservation['hour']
+                name = reservation['name']
+
+                if date_str in reservations_grid:
+                    reservations_grid[date_str][hour] = {
+                        'name': name,
+                        'email': reservation['email']
+                    }
+
+            return {
+                'week_dates': week_dates,
+                'reservations_grid': reservations_grid,
+                'week_start': week_dates[0].strftime('%d/%m/%Y'),
+                'week_end': week_dates[6].strftime('%d/%m/%Y'),
+                'total_reservations': len(result.data)
+            }
+
+        except Exception as e:
+            print(f"Error getting weekly calendar data: {e}")
+            return {
+                'week_dates': [],
+                'reservations_grid': {},
+                'week_start': '',
+                'week_end': '',
+                'total_reservations': 0
+            }
+
+    def get_user_activity_stats(self, days: int = 30) -> List[Dict]:
+        """Obtener estadísticas de actividad de usuarios"""
+        try:
+            start_date = (get_colombia_today() - timedelta(days=days)).strftime('%Y-%m-%d')
+
+            # Obtener reservas recientes
+            result = self.client.table('reservations').select('email, name, date, created_at').gte(
+                'date', start_date
+            ).execute()
+
+            # Obtener datos de usuarios
+            users_result = self.client.table('users').select('email, full_name, last_login, created_at').execute()
+            users_dict = {u['email']: u for u in users_result.data}
+
+            # Agrupar actividad por usuario
+            user_activity = {}
+            for reservation in result.data:
+                email = reservation['email']
+                if email not in user_activity:
+                    user_info = users_dict.get(email, {})
+                    user_activity[email] = {
+                        'name': reservation['name'],
+                        'email': email,
+                        'recent_reservations': 0,
+                        'last_reservation': None,
+                        'last_login': self._format_colombia_datetime(user_info.get('last_login')),
+                        'member_since': self._format_colombia_datetime(user_info.get('created_at'))
+                    }
+
+                user_activity[email]['recent_reservations'] += 1
+
+                # Actualizar última reserva
+                if (not user_activity[email]['last_reservation'] or
+                        reservation['date'] > user_activity[email]['last_reservation']):
+                    user_activity[email]['last_reservation'] = reservation['date']
+
+            # Convertir a lista ordenada por actividad
+            return sorted(user_activity.values(),
+                          key=lambda x: x['recent_reservations'], reverse=True)[:20]
+
+        except Exception as e:
+            print(f"Error getting user activity stats: {e}")
+            return []
+
+    def save_cancellation_record(self, reservation_id: int, reservation_data: Dict,
+                                 reason: str, admin_username: str) -> bool:
+        """Guardar registro de cancelación"""
+        try:
+            result = self.client.table('reservation_cancellations').insert({
+                'original_reservation_id': reservation_id,
+                'user_email': reservation_data.get('email'),
+                'user_name': reservation_data.get('name'),
+                'reservation_date': reservation_data.get('date'),
+                'reservation_hour': reservation_data.get('hour'),
+                'cancellation_reason': reason,
+                'cancelled_by': admin_username,
+                'cancelled_at': datetime.now().isoformat(),
+                'credits_refunded': 1
+            }).execute()
+
+            return len(result.data) > 0
+        except Exception as e:
+            print(f"Error saving cancellation record: {e}")
+            return False
+
+    def get_cancellation_history(self, days_back: int = None) -> List[Dict]:
+        """Obtener historial de cancelaciones"""
+        try:
+            query = self.client.table('reservation_cancellations').select('*')
+
+            # Filtrar por días si se especifica
+            if days_back:
+                start_date = (get_colombia_today() - timedelta(days=days_back)).strftime('%Y-%m-%d')
+                query = query.gte('cancelled_at', start_date)
+
+            result = query.order('cancelled_at', desc=True).execute()
+
+            # Formatear datos para display
+            formatted_cancellations = []
+            for cancellation in result.data:
+                # Formatear hora
+                hour_display = f"{cancellation['reservation_hour']:02d}:00"
+
+                # Formatear fecha de reserva
+                try:
+                    from datetime import datetime
+                    date_obj = datetime.strptime(cancellation['reservation_date'], '%Y-%m-%d')
+                    formatted_date = date_obj.strftime('%d/%m/%Y')
+                    day_name = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'][date_obj.weekday()]
+                    reservation_date_display = f"{day_name} {formatted_date}"
+                except:
+                    reservation_date_display = cancellation['reservation_date']
+
+                formatted_cancellations.append({
+                    'user_name': cancellation['user_name'],
+                    'user_email': cancellation['user_email'],
+                    'reservation_date': reservation_date_display,
+                    'reservation_hour': hour_display,
+                    'cancellation_reason': cancellation['cancellation_reason'] or 'Sin motivo especificado',
+                    'cancelled_by': cancellation['cancelled_by'],
+                    'cancelled_at': self._format_colombia_datetime(cancellation['cancelled_at']),
+                    'credits_refunded': cancellation['credits_refunded']
+                })
+
+            return formatted_cancellations
+
+        except Exception as e:
+            print(f"Error getting cancellation history: {e}")
+            return []
 
 # Instancia global
 admin_db_manager = AdminDatabaseManager()

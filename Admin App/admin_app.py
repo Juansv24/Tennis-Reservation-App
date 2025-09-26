@@ -4,13 +4,12 @@ Gestión de reservas, usuarios y créditos
 """
 
 import streamlit as st
-import datetime
-from datetime import timedelta
-import pandas as pd
 from admin_auth import admin_auth_manager, require_admin_auth
 from admin_database import admin_db_manager
-from timezone_utils import get_colombia_today, get_colombia_now
+from timezone_utils import get_colombia_now
 from email_config import email_manager
+import pandas as pd
+import datetime
 
 # Colores US Open
 US_OPEN_BLUE = "#001854"
@@ -340,6 +339,7 @@ def show_dashboard_tab():
     col1, col2 = st.columns(2)
 
     with col1:
+        import pandas as pd
         st.subheader("📈 Reservas por Día (Últimos 7 días)")
         daily_stats = admin_db_manager.get_daily_reservation_stats()
         if daily_stats:
@@ -360,50 +360,158 @@ def show_dashboard_tab():
     st.divider()
 
     # Estadísticas de usuarios
-    col1, col2 = st.columns(2)
+    st.subheader("🏆 Usuarios Más Activos")
+    user_stats = admin_db_manager.get_user_reservation_statistics()
+    if user_stats:
+        for i, user in enumerate(user_stats[:5], 1):
+            # Crear expander con título más prominente y ancho completo
+            expander_title = f"**{i}. {user['name']}** • {user['reservations']} reservas"
 
-    with col1:
-        st.subheader("🏆 Usuarios Más Activos")
-        user_stats = admin_db_manager.get_user_reservation_statistics()
-        if user_stats:
-            for i, user in enumerate(user_stats[:5], 1):
-                # Crear expander con título más prominente y ancho completo
-                expander_title = f"**{i}. {user['name']}** • {user['reservations']} reservas"
+            with st.expander(expander_title, expanded=False):
+                # Obtener datos detallados del usuario
+                user_detail = admin_db_manager.search_users_detailed(user['email'])
+                if user_detail:
+                    user_info = user_detail[0]
 
-                with st.expander(expander_title, expanded=False):
-                    # Obtener datos detallados del usuario
-                    user_detail = admin_db_manager.search_users_detailed(user['email'])
-                    if user_detail:
-                        user_info = user_detail[0]
-
-                        # Card con información organizada
-                        st.markdown(f"""
-                        <div style="
-                            background: white;
-                            border: 1px solid #e0e0e0;
-                            border-radius: 8px;
-                            padding: 16px;
-                            margin: 8px 0;
-                            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-                        ">
-                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
-                                <div>
-                                    <p style="margin: 4px 0;"><strong>📧 Email:</strong> {user_info['email']}</p>
-                                    <p style="margin: 4px 0;"><strong>🎯 Estado:</strong> {'✅ Activo' if user_info['is_active'] else '❌ Inactivo'}</p>
-                                    <p style="margin: 4px 0;"><strong>💰 Créditos:</strong> {user_info.get('credits', 0)}</p>
-                                </div>
-                                <div>
-                                    <p style="margin: 4px 0;"><strong>🕒 Último login:</strong> {user_info['last_login'][:10] if user_info.get('last_login') else 'Nunca'}</p>
-                                    <p style="margin: 4px 0;"><strong>📅 Registrado:</strong> {user_info['created_at'][:10]}</p>
-                                    <p style="margin: 4px 0;"><strong>🎾 Total reservas:</strong> {user['reservations']}</p>
-                                </div>
+                    # Card con información organizada
+                    st.markdown(f"""
+                    <div style="
+                        background: white;
+                        border: 1px solid #e0e0e0;
+                        border-radius: 8px;
+                        padding: 16px;
+                        margin: 8px 0;
+                        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                    ">
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+                            <div>
+                                <p style="margin: 4px 0;"><strong>📧 Email:</strong> {user_info['email']}</p>
+                                <p style="margin: 4px 0;"><strong>🎯 Estado:</strong> {'✅ Activo' if user_info['is_active'] else '❌ Inactivo'}</p>
+                                <p style="margin: 4px 0;"><strong>💰 Créditos:</strong> {user_info.get('credits', 0)}</p>
+                            </div>
+                            <div>
+                                <p style="margin: 4px 0;"><strong>🕒 Último login:</strong> {user_info['last_login'][:10] if user_info.get('last_login') else 'Nunca'}</p>
+                                <p style="margin: 4px 0;"><strong>📅 Registrado:</strong> {user_info['created_at'][:10]}</p>
+                                <p style="margin: 4px 0;"><strong>🎾 Total reservas:</strong> {user['reservations']}</p>
                             </div>
                         </div>
-                        """, unsafe_allow_html=True)
-                    else:
-                        st.warning("⚠️ No se pudieron cargar los detalles del usuario")
-        else:
-            st.info("📊 No hay datos de usuarios disponibles")
+                    </div>
+                    """, unsafe_allow_html=True)
+                else:
+                    st.warning("⚠️ No se pudieron cargar los detalles del usuario")
+    else:
+        st.info("📊 No hay datos de usuarios disponibles")
+
+    st.divider()
+
+    # NUEVA SECCIÓN: Vista de Calendario Semanal
+    st.subheader("📅 Calendario de Reservas Semanal")
+
+    # Controles de navegación
+    col1, col2, col3, col4, col5 = st.columns([1, 1, 2, 1, 1])
+
+    # Inicializar week_offset si no existe
+    if 'calendar_week_offset' not in st.session_state:
+        st.session_state.calendar_week_offset = 0
+
+    with col1:
+        if st.button("⬅️ Anterior", key="prev_week"):
+            st.session_state.calendar_week_offset -= 1
+            st.rerun()
+
+    with col2:
+        if st.button("➡️ Siguiente", key="next_week"):
+            st.session_state.calendar_week_offset += 1
+            st.rerun()
+
+    with col3:
+        if st.button("📍 Semana Actual", key="current_week"):
+            st.session_state.calendar_week_offset = 0
+            st.rerun()
+
+    with col4:
+        if st.button("🔄 Actualizar", key="refresh_calendar"):
+            st.cache_data.clear()
+            st.success("✅ Calendario actualizado")
+
+    # Obtener datos del calendario
+    calendar_data = admin_db_manager.get_weekly_calendar_data(st.session_state.calendar_week_offset)
+
+    if calendar_data['week_dates']:
+        # Mostrar información de la semana
+        week_info = f"📊 Semana del {calendar_data['week_start']} al {calendar_data['week_end']} • {calendar_data['total_reservations']} reservas"
+        st.info(week_info)
+
+        # Crear el calendario como tabla
+        week_dates = calendar_data['week_dates']
+        reservations_grid = calendar_data['reservations_grid']
+
+        # Nombres de los días
+        day_names = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo']
+
+        # Horarios de la cancha (6 AM a 9 PM)
+        court_hours = list(range(6, 22))
+
+        # Crear DataFrame para el calendario
+        import pandas as pd
+
+        # Preparar datos para la tabla
+        calendar_table = []
+
+        for hour in court_hours:
+            row = {'Hora': f"{hour:02d}:00"}
+
+            for i, date in enumerate(week_dates):
+                date_str = date.strftime('%Y-%m-%d')
+                day_name = day_names[i]
+
+                # Obtener reserva para este día/hora
+                reservation = reservations_grid.get(date_str, {}).get(hour)
+
+                if reservation:
+                    # Mostrar nombre (truncado si es muy largo)
+                    name = reservation['name']
+                    if len(name) > 12:
+                        name = name[:9] + "..."
+                    row[f"{day_name}\n{date.strftime('%d/%m')}"] = f"🎾 {name}"
+                else:
+                    row[f"{day_name}\n{date.strftime('%d/%m')}"] = "⚪ Libre"
+
+            calendar_table.append(row)
+
+        # Crear DataFrame
+        df_calendar = pd.DataFrame(calendar_table)
+
+        # Mostrar la tabla con estilo
+        st.markdown("### 📋 Vista de Calendario")
+
+        # Aplicar estilos a la tabla
+        def style_calendar_table(val):
+            """Aplicar estilos según el contenido"""
+            if "🎾" in str(val):
+                return 'background-color: #e8f5e8; color: #2e7d32; text-align: center; font-weight: bold; border: 1px solid #4caf50;'
+            elif "⚪ Libre" in str(val):
+                return 'background-color: #f5f5f5; color: #757575; text-align: center; border: 1px solid #e0e0e0;'
+            elif "Hora" in str(val):
+                return 'background-color: #1976d2; color: white; text-align: center; font-weight: bold; border: 1px solid #1565c0;'
+            else:
+                return 'text-align: center; font-weight: bold; border: 1px solid #2478CC; background-color: #e3f2fd;'
+
+        # Mostrar tabla estilizada
+        styled_df = df_calendar.style.applymap(style_calendar_table)
+        st.dataframe(styled_df, use_container_width=True, hide_index=True)
+
+        # Leyenda
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.markdown("🎾 **Reservado** - Usuario asignado")
+        with col2:
+            st.markdown("⚪ **Libre** - Disponible para reservar")
+        with col3:
+            st.markdown(f"📊 **Total: {calendar_data['total_reservations']} reservas**")
+
+    else:
+        st.error("❌ Error cargando datos del calendario")
 
 def mostrar_feedback_reserva(reservation_id):
     """Mostrar feedback de actualización de reserva"""
@@ -503,65 +611,155 @@ def show_reservations_management_tab():
                     """)
 
                 with col2:
-                    if st.button("❌ Cancelar Reserva",
-                                 key=f"cancel_{reservation['id']}",
-                                 type="secondary",
-                                 use_container_width=True):
+                    # Formulario para cancelación con motivo
+                    with st.form(f"cancel_form_{reservation['id']}", clear_on_submit=True):
+                        cancellation_reason = st.text_area(
+                            "Motivo de cancelación (opcional):",
+                            placeholder="Ej: Mantenimiento de cancha, lluvia, etc.",
+                            max_chars=200,
+                            key=f"reason_{reservation['id']}"
+                        )
+
+                        cancel_submitted = st.form_submit_button(
+                            "❌ Cancelar Reserva",
+                            type="secondary",
+                            use_container_width=True
+                        )
+
+                        if cancel_submitted:
+                            admin_user = st.session_state.get('admin_user', {})
+
                             with st.spinner("🔄 Cancelando reserva..."):
-                                if admin_db_manager.cancel_reservation_with_notification(reservation['id'], reservation['email']):
-                                    # Obtener datos del usuario para el email
-                                    user_data = admin_db_manager.get_user_by_email(reservation['email'])
+                                success = admin_db_manager.cancel_reservation_with_notification(
+                                    reservation['id'],
+                                    reservation['email'],
+                                    cancellation_reason.strip() if cancellation_reason else "",
+                                    admin_user.get('username', 'admin')
+                                )
 
-                                    # Enviar email de cancelación
-                                    try:
-                                        if email_manager.is_configured() and user_data:
-                                            subject = "🎾 Reserva Cancelada - Sistema de Reservas"
-                                            html_body = f"""
-                                            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-                                                <div style="background: linear-gradient(135deg, #001854 0%, #2478CC 100%); color: white; padding: 20px; text-align: center; border-radius: 10px;">
-                                                    <h1>🎾 Reserva Cancelada</h1>
-                                                </div>
-
-                                                <div style="background: #f9f9f9; padding: 20px; border-radius: 10px; margin: 20px 0;">
-                                                    <h2>Hola {user_data['full_name']},</h2>
-                                                    <p>Tu reserva ha sido <strong>cancelada por el administrador</strong>:</p>
-
-                                                    <div style="background: white; padding: 15px; border-radius: 8px; border-left: 5px solid #FFD400;">
-                                                        <p><strong>📅 Fecha:</strong> {reservation['date']}</p>
-                                                        <p><strong>🕐 Hora:</strong> {reservation['hour']}:00</p>
-                                                    </div>
-
-                                                    <p>✅ <strong>Se ha reembolsado 1 crédito</strong> a tu cuenta automáticamente.</p>
-                                                    <p>Si tienes preguntas, contacta al administrador.</p>
-                                                </div>
-                                            </div>
-                                            """
-
-                                            success, message = email_manager.send_email(reservation['email'], subject,
-                                                                                        html_body)
-                                            if success:
-                                                st.success(
-                                                    "✅ Reserva cancelada exitosamente y usuario notificado por email")
-                                            else:
-                                                st.success("✅ Reserva cancelada exitosamente")
-                                                st.warning(f"⚠️ Error enviando email: {message}")
-                                        else:
-                                            st.success("✅ Reserva cancelada exitosamente (email no configurado)")
-
-                                    except Exception as e:
-                                        st.success("✅ Reserva cancelada exitosamente")
-                                        st.warning(f"⚠️ Error enviando notificación: {str(e)}")
-
-                                    # Limpiar y recargar la lista
+                                if success:
+                                    st.success("✅ Reserva cancelada exitosamente y usuario notificado")
+                                    # Limpiar selección
                                     if 'selected_user_for_reservations' in st.session_state:
                                         del st.session_state['selected_user_for_reservations']
 
-                                    # Pequeña pausa para que el usuario vea el mensaje
                                     import time
                                     time.sleep(2)
                                     st.rerun()
                                 else:
                                     st.error("❌ Error al cancelar reserva")
+
+    st.divider()
+
+    # NUEVA SECCIÓN: Historial de Cancelaciones
+    st.subheader("📋 Historial de Cancelaciones")
+
+    # Controles para el historial
+    col1, col2, col3 = st.columns([2, 1, 1])
+
+    with col1:
+        days_back = st.selectbox(
+            "Mostrar cancelaciones de:",
+            options=[7, 15, 30, 60, 90],
+            index=2,  # Default: 30 días
+            format_func=lambda x: f"Últimos {x} días",
+            key="cancellation_days_selector"
+        )
+
+    with col2:
+        if st.button("🔄 Actualizar Historial", key="refresh_cancellations"):
+            st.cache_data.clear()
+            st.success("✅ Historial actualizado")
+
+    with col3:
+        show_all_cancellations = st.checkbox("Ver todas", key="show_all_cancellations")
+
+    # Obtener historial de cancelaciones
+    cancellations = admin_db_manager.get_cancellation_history(
+        days_back if not show_all_cancellations else None
+    )
+
+    if cancellations:
+        st.info(
+            f"📊 **Total de cancelaciones:** {len(cancellations)} {'en todos los registros' if show_all_cancellations else f'en los últimos {days_back} días'}")
+
+        # Convertir a DataFrame para mejor visualización
+        import pandas as pd
+        df_cancellations = pd.DataFrame(cancellations)
+
+        # Renombrar columnas para display
+        display_df = df_cancellations.rename(columns={
+            'user_name': 'Usuario',
+            'user_email': 'Email',
+            'reservation_date': 'Fecha Reserva',
+            'reservation_hour': 'Hora',
+            'cancellation_reason': 'Motivo',
+            'cancelled_by': 'Cancelado Por',
+            'cancelled_at': 'Fecha Cancelación',
+            'credits_refunded': 'Créditos Reembolsados'
+        })
+
+        # Seleccionar columnas a mostrar
+        columns_to_show = [
+            'Usuario', 'Email', 'Fecha Reserva', 'Hora', 'Motivo',
+            'Cancelado Por', 'Fecha Cancelación', 'Créditos Reembolsados'
+        ]
+
+        # Mostrar tabla interactiva
+        st.dataframe(
+            display_df[columns_to_show],
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "Hora": st.column_config.TextColumn(
+                    "Hora",
+                    help="Hora de la reserva original",
+                    width="small"
+                ),
+                "Motivo": st.column_config.TextColumn(
+                    "Motivo",
+                    help="Motivo de la cancelación",
+                    width="medium"
+                ),
+                "Fecha Cancelación": st.column_config.DatetimeColumn(
+                    "Fecha Cancelación",
+                    help="Cuándo se canceló la reserva",
+                    width="medium"
+                ),
+                "Créditos Reembolsados": st.column_config.NumberColumn(
+                    "Créditos",
+                    help="Créditos reembolsados",
+                    width="small"
+                )
+            }
+        )
+
+        # Estadísticas adicionales
+        with st.expander("📊 Estadísticas de Cancelaciones", expanded=False):
+            col1, col2, col3, col4 = st.columns(4)
+
+            with col1:
+                total_refunds = df_cancellations['credits_refunded'].sum()
+                st.metric("💰 Total Créditos Reembolsados", total_refunds)
+
+            with col2:
+                admin_cancellations = len(df_cancellations[df_cancellations['cancelled_by'] != 'system'])
+                st.metric("👤 Cancelaciones Admin", admin_cancellations)
+
+            with col3:
+                with_reason = len(df_cancellations[
+                                      (df_cancellations['cancellation_reason'].notna()) &
+                                      (df_cancellations['cancellation_reason'] != 'Sin motivo especificado')
+                                      ])
+                st.metric("📝 Con Motivo Específico", with_reason)
+
+            with col4:
+                unique_users = df_cancellations['user_email'].nunique()
+                st.metric("👥 Usuarios Afectados", unique_users)
+
+    else:
+        st.info(
+            f"📅 No hay cancelaciones registradas {'en el período seleccionado' if not show_all_cancellations else ''}")
 
 def mantener_expander_abierto_admin(item_id, accion='actualizacion', duracion=15):
     """Mantener expander abierto después de una acción administrativa"""
@@ -1325,7 +1523,6 @@ def show_config_tab():
                         st.error("❌ Error agregando usuario (puede que ya sea parte del comité o no exista)")
                 else:
                     st.error("Por favor ingresa un email válido")
-
 
 def main():
     """Función principal de la aplicación de administración"""
