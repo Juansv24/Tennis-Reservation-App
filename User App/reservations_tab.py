@@ -759,7 +759,7 @@ def confirm_reservation_callback(current_user, selected_date, selected_hours):
 
 
 def handle_reservation_submission(current_user, date, selected_hours):
-    """Handle reservation submission with ALL-OR-NOTHING transaction safety"""
+    """Handle reservation submission with slot-specific error reporting"""
     from datetime import datetime
 
     # Timestamp para mostrar cuándo ocurrió el intento
@@ -782,22 +782,21 @@ def handle_reservation_submission(current_user, date, selected_hours):
         st.error(f"❌ Créditos insuficientes. Necesitas {credits_needed} créditos, tienes {user_credits}.")
         return False
 
-    # Se reservan todas las horas o ninguna
+    # NUEVA LÓGICA: TODO-O-NADA con errores específicos por slot
     with st.spinner("Procesando reserva con transacción todo-o-nada..."):
         try:
-            # PASO 1: Verificar que TODOS los horarios estén disponibles
+            # PASO 1: Verificar disponibilidad inicial
             unavailable_hours = []
             for hour in selected_hours:
                 if not db_manager.is_hour_available(date, hour):
                     unavailable_hours.append(hour)
 
-            # Si algún horario no está disponible, fallar completamente
             if unavailable_hours:
-                unavailable_times = [format_hour(h) for h in unavailable_hours]
-                st.error(
-                    f"❌ Reserva cancelada. Los siguientes horarios ya no están disponibles: {', '.join(unavailable_times)}")
-                st.info(
-                    f"💡 Cuando seleccionas múltiples horas, todas deben estar disponibles. Intenta con otros horarios.")
+                # Mostrar errores específicos por slot
+                st.error("❌ Reserva cancelada. Los siguientes horarios ya no están disponibles:")
+                for hour in unavailable_hours:
+                    st.error(f"   • {format_hour(hour)} - Ya reservado por otro usuario")
+                st.info("💡 Cuando seleccionas múltiples horas, todas deben estar disponibles.")
 
                 # Limpiar selección
                 st.session_state.selected_hours = []
@@ -805,26 +804,32 @@ def handle_reservation_submission(current_user, date, selected_hours):
                 invalidate_reservation_cache()
                 return False
 
-            # PASO 2: Intentar crear TODAS las reservas
+            # PASO 2: Intentar crear TODAS las reservas con manejo de errores específicos
             successful_reservations = []
-            failed_hours = []
+            slot_errors = {}  # {hour: error_message}
 
             for hour in selected_hours:
-                reservation_success = create_reservation_with_transaction(
+                success, message = create_reservation_with_transaction(
                     current_user, date, hour
                 )
 
-                if reservation_success:
+                if success:
                     successful_reservations.append(hour)
                     print(f"✅ Reservado horario {hour} exitosamente")
                 else:
-                    failed_hours.append(hour)
-                    print(f"❌ Falló reserva del horario {hour}")
+                    # Parsear el mensaje de error específico
+                    if ":" in message:
+                        error_type, error_detail = message.split(":", 1)
+                        slot_errors[hour] = error_detail.strip()
+                    else:
+                        slot_errors[hour] = f"Error desconocido"
+
+                    print(f"❌ Falló reserva del horario {hour}: {message}")
                     break  # Salir inmediatamente si falla una reserva
 
-            # PASO 3: LÓGICA TODO-O-NADA
+            # PASO 3: LÓGICA TODO-O-NADA con errores específicos
             if len(successful_reservations) == len(selected_hours):
-                # ✅ ÉXITO COMPLETO - todas las horas reservadas
+                # ✅ ÉXITO COMPLETO
                 st.session_state.reservation_confirmed = True
                 st.session_state.last_reservation_data = {
                     'name': current_user['full_name'],
@@ -844,24 +849,29 @@ def handle_reservation_submission(current_user, date, selected_hours):
                 return True
 
             else:
-                # ❌ FALLO PARCIAL - REVERTIR TODO
-                st.error(f"❌ Reserva cancelada. Uno de los horarios fue tomado por otro usuario a las {attempt_time}.")
+                # ❌ FALLO PARCIAL - REVERTIR TODO CON ERRORES ESPECÍFICOS
+                st.error("❌ Reserva cancelada por conflictos:")
+
+                # Mostrar errores específicos por slot
+                for hour, error_msg in slot_errors.items():
+                    if "fue reservado por" in error_msg:
+                        st.error(f"   • {error_msg} (a las {attempt_time})")
+                    else:
+                        st.error(f"   • {error_msg}")
 
                 if len(selected_hours) > 1:
-                    st.info(
-                        "💡 Cuando seleccionas múltiples horas, todas deben completarse exitosamente. Tu reserva no se realizó.")
+                    st.info("💡 Cuando seleccionas múltiples horas, todas deben completarse exitosamente.")
 
                 # REVERTIR todas las reservas exitosas
                 print(f"🔄 Revirtiendo {len(successful_reservations)} reservas por fallo parcial...")
                 for hour in successful_reservations:
                     try:
-                        # Eliminar la reserva
+                        # Eliminar la reserva y reembolsar crédito
                         rollback_success = db_manager.delete_reservation(date.strftime('%Y-%m-%d'), hour)
                         if rollback_success:
                             print(f"🔄 Revertida reserva del horario {hour}")
 
                             # Reembolsar el crédito
-                            # Obtener usuario para reembolso
                             user_result = db_manager.client.table('users').select('id, credits').eq('email',
                                                                                                     current_user[
                                                                                                         'email']).execute()
@@ -870,12 +880,10 @@ def handle_reservation_submission(current_user, date, selected_hours):
                                 current_credits = user['credits'] or 0
                                 new_credits = current_credits + 1
 
-                                # Actualizar créditos
                                 db_manager.client.table('users').update({
                                     'credits': new_credits
                                 }).eq('id', user['id']).execute()
 
-                                # Registrar transacción de reembolso
                                 db_manager.client.table('credit_transactions').insert({
                                     'user_id': user['id'],
                                     'amount': 1,
@@ -908,46 +916,49 @@ def handle_reservation_submission(current_user, date, selected_hours):
             return False
 
 def create_reservation_with_transaction(current_user, date, hour):
-    """Create a single reservation with atomic transaction"""
+    """Create a single reservation with atomic transaction and slot-specific error handling"""
     try:
         # Check availability one more time
         if not db_manager.is_hour_available(date, hour):
-            return False
+            return False, f"slot_conflict:{format_hour(hour)} ya reservado"
 
         # Check user has credits
         user_credits = db_manager.get_user_credits(current_user['email'])
         if user_credits < 1:
-            return False
+            return False, f"insufficient_credits:{format_hour(hour)}"
 
-        # ATOMIC TRANSACTION: Both reservation and credit deduction must succeed
-
-        # Step 1: Create reservation
-        reservation_success = db_manager.save_reservation(
+        # PASO 1: Crear reserva con resolución aleatoria de conflictos
+        reservation_success, reservation_message = db_manager.save_reservation_with_random_conflict_resolution(
             date, hour, current_user['full_name'], current_user['email']
         )
 
         if not reservation_success:
-            return False
+            # Retornar error específico del slot
+            if reservation_message.startswith("slot_conflict:"):
+                winner_name = reservation_message.split(":", 1)[1]
+                return False, f"slot_conflict:{format_hour(hour)} fue reservado por {winner_name}"
+            else:
+                return False, f"error:{format_hour(hour)} - {reservation_message}"
 
-        # Step 2: Deduct credit
+        # PASO 2: Deducir crédito
         credit_success = db_manager.use_credits_for_reservation(
             current_user['email'], 1, date.strftime('%Y-%m-%d'), hour
         )
 
         if not credit_success:
-            # ROLLBACK: Delete the reservation we just created
+            # ROLLBACK: Eliminar la reserva que acabamos de crear
             rollback_success = db_manager.delete_reservation(date.strftime('%Y-%m-%d'), hour)
             if rollback_success:
-                print(f"🔄 Rollback successful for hour {hour}")
+                print(f"🔄 Rollback exitoso para horario {hour}")
             else:
-                print(f"❌ CRITICAL: Failed to rollback reservation for hour {hour}")
-            return False
+                print(f"❌ CRÍTICO: Falló rollback de reserva para horario {hour}")
+            return False, f"credit_error:{format_hour(hour)} - Error procesando créditos"
 
-        return True
+        return True, f"success:{format_hour(hour)}"
 
     except Exception as e:
-        print(f"❌ Transaction error for hour {hour}: {e}")
-        return False
+        print(f"❌ Error de transacción para horario {hour}: {e}")
+        return False, f"error:{format_hour(hour)} - Error inesperado"
 
 def send_reservation_confirmation_email(current_user, date, selected_hours):
     """Enviar email de confirmación de reserva"""
