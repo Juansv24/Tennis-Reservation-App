@@ -404,7 +404,6 @@ def show_reservation_tab():
         tipo_usuario = "VIP " if is_vip else ""
 
         st.error(f"🕐 {reservation_time_error}")
-        st.info(f"💡 Como usuario {tipo_usuario}puedes hacer reservas de {horario_permitido}")
 
         # Mostrar información pero deshabilitar funcionalidad
         show_read_only_schedule_view(current_user)
