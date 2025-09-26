@@ -380,5 +380,35 @@ class SupabaseManager:
         except Exception as e:
             print(f"⚠️ Failed to log operation: {e}")
 
+    def create_atomic_reservation(self, date, hour, name, email):
+        """Crear reserva usando stored procedure atómica"""
+        try:
+            result = self.client.rpc('atomic_reservation_request', {
+                'p_date': date.strftime('%Y-%m-%d'),
+                'p_hour': hour,
+                'p_user_email': email,
+                'p_user_name': name
+            }).execute()
+
+            if result.data:
+                response = result.data
+                return response['success'], response.get('message', response.get('error', ''))
+            else:
+                return False, "Error en la consulta"
+
+        except Exception as e:
+            return False, f"Error de conexión: {str(e)}"
+
+    def verify_both_slots_available(self, date, hours):
+        """Verificar que ambos slots estén disponibles antes de reservar"""
+        try:
+            unavailable = []
+            for hour in hours:
+                if not self.is_hour_available(date, hour):
+                    unavailable.append(hour)
+            return len(unavailable) == 0, unavailable
+        except Exception:
+            return False, hours
+
 # Instancia global
 db_manager = SupabaseManager()

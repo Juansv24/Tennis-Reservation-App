@@ -181,7 +181,6 @@ def show_user_controls_bar():
 
     with col1:
         if st.button("🔄 Actualizar Datos", type="secondary", use_container_width=True, key="user_refresh_btn"):
-            invalidate_reservation_cache()
             st.success("✅ Datos actualizados")
             st.rerun()
 
@@ -721,139 +720,94 @@ def confirm_reservation_callback(current_user, selected_date, selected_hours):
 
 
 def handle_reservation_submission(current_user, date, selected_hours):
-    """Handle reservation submission with different logic for 1 vs 2 hours"""
-    from datetime import datetime
+    """Nueva lógica simplificada con stored procedure"""
 
-    attempt_time = datetime.now().strftime("%H:%M:%S")
-
-    # Validaciones básicas
-    if not selected_hours or not current_user:
-        st.error("Error en la solicitud")
-        return False
-
-    user_credits = db_manager.get_user_credits(current_user['email'])
-    if user_credits < len(selected_hours):
-        st.error(f"❌ Créditos insuficientes. Necesitas {len(selected_hours)} créditos, tienes {user_credits}.")
-        return False
-
-    with st.spinner("Procesando reserva..."):
-        try:
-            if len(selected_hours) == 1:
-                # LÓGICA SIMPLE PARA 1 HORA - PERMITIR QUE UNO GANE
-                hour = selected_hours[0]
-                success, message = create_reservation_with_transaction(current_user, date, hour)
-
-                if success:
-                    # Éxito - mostrar confirmación
-                    st.session_state.reservation_confirmed = True
-                    st.session_state.last_reservation_data = {
-                        'name': current_user['full_name'],
-                        'date': date,
-                        'hours': [hour],
-                        'credits_used': 1
-                    }
-                    st.session_state.selected_hours = []
-                    st.session_state.selected_date = None
-                    invalidate_reservation_cache()
-                    send_reservation_confirmation_email(current_user, date, [hour])
-                    st.balloons()
-                    return True
-                else:
-                    # Fallo - otro usuario ganó
-                    st.error(f"❌ {format_hour(hour)} ya fue reservado por otro usuario a las {attempt_time}")
-                    st.info("💡 Otro usuario fue más rápido. Intenta con otro horario.")
-                    st.session_state.selected_hours = []
-                    st.session_state.selected_date = None
-                    invalidate_reservation_cache()
-                    return False
-
-            else:
-                # LÓGICA TODO-O-NADA PARA 2 HORAS
-                successful_reservations = []
-
-                for hour in selected_hours:
-                    success, message = create_reservation_with_transaction(current_user, date, hour)
-
-                    if success:
-                        successful_reservations.append(hour)
-                    else:
-                        # Si falla alguna, revertir todas las exitosas
-                        for revert_hour in successful_reservations:
-                            try:
-                                db_manager.delete_reservation(date.strftime('%Y-%m-%d'), revert_hour)
-                                # Reembolsar crédito
-                                user_result = db_manager.client.table('users').select('id, credits').eq('email',
-                                                                                                        current_user[
-                                                                                                            'email']).execute()
-                                if user_result.data:
-                                    user = user_result.data[0]
-                                    new_credits = (user['credits'] or 0) + 1
-                                    db_manager.client.table('users').update({'credits': new_credits}).eq('id', user[
-                                        'id']).execute()
-                            except Exception as e:
-                                print(f"Error en rollback: {e}")
-
-                        # Mostrar error específico
-                        st.error(f"❌ Reserva de 2 horas cancelada: {format_hour(hour)} ya fue tomado por otro usuario")
-                        st.info("💡 Para reservar 2 horas consecutivas, ambas deben estar disponibles.")
-                        st.session_state.selected_hours = []
-                        st.session_state.selected_date = None
-                        invalidate_reservation_cache()
-                        return False
-
-                # Si llegamos aquí, ambas horas se reservaron exitosamente
-                st.session_state.reservation_confirmed = True
-                st.session_state.last_reservation_data = {
-                    'name': current_user['full_name'],
-                    'date': date,
-                    'hours': successful_reservations,
-                    'credits_used': len(successful_reservations)
-                }
-                st.session_state.selected_hours = []
-                st.session_state.selected_date = None
-                invalidate_reservation_cache()
-                send_reservation_confirmation_email(current_user, date, successful_reservations)
-                st.balloons()
-                return True
-
-        except Exception as e:
-            st.error(f"❌ Error crítico: {str(e)}")
-            st.session_state.selected_hours = []
-            st.session_state.selected_date = None
-            invalidate_reservation_cache()
-            return False
-
-def create_reservation_with_transaction(current_user, date, hour):
-    """Create a single reservation - let PostgreSQL handle conflicts naturally"""
-    try:
-        # Check credits
-        user_credits = db_manager.get_user_credits(current_user['email'])
-        if user_credits < 1:
-            return False, "Créditos insuficientes"
-
-        # Try to create reservation - PostgreSQL will reject duplicates
-        reservation_success = db_manager.save_reservation(
+    if len(selected_hours) == 1:
+        # Reserva de 1 hora - usar stored procedure atómica
+        hour = selected_hours[0]
+        success, message = db_manager.create_atomic_reservation(
             date, hour, current_user['full_name'], current_user['email']
         )
 
-        if not reservation_success:
-            # Someone else got it - that's fair and normal
-            return False, "Slot tomado por otro usuario"
+        if success:
+            show_success_and_cleanup(current_user, date, [hour])
+            return True
+        else:
+            st.error(f"❌ {message}")
+            cleanup_selection()
+            return False
 
-        # Deduct credit
-        credit_success = db_manager.use_credits_for_reservation(
-            current_user['email'], 1, date.strftime('%Y-%m-%d'), hour
+    else:
+        # Reserva de 2 horas - lógica todo-o-nada
+        return handle_two_hour_reservation(current_user, date, selected_hours)
+
+
+def handle_two_hour_reservation(current_user, date, selected_hours):
+    """Manejar reserva de 2 horas con verificación previa"""
+    # Verificar que ambos slots estén disponibles
+    both_available, unavailable_hours = db_manager.verify_both_slots_available(date, selected_hours)
+
+    if not both_available:
+        error_hours = [f"{h:02d}:00" for h in unavailable_hours]
+        st.error(f"❌ Reserva cancelada. Slots no disponibles: {', '.join(error_hours)}")
+        cleanup_selection()
+        return False
+
+    # Intentar reservar ambas horas
+    successful_hours = []
+    for hour in selected_hours:
+        success, message = db_manager.create_atomic_reservation(
+            date, hour, current_user['full_name'], current_user['email']
         )
 
-        if not credit_success:
-            # Rollback only this reservation
+        if success:
+            successful_hours.append(hour)
+        else:
+            # Falló una hora - revertir las exitosas
+            revert_successful_reservations(current_user, date, successful_hours)
+            st.error(f"❌ Reserva de 2 horas cancelada: {message}")
+            cleanup_selection()
+            return False
+
+    # Ambas exitosas
+    show_success_and_cleanup(current_user, date, successful_hours)
+    return True
+
+
+def revert_successful_reservations(current_user, date, hours_to_revert):
+    """Revertir reservas exitosas cuando falla el conjunto"""
+    for hour in hours_to_revert:
+        try:
             db_manager.delete_reservation(date.strftime('%Y-%m-%d'), hour)
-            return False, "Error procesando créditos"
+            # Reembolsar crédito manualmente
+            user_result = db_manager.client.table('users').select('id, credits').eq('email',
+                                                                                    current_user['email']).execute()
+            if user_result.data:
+                user = user_result.data[0]
+                new_credits = (user['credits'] or 0) + 1
+                db_manager.client.table('users').update({'credits': new_credits}).eq('id', user['id']).execute()
+        except Exception as e:
+            print(f"Error revirtiendo reserva {hour}: {e}")
 
-        return True, "Reserva exitosa"
 
-    except Exception as e:
-        return False, f"Error: {str(e)}"
+def show_success_and_cleanup(current_user, date, hours):
+    """Mostrar éxito y limpiar estado"""
+    st.session_state.reservation_confirmed = True
+    st.session_state.last_reservation_data = {
+        'name': current_user['full_name'],
+        'date': date,
+        'hours': hours,
+        'credits_used': len(hours)
+    }
+    cleanup_selection()
+    send_reservation_confirmation_email(current_user, date, hours)
+    st.balloons()
+
+
+def cleanup_selection():
+    """Limpiar selección y refrescar datos"""
+    st.session_state.selected_hours = []
+    st.session_state.selected_date = None
 
 def send_reservation_confirmation_email(current_user, date, selected_hours):
     """Enviar email de confirmación de reserva"""
@@ -1144,23 +1098,3 @@ def init_reservation_session_state():
         st.session_state.selected_hours = []
     if 'selected_date' not in st.session_state:
         st.session_state.selected_date = None
-
-def invalidate_reservation_cache():
-    """Force cache refresh"""
-    today, tomorrow = get_today_tomorrow()
-    cache_key = f"reservations_cache_{today}_{tomorrow}"
-    cache_timestamp_key = f"cache_timestamp_{today}_{tomorrow}"
-
-    if cache_key in st.session_state:
-        del st.session_state[cache_key]
-    if cache_timestamp_key in st.session_state:
-        del st.session_state[cache_timestamp_key]
-
-def get_cache_age():
-    """Get age of current cache in seconds"""
-    today, tomorrow = get_today_tomorrow()
-    cache_timestamp_key = f"cache_timestamp_{today}_{tomorrow}"
-
-    if cache_timestamp_key in st.session_state:
-        return time.time() - st.session_state[cache_timestamp_key]
-    return float('inf')
