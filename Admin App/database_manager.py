@@ -161,23 +161,49 @@ class SupabaseManager:
             print(f"Error using credits: {e}")
             return False
 
-    def save_reservation(self, date: datetime.date, hour: int, name: str, email: str) -> bool:
-        """Guardar nueva reserva"""
+    def save_reservation_with_credit_check(self, date: datetime.date, hour: int, name: str, email: str) -> tuple[
+        bool, str]:
+        """Atomically check availability, create reservation, and deduct credit using PostgreSQL function"""
         try:
-            result = self.client.table('reservations').insert({
-                'date': date.strftime('%Y-%m-%d'),
-                'hour': hour,
-                'name': name.strip(),
-                'email': email.strip().lower(),
-                'created_at': get_colombia_now().replace(tzinfo=None).isoformat()
+            result = self.client.rpc('create_reservation_with_credit_check', {
+                'p_date': date.strftime('%Y-%m-%d'),
+                'p_hour': hour,
+                'p_name': name.strip(),
+                'p_email': email.strip().lower()
             }).execute()
-            return len(result.data) > 0
+
+            if result.data and len(result.data) > 0:
+                response = result.data[0]  # Get first row
+                return response['success'], response['message']
+            else:
+                return False, "No response from database"
+
         except Exception as e:
-            # Verificar si es error de clave duplicada
             if 'duplicate' in str(e).lower() or 'unique' in str(e).lower():
-                return False
-            st.error(f"Error de base de datos: {e}")
-            return False
+                return False, "Slot was just reserved by another user"
+            return False, f"Reservation failed: {str(e)}"
+
+    def save_multiple_reservations_atomic(self, date: datetime.date, hours: List[int], name: str, email: str) -> tuple[
+        bool, str]:
+        """Atomically reserve multiple slots using PostgreSQL function"""
+        try:
+            result = self.client.rpc('create_multiple_reservations_with_credit_check', {
+                'p_date': date.strftime('%Y-%m-%d'),
+                'p_hours': hours,
+                'p_name': name.strip(),
+                'p_email': email.strip().lower()
+            }).execute()
+
+            if result.data and len(result.data) > 0:
+                response = result.data[0]  # Get first row
+                return response['success'], response['message']
+            else:
+                return False, "No response from database"
+
+        except Exception as e:
+            if 'duplicate' in str(e).lower() or 'unique' in str(e).lower():
+                return False, "One or more slots were just reserved by another user"
+            return False, f"Reservation failed: {str(e)}"
 
     def is_hour_available(self, date: datetime.date, hour: int) -> bool:
         """Verificar si una hora está disponible"""
