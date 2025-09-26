@@ -15,7 +15,7 @@ class SmartWakeUpService:
     """Service with two daily randomized wake-up pings"""
 
     def __init__(self, app_url: str = None):
-        self.app_url = app_url or "https://reservas-tenis-colina.streamlit.app"
+        self.app_url = app_url or "https://reservas-cancha-tenis-colina.streamlit.app/"
         self.is_running = False
         self.thread = None
 

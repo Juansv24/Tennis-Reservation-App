@@ -381,27 +381,18 @@ class SupabaseManager:
             print(f"⚠️ Failed to log operation: {e}")
 
     def save_reservation_with_random_conflict_resolution(self, date, hour, name, email):
-        """Guardar reserva con resolución aleatoria de conflictos simultáneos"""
-        import random
-        import time
-
+        """Guardar reserva con manejo mejorado de conflictos simultáneos"""
         try:
-            # Generar un timestamp muy preciso + número aleatorio para desempate
-            microsecond_timestamp = time.time_ns()  # Nanosegundos
-            random_tiebreaker = random.randint(1, 1000000)
-
-            # Intentar insertar con timestamp de desempate
+            # Usar la función de reserva normal
             result = self.client.table('reservations').insert({
                 'date': date.strftime('%Y-%m-%d'),
                 'hour': hour,
                 'name': name.strip(),
                 'email': email.strip().lower(),
-                'created_at': get_colombia_now().isoformat(),
-                'conflict_resolution_timestamp': microsecond_timestamp,
-                'random_tiebreaker': random_tiebreaker
+                'created_at': get_colombia_now().isoformat()
             }).execute()
 
-            return len(result.data) > 0, "Reserva exitosa"
+            return True, "Reserva exitosa"
 
         except Exception as e:
             error_str = str(e).lower()
@@ -411,7 +402,7 @@ class SupabaseManager:
                 try:
                     # Buscar la reserva que quedó (la ganadora)
                     winner_result = self.client.table('reservations').select(
-                        'name, email, conflict_resolution_timestamp, random_tiebreaker'
+                        'name, email'
                     ).eq('date', date.strftime('%Y-%m-%d')).eq('hour', hour).execute()
 
                     if winner_result.data:
@@ -419,8 +410,8 @@ class SupabaseManager:
                         winner_email = winner['email']
 
                         if winner_email == email.strip().lower():
-                            # Este usuario ganó de alguna manera
-                            return True, "Reserva exitosa (ganaste el desempate)"
+                            # Este usuario ganó de alguna manera (llegó primero)
+                            return True, "Reserva exitosa"
                         else:
                             # Otro usuario ganó
                             return False, f"slot_conflict:{winner['name']}"
@@ -431,7 +422,6 @@ class SupabaseManager:
                     return False, "slot_conflict:Otro usuario"
             else:
                 return False, f"Error de base de datos: {str(e)}"
-
 
 # Instancia global
 db_manager = SupabaseManager()
