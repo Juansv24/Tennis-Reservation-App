@@ -916,48 +916,35 @@ def handle_reservation_submission(current_user, date, selected_hours):
             return False
 
 def create_reservation_with_transaction(current_user, date, hour):
-    """Create a single reservation with atomic transaction and slot-specific error handling"""
+    """Create a single reservation with basic conflict handling"""
     try:
-        # Check availability one more time
-        if not db_manager.is_hour_available(date, hour):
-            return False, f"slot_conflict:{format_hour(hour)} ya reservado"
-
-        # Check user has credits
+        # Check user has credits first
         user_credits = db_manager.get_user_credits(current_user['email'])
         if user_credits < 1:
             return False, f"insufficient_credits:{format_hour(hour)}"
 
-        # PASO 1: Crear reserva con resolución aleatoria de conflictos
-        reservation_success, reservation_message = db_manager.save_reservation_with_random_conflict_resolution(
+        # Try to create reservation using the ORIGINAL method
+        reservation_success = db_manager.save_reservation(
             date, hour, current_user['full_name'], current_user['email']
         )
 
         if not reservation_success:
-            # Retornar error específico del slot
-            if reservation_message.startswith("slot_conflict:"):
-                winner_name = reservation_message.split(":", 1)[1]
-                return False, f"slot_conflict:{format_hour(hour)} fue reservado por {winner_name}"
-            else:
-                return False, f"error:{format_hour(hour)} - {reservation_message}"
+            # Someone else got it first - that's fair
+            return False, f"slot_conflict:{format_hour(hour)} ya fue tomado por otro usuario"
 
-        # PASO 2: Deducir crédito
+        # Deduct credit only if reservation succeeded
         credit_success = db_manager.use_credits_for_reservation(
             current_user['email'], 1, date.strftime('%Y-%m-%d'), hour
         )
 
         if not credit_success:
-            # ROLLBACK: Eliminar la reserva que acabamos de crear
-            rollback_success = db_manager.delete_reservation(date.strftime('%Y-%m-%d'), hour)
-            if rollback_success:
-                print(f"🔄 Rollback exitoso para horario {hour}")
-            else:
-                print(f"❌ CRÍTICO: Falló rollback de reserva para horario {hour}")
+            # ROLLBACK - delete the reservation we just made
+            db_manager.delete_reservation(date.strftime('%Y-%m-%d'), hour)
             return False, f"credit_error:{format_hour(hour)} - Error procesando créditos"
 
         return True, f"success:{format_hour(hour)}"
 
     except Exception as e:
-        print(f"❌ Error de transacción para horario {hour}: {e}")
         return False, f"error:{format_hour(hour)} - Error inesperado"
 
 def send_reservation_confirmation_email(current_user, date, selected_hours):
