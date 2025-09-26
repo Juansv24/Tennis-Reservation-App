@@ -413,55 +413,17 @@ def show_reservation_tab():
     today, tomorrow = get_today_tomorrow()
     current_hour = get_current_hour()
 
-    # CACHING SYSTEM - Cache data for 30 seconds
-    cache_key = f"reservations_cache_{today}_{tomorrow}"
-    cache_timestamp_key = f"cache_timestamp_{today}_{tomorrow}"
+    # CONSULTA DIRECTA - Sin caché
+    with st.spinner("Cargando disponibilidad..."):
+        summary = db_manager.get_date_reservations_summary([today, tomorrow], current_user['email'])
 
-    # Check if we need to refresh cache (every 30 seconds)
-    current_time = time.time()
-    should_refresh = (
-            cache_key not in st.session_state or
-            cache_timestamp_key not in st.session_state or
-            current_time - st.session_state[cache_timestamp_key] > 30
-    )
+        today_str = today.strftime('%Y-%m-%d')
+        tomorrow_str = tomorrow.strftime('%Y-%m-%d')
 
-    if should_refresh:
-        with st.spinner("Actualizando disponibilidad..."):
-            # Single database call instead of 4 separate calls
-            summary = db_manager.get_date_reservations_summary([today, tomorrow], current_user['email'])
-
-            today_str = today.strftime('%Y-%m-%d')
-            tomorrow_str = tomorrow.strftime('%Y-%m-%d')
-
-            today_reservations = summary['reservation_names'].get(today_str, {})
-            tomorrow_reservations = summary['reservation_names'].get(tomorrow_str, {})
-            user_today_reservations = summary['user_reservations'].get(today_str, [])
-            user_tomorrow_reservations = summary['user_reservations'].get(tomorrow_str, [])
-
-        # Cache the data (same structure as before)
-        st.session_state[cache_key] = {
-            'today_reservations': today_reservations,
-            'tomorrow_reservations': tomorrow_reservations,
-            'user_today_reservations': user_today_reservations,
-            'user_tomorrow_reservations': user_tomorrow_reservations
-        }
-        st.session_state[cache_timestamp_key] = current_time
-
-        # Show cache refresh indicator
-        #st.success("✅ Datos actualizados", icon="🔄")
-
-    else:
-        # Use cached data (fast)
-        cached_data = st.session_state[cache_key]
-        today_reservations = cached_data['today_reservations']
-        tomorrow_reservations = cached_data['tomorrow_reservations']
-        user_today_reservations = cached_data['user_today_reservations']
-        user_tomorrow_reservations = cached_data['user_tomorrow_reservations']
-
-    # Show cache age info (optional - for debugging)
-    cache_age = get_cache_age()
-    if cache_age < 30:
-        st.caption(f"🕐 Datos actualizados hace {int(cache_age)}s")
+        today_reservations = summary['reservation_names'].get(today_str, {})
+        tomorrow_reservations = summary['reservation_names'].get(tomorrow_str, {})
+        user_today_reservations = summary['user_reservations'].get(today_str, [])
+        user_tomorrow_reservations = summary['user_reservations'].get(tomorrow_str, [])
 
     # Mostrar barra de controles
     show_user_controls_bar()
@@ -892,7 +854,7 @@ def create_reservation_with_transaction(current_user, date, hour):
 
     except Exception as e:
         return False, f"Error: {str(e)}"
-    
+
 def send_reservation_confirmation_email(current_user, date, selected_hours):
     """Enviar email de confirmación de reserva"""
     try:
@@ -1088,17 +1050,9 @@ def handle_time_slot_click(hour, date, current_user):
     today, tomorrow = get_today_tomorrow()
     cache_key = f"reservations_cache_{today}_{tomorrow}"
 
-    if cache_key in st.session_state:
-        cached_data = st.session_state[cache_key]
-        if date == today:
-            user_existing_hours = cached_data['user_today_reservations']
-        else:
-            user_existing_hours = cached_data['user_tomorrow_reservations']
-    else:
-        # Fallback if no cache (shouldn't happen) - use optimized method
-        summary = db_manager.get_date_reservations_summary([date], current_user['email'])
-        date_str = date.strftime('%Y-%m-%d')
-        user_existing_hours = summary['user_reservations'].get(date_str, [])
+    summary = db_manager.get_date_reservations_summary([date], current_user['email'])
+    date_str = date.strftime('%Y-%m-%d')
+    user_existing_hours = summary['user_reservations'].get(date_str, [])
 
     # Si es una fecha diferente, limpiar selección anterior
     if selected_date is not None and selected_date != date:
