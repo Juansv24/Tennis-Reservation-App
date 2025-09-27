@@ -390,27 +390,14 @@ class SupabaseManager:
                 'p_user_name': name
             }).execute()
 
-            if result.data:
-                # El resultado viene como string JSON, no como objeto
-                import json
-
-                # Si result.data es una lista, tomar el primer elemento
-                response_data = result.data[0] if isinstance(result.data, list) else result.data
-
-                # Si es string, parsearlo como JSON
-                if isinstance(response_data, str):
-                    response = json.loads(response_data)
-                else:
-                    response = response_data
-
-                return response['success'], response.get('message', response.get('error', ''))
+            if result.data and len(result.data) > 0:
+                response = result.data[0]
+                return response['success'], response['message']
             else:
                 return False, "Sin respuesta de la base de datos"
 
-        except json.JSONDecodeError as e:
-            return False, f"Error parsing respuesta: {str(e)}"
         except Exception as e:
-            return False, f"Error de conexión: {str(e)}"
+            return False, f"Error: {str(e)}"
 
     def verify_both_slots_available(self, date, hours):
         """Verificar que ambos slots estén disponibles antes de reservar"""
