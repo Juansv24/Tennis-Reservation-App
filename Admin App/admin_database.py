@@ -6,7 +6,7 @@ VERSIÓN ACTUALIZADA con formateo de fechas y horas en zona horaria de Colombia
 from database_manager import db_manager
 from timezone_utils import get_colombia_today, COLOMBIA_TZ
 from datetime import datetime, timedelta
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Tuple
 import pytz
 
 class AdminDatabaseManager:
@@ -1120,6 +1120,78 @@ class AdminDatabaseManager:
 
         except Exception as e:
             print(f"Error getting cancellation history: {e}")
+            return []
+
+    def get_maintenance_slots(self, start_date: str = None, end_date: str = None) -> List[Dict]:
+        """Obtener horarios de mantenimiento"""
+        try:
+            query = self.client.table('maintenance_slots').select('*')
+
+            if start_date:
+                query = query.gte('date', start_date)
+            if end_date:
+                query = query.lte('date', end_date)
+
+            result = query.order('date').order('hour').execute()
+
+            # Formatear fechas
+            for slot in result.data:
+                if 'created_at' in slot:
+                    slot['created_at'] = self._format_colombia_datetime(slot['created_at'])
+
+            return result.data
+        except Exception as e:
+            print(f"Error getting maintenance slots: {e}")
+            return []
+
+    def add_maintenance_slot(self, date: str, hour: int, reason: str, admin_username: str) -> Tuple[bool, str]:
+        """Agregar horario de mantenimiento"""
+        try:
+            # Verificar si ya existe una reserva
+            existing_reservation = self.client.table('reservations').select('id, email').eq(
+                'date', date
+            ).eq('hour', hour).execute()
+
+            if existing_reservation.data:
+                return False, "Ya existe una reserva en este horario"
+
+            # Verificar si ya existe mantenimiento
+            existing_maintenance = self.client.table('maintenance_slots').select('id').eq(
+                'date', date
+            ).eq('hour', hour).execute()
+
+            if existing_maintenance.data:
+                return False, "Ya existe mantenimiento programado en este horario"
+
+            # Insertar mantenimiento
+            result = self.client.table('maintenance_slots').insert({
+                'date': date,
+                'hour': hour,
+                'reason': reason or 'Mantenimiento programado',
+                'created_by': admin_username,
+                'created_at': datetime.now().isoformat()
+            }).execute()
+
+            return len(result.data) > 0, "Mantenimiento programado exitosamente"
+        except Exception as e:
+            print(f"Error adding maintenance slot: {e}")
+            return False, f"Error: {str(e)}"
+
+    def remove_maintenance_slot(self, maintenance_id: int) -> bool:
+        """Eliminar horario de mantenimiento"""
+        try:
+            result = self.client.table('maintenance_slots').delete().eq('id', maintenance_id).execute()
+            return len(result.data) > 0
+        except Exception as e:
+            print(f"Error removing maintenance slot: {e}")
+            return False
+
+    def get_maintenance_for_date(self, date: str) -> List[int]:
+        """Obtener horas de mantenimiento para una fecha específica"""
+        try:
+            result = self.client.table('maintenance_slots').select('hour').eq('date', date).execute()
+            return [row['hour'] for row in result.data]
+        except Exception:
             return []
 
 # Instancia global

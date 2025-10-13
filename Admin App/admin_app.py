@@ -6,10 +6,10 @@ Gestión de reservas, usuarios y créditos
 import streamlit as st
 from admin_auth import admin_auth_manager, require_admin_auth
 from admin_database import admin_db_manager
-from timezone_utils import get_colombia_now
+from timezone_utils import get_colombia_now, get_colombia_today
 from email_config import email_manager
 import pandas as pd
-import datetime
+
 
 # Colores US Open
 US_OPEN_BLUE = "#001854"
@@ -260,7 +260,7 @@ def show_admin_dashboard():
 
     tab = st.segmented_control(
         "Navegación Admin",
-        ["📊 Dashboard", "📅 Reservas", "👥 Usuarios", "💰 Créditos", "⚙️ Config"],
+        ["📊 Dashboard", "📅 Reservas", "👥 Usuarios", "💰 Créditos", "🔧 Mantenimiento", "⚙️ Config"],  # AGREGADO
         selection_mode="single",
         default="📊 Dashboard",
         label_visibility="collapsed",
@@ -277,8 +277,6 @@ def show_admin_dashboard():
         # Guardar pestaña actual
         st.session_state.admin_current_tab = tab
 
-
-
     # Mostrar sección correspondiente
     if tab == "📊 Dashboard":
         show_dashboard_tab()
@@ -288,6 +286,8 @@ def show_admin_dashboard():
         show_users_management_tab()
     elif tab == "💰 Créditos":
         show_credits_management_tab()
+    elif tab == "🔧 Mantenimiento":  # NUEVO
+        show_maintenance_tab()
     elif tab == "⚙️ Config":
         show_config_tab()
 
@@ -1523,6 +1523,150 @@ def show_config_tab():
                         st.error("❌ Error agregando usuario (puede que ya sea parte del comité o no exista)")
                 else:
                     st.error("Por favor ingresa un email válido")
+
+
+def show_maintenance_tab():
+    """Mostrar pestaña de gestión de mantenimiento"""
+    st.subheader("🔧 Gestión de Mantenimiento de Cancha")
+
+    st.markdown("""
+    <div style="
+        background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+        border: 2px solid #dee2e6;
+        border-radius: 15px;
+        padding: 20px;
+        margin: 20px 0;
+        text-align: center;
+    ">
+        <h3 style="margin: 0; color: #495057;">🔧 Programar Mantenimiento</h3>
+        <p style="margin: 10px 0 0 0; color: #6c757d;">Bloquea horarios cuando la cancha no esté disponible</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Formulario para agregar mantenimiento
+    col1, col2, col3 = st.columns([1, 2, 1])
+
+    with col2:
+        with st.form("add_maintenance_form", clear_on_submit=True):
+            st.markdown("**Programar nuevo mantenimiento:**")
+
+            # Selector de fecha
+            maintenance_date = st.date_input(
+                "Fecha de mantenimiento",
+                min_value=get_colombia_today(),
+                help="Selecciona la fecha para el mantenimiento"
+            )
+
+            # Selector de hora
+            maintenance_hour = st.selectbox(
+                "Hora de inicio",
+                options=list(range(6, 22)),
+                format_func=lambda x: f"{x:02d}:00 - {x + 1:02d}:00"
+            )
+
+            # Motivo
+            maintenance_reason = st.text_area(
+                "Motivo del mantenimiento",
+                placeholder="Ej: Limpieza profunda, reparación de superficie, pintura, etc.",
+                max_chars=200
+            )
+
+            # Botón de submit
+            col_btn1, col_btn2, col_btn3 = st.columns([1, 2, 1])
+            with col_btn2:
+                submit_button = st.form_submit_button(
+                    "🔧 Programar Mantenimiento",
+                    type="primary",
+                    use_container_width=True
+                )
+
+            if submit_button:
+                admin_user = st.session_state.get('admin_user', {})
+
+                success, message = admin_db_manager.add_maintenance_slot(
+                    maintenance_date.strftime('%Y-%m-%d'),
+                    maintenance_hour,
+                    maintenance_reason.strip() if maintenance_reason else "Mantenimiento programado",
+                    admin_user.get('username', 'admin')
+                )
+
+                if success:
+                    st.success(f"✅ {message}")
+                    st.balloons()
+                    import time
+                    time.sleep(1)
+                    st.rerun()
+                else:
+                    st.error(f"❌ {message}")
+
+    st.markdown("---")
+
+    # Mostrar mantenimientos programados
+    st.subheader("📋 Mantenimientos Programados")
+
+    # Controles
+    col1, col2 = st.columns([2, 1])
+
+    with col1:
+        days_range = st.selectbox(
+            "Mostrar mantenimientos de:",
+            options=[7, 15, 30, 60, 90],
+            index=1,
+            format_func=lambda x: f"Próximos {x} días"
+        )
+
+    with col2:
+        if st.button("🔄 Actualizar", key="refresh_maintenance"):
+            st.cache_data.clear()
+            st.success("✅ Actualizado")
+
+    # Obtener mantenimientos
+    from datetime import timedelta
+    start_date = get_colombia_today().strftime('%Y-%m-%d')
+    end_date = (get_colombia_today() + timedelta(days=days_range)).strftime('%Y-%m-%d')
+
+    maintenance_slots = admin_db_manager.get_maintenance_slots(start_date, end_date)
+
+    if maintenance_slots:
+        st.info(f"📊 Total de mantenimientos programados: {len(maintenance_slots)}")
+
+        # Mostrar cada mantenimiento
+        for slot in maintenance_slots:
+            # Formatear fecha
+            try:
+                from datetime import datetime
+                date_obj = datetime.strptime(slot['date'], '%Y-%m-%d')
+                formatted_date = date_obj.strftime('%d/%m/%Y')
+                day_name = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'][date_obj.weekday()]
+                date_display = f"{day_name} {formatted_date}"
+            except:
+                date_display = slot['date']
+
+            hour_display = f"{slot['hour']:02d}:00 - {slot['hour'] + 1:02d}:00"
+
+            with st.expander(f"🔧 {date_display} • {hour_display}", expanded=False):
+                col1, col2 = st.columns([3, 1])
+
+                with col1:
+                    st.markdown(f"""
+                    **📅 Fecha:** {date_display}  
+                    **🕐 Hora:** {hour_display}  
+                    **📝 Motivo:** {slot.get('reason', 'No especificado')}  
+                    **👤 Programado por:** {slot.get('created_by', 'N/A')}  
+                    **📆 Creado:** {slot.get('created_at', 'N/A')}
+                    """)
+
+                with col2:
+                    if st.button("🗑️ Eliminar", key=f"delete_maintenance_{slot['id']}"):
+                        if admin_db_manager.remove_maintenance_slot(slot['id']):
+                            st.success("✅ Mantenimiento eliminado")
+                            import time
+                            time.sleep(1)
+                            st.rerun()
+                        else:
+                            st.error("❌ Error al eliminar")
+    else:
+        st.info("📅 No hay mantenimientos programados en este período")
 
 def main():
     """Función principal de la aplicación de administración"""

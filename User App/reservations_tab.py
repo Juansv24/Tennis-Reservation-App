@@ -309,7 +309,28 @@ def show_read_only_day_schedule(date, reservations_dict, current_user):
     """Mostrar horarios en modo de solo lectura"""
     user_reservations = db_manager.get_user_reservations_for_date(current_user['email'], date)
 
+    maintenance_hours = db_manager.get_maintenance_slots_for_date(date)
+
     for hour in COURT_HOURS:
+
+        # Revisar si es hora de mantenimiento
+        if hour in maintenance_hours:
+            st.markdown(f"""
+                        <div style="
+                            background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+                            border: 2px solid #bd2130;
+                            color: white;
+                            padding: 10px;
+                            border-radius: 6px;
+                            text-align: center;
+                            margin: 5px 0;
+                            cursor: not-allowed;
+                            font-weight: bold;
+                        ">
+                            {format_hour(hour)}<br>🔧 Mantenimiento
+                        </div>
+                        """, unsafe_allow_html=True)
+            continue
 
         # Revisa si es hora de escuela de tenis
         if is_tennis_school_hour(date, hour):
@@ -899,7 +920,29 @@ def show_day_schedule(date, reservations_dict, current_user, is_today=False, cur
     selected_date = st.session_state.get('selected_date', None)
     user_reservations = db_manager.get_user_reservations_for_date(current_user['email'], date)
 
+    # Obtener horarios de mantenimiento
+    maintenance_hours = db_manager.get_maintenance_slots_for_date(date)
+
     for hour in COURT_HOURS:
+
+        # Revisar si es hora de mantenimiento
+        if hour in maintenance_hours:
+            st.markdown(f"""
+                        <div style="
+                            background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+                            border: 2px solid #bd2130;
+                            color: white;
+                            padding: 10px;
+                            border-radius: 6px;
+                            text-align: center;
+                            margin: 5px 0;
+                            cursor: not-allowed;
+                            font-weight: bold;
+                        ">
+                            {format_hour(hour)}<br>🔧 Mantenimiento
+                        </div>
+                        """, unsafe_allow_html=True)
+            continue
 
         # Revisar si es hora de escuela de tenis
         if is_tennis_school_hour(date, hour):

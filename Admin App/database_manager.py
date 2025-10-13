@@ -410,5 +410,17 @@ class SupabaseManager:
         except Exception:
             return False, hours
 
+    def get_maintenance_slots_for_date(self, date: datetime.date) -> List[int]:
+        """Obtener horarios de mantenimiento para una fecha"""
+        try:
+            result = self.client.table('maintenance_slots').select('hour').eq(
+                'date', date.strftime('%Y-%m-%d')
+            ).execute()
+            return [row['hour'] for row in result.data]
+        except Exception:
+            return []
+
+
+
 # Instancia global
 db_manager = SupabaseManager()
