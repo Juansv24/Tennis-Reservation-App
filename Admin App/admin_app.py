@@ -339,16 +339,34 @@ def show_dashboard_tab():
     col1, col2 = st.columns(2)
 
     with col1:
-        import pandas as pd
-        st.subheader("📈 Reservas por Día (Últimos 7 días)")
-        daily_stats = admin_db_manager.get_daily_reservation_stats()
-        if daily_stats:
-            df_daily = pd.DataFrame(daily_stats)
-            st.bar_chart(df_daily.set_index('date')['count'])
+        st.subheader("📊 Distribución por Día de la Semana")
+        day_stats = admin_db_manager.get_reservations_by_day_of_week()
+
+        if day_stats['counts'] and sum(day_stats['counts']) > 0:
+            import plotly.graph_objects as go
+
+            fig = go.Figure(data=[go.Pie(
+                labels=day_stats['days'],
+                values=day_stats['counts'],
+                hole=0.4,
+                textinfo='label+percent',
+                textposition='inside',
+                hovertemplate='<b>%{label}</b><br>%{value} reservas<br>%{percent}<extra></extra>',
+                marker=dict(colors=['#001854', '#2478CC', '#FFD400', '#FF6B6B', '#4ECDC4', '#95E1D3', '#F38181'])
+            )])
+
+            fig.update_layout(
+                showlegend=False,
+                height=400,
+                margin=dict(t=0, b=0, l=0, r=0)
+            )
+
+            st.plotly_chart(fig, use_container_width=True)
         else:
             st.info("No hay datos de reservas disponibles")
 
     with col2:
+        import pandas as pd
         st.subheader("⏰ Horas Más Populares")
         hourly_stats = admin_db_manager.get_hourly_reservation_stats()
         if hourly_stats:
@@ -821,11 +839,12 @@ def show_user_detailed_info(user):
             else:
                 st.rerun()
 
+
 def show_users_management_tab():
-    """Gestión mejorada de usuarios"""
+    """Gestión mejorada de usuarios con vista de base de datos siempre visible"""
     st.subheader("👥 Gestión de Usuarios")
 
-    # Buscador
+    # Buscador en la parte superior
     col1, col2 = st.columns([3, 1])
 
     with col1:
@@ -842,17 +861,67 @@ def show_users_management_tab():
                 else:
                     st.warning("No se encontraron usuarios")
 
-    # Mostrar usuarios encontrados
+    # Mostrar usuarios encontrados (si hay búsqueda)
     if 'found_users' in st.session_state and st.session_state.found_users:
-        st.write("**Usuarios encontrados:**")
+        st.markdown("### 🔍 Resultados de Búsqueda")
 
         for user in st.session_state.found_users:
-            # Verificar si debe mantenerse abierto
             expandido = verificar_expander_abierto_admin(user['id'])
 
             with st.expander(f"👤 {user['full_name']} ({user['email']})", expanded=expandido):
                 show_user_detailed_info(user)
 
+        st.divider()
+
+    # Base de datos completa
+    st.markdown("### 📊 Base de Usuarios Registrados")
+
+    with st.spinner("Cargando datos de usuarios..."):
+        users_stats = admin_db_manager.get_users_detailed_statistics()
+
+    if users_stats:
+        import pandas as pd
+
+        df = pd.DataFrame(users_stats)
+        df = df.rename(columns={
+            'name': 'Nombre',
+            'email': 'Email',
+            'registered_date': 'Fecha Registro',
+            'total_credits_bought': 'Créditos Comprados',
+            'total_reservations': 'Reservas Totales',
+            'favorite_day': 'Día Favorito',
+            'favorite_time': 'Hora Favorita'
+        })
+
+        # Display with filters
+        st.dataframe(
+            df,
+            use_container_width=True,
+            height=600,
+            hide_index=True,
+            column_config={
+                "Email": st.column_config.TextColumn("Email", width="medium"),
+                "Nombre": st.column_config.TextColumn("Nombre", width="medium"),
+                "Créditos Comprados": st.column_config.NumberColumn("Créditos Comprados", format="%d 💰"),
+                "Reservas Totales": st.column_config.NumberColumn("Reservas Totales", format="%d 🎾"),
+            }
+        )
+
+        # Summary stats
+        st.markdown("### 📈 Estadísticas Generales")
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            st.metric("Total Usuarios", len(users_stats))
+        with col2:
+            st.metric("Total Créditos Vendidos", sum(u['total_credits_bought'] for u in users_stats))
+        with col3:
+            st.metric("Total Reservas", sum(u['total_reservations'] for u in users_stats))
+        with col4:
+            avg_reservations = sum(u['total_reservations'] for u in users_stats) / len(
+                users_stats) if users_stats else 0
+            st.metric("Promedio Reservas/Usuario", f"{avg_reservations:.1f}")
+    else:
+        st.info("No hay usuarios registrados")
 
 def show_credits_management_tab():
     """Gestión de créditos"""

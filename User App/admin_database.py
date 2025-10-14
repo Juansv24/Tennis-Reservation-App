@@ -151,6 +151,32 @@ class AdminDatabaseManager:
                 'total_credits_issued': 0
             }
 
+    def get_reservations_by_day_of_week(self) -> Dict:
+        """Get all reservations grouped by day of week"""
+        try:
+            result = self.client.table('reservations').select('date').execute()
+
+            # Count by day of week
+            day_counts = {0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0}  # Mon-Sun
+
+            for reservation in result.data:
+                date_obj = datetime.strptime(reservation['date'], '%Y-%m-%d').date()
+                day_of_week = date_obj.weekday()
+                day_counts[day_of_week] += 1
+
+            # Convert to readable format
+            days_spanish = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo']
+            total = sum(day_counts.values())
+
+            return {
+                'days': [days_spanish[i] for i in range(7)],
+                'counts': [day_counts[i] for i in range(7)],
+                'percentages': [round((day_counts[i] / total * 100), 1) if total > 0 else 0 for i in range(7)]
+            }
+        except Exception as e:
+            print(f"Error getting day of week stats: {e}")
+            return {'days': [], 'counts': [], 'percentages': []}
+
     def search_users_for_reservations(self, search_term: str) -> List[Dict]:
         """Buscar usuarios por nombre o email para gestión de reservas"""
         try:
@@ -177,6 +203,99 @@ class AdminDatabaseManager:
 
             return result.data
         except Exception:
+            return []
+
+    def get_users_detailed_statistics(self) -> List[Dict]:
+        """Get detailed statistics for all users"""
+        try:
+            # Get all users with their IDs
+            users_result = self.client.table('users').select('id, email, full_name, created_at, credits').execute()
+
+            # Create a dictionary to map user_id to email
+            user_id_to_email = {user['id']: user['email'] for user in users_result.data}
+            user_id_to_data = {user['id']: user for user in users_result.data}
+
+            # Get all reservations
+            reservations_result = self.client.table('reservations').select('email, date, hour').execute()
+
+            # Get all credit transactions using user_id
+            credits_transactions = self.client.table('credit_transactions').select(
+                'user_id, amount, transaction_type').execute()
+
+            # Calculate total credits bought per user (by user_id first, then convert to email)
+            credits_by_user_id = {}
+            for transaction in credits_transactions.data:
+                user_id = transaction['user_id']
+                # Only count purchases (admin_grant, purchase, etc.)
+                if transaction['transaction_type'] in ['admin_grant', 'purchase', 'bonus']:
+                    if user_id not in credits_by_user_id:
+                        credits_by_user_id[user_id] = 0
+                    credits_by_user_id[user_id] += transaction['amount']
+
+            # Convert to email-based dictionary
+            credits_dict = {}
+            for user_id, total_credits in credits_by_user_id.items():
+                if user_id in user_id_to_email:
+                    email = user_id_to_email[user_id]
+                    credits_dict[email] = total_credits
+
+            # Process reservations by user
+            user_reservations = {}
+            for res in reservations_result.data:
+                email = res['email']
+                if email not in user_reservations:
+                    user_reservations[email] = {
+                        'total': 0,
+                        'days': [],
+                        'hours': []
+                    }
+                user_reservations[email]['total'] += 1
+
+                # Add day of week
+                date_obj = datetime.strptime(res['date'], '%Y-%m-%d').date()
+                user_reservations[email]['days'].append(date_obj.weekday())
+
+                # Add hour
+                user_reservations[email]['hours'].append(res['hour'])
+
+            # Build final user stats
+            days_spanish = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo']
+
+            user_stats = []
+            for user in users_result.data:
+                email = user['email']
+                res_data = user_reservations.get(email, {'total': 0, 'days': [], 'hours': []})
+
+                # Calculate favorite day
+                if res_data['days']:
+                    from collections import Counter
+                    most_common_day = Counter(res_data['days']).most_common(1)[0][0]
+                    favorite_day = days_spanish[most_common_day]
+                else:
+                    favorite_day = 'N/A'
+
+                # Calculate favorite time
+                if res_data['hours']:
+                    from collections import Counter
+                    most_common_hour = Counter(res_data['hours']).most_common(1)[0][0]
+                    favorite_time = f"{most_common_hour:02d}:00"
+                else:
+                    favorite_time = 'N/A'
+
+                user_stats.append({
+                    'email': email,
+                    'name': user['full_name'],
+                    'registered_date': user['created_at'][:10] if user['created_at'] else 'N/A',
+                    'total_credits_bought': credits_dict.get(email, 0),
+                    'total_reservations': res_data['total'],
+                    'favorite_day': favorite_day,
+                    'favorite_time': favorite_time
+                })
+
+            return user_stats
+
+        except Exception as e:
+            print(f"Error getting detailed user statistics: {e}")
             return []
 
     def cancel_reservation_with_notification(self, reservation_id: int, user_email: str,
