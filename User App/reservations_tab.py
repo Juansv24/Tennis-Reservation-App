@@ -764,52 +764,23 @@ def handle_reservation_submission(current_user, date, selected_hours):
 
 
 def handle_two_hour_reservation(current_user, date, selected_hours):
-    """Manejar reserva de 2 horas con verificación previa"""
-    # Verificar que ambos slots estén disponibles
-    both_available, unavailable_hours = db_manager.verify_both_slots_available(date, selected_hours)
+    """Manejar reserva de 2 horas con stored procedure atómica"""
 
-    if not both_available:
-        error_hours = [f"{h:02d}:00" for h in unavailable_hours]
-        st.error(f"❌ Reserva cancelada. Slots no disponibles: {', '.join(error_hours)}")
+    # Sort hours to ensure correct order
+    hour1, hour2 = sorted(selected_hours)
+
+    # Single atomic call for both reservations
+    success, message = db_manager.create_atomic_double_reservation(
+        date, hour1, hour2, current_user['full_name'], current_user['email']
+    )
+
+    if success:
+        show_success_and_cleanup(current_user, date, selected_hours)
+        return True
+    else:
+        st.error(f"❌ {message}")
         cleanup_selection()
         return False
-
-    # Intentar reservar ambas horas
-    successful_hours = []
-    for hour in selected_hours:
-        success, message = db_manager.create_atomic_reservation(
-            date, hour, current_user['full_name'], current_user['email']
-        )
-
-        if success:
-            successful_hours.append(hour)
-        else:
-            # Falló una hora - revertir las exitosas
-            revert_successful_reservations(current_user, date, successful_hours)
-            st.error(f"❌ Reserva de 2 horas cancelada: {message}")
-            cleanup_selection()
-            return False
-
-    # Ambas exitosas
-    show_success_and_cleanup(current_user, date, successful_hours)
-    return True
-
-
-def revert_successful_reservations(current_user, date, hours_to_revert):
-    """Revertir reservas exitosas cuando falla el conjunto"""
-    for hour in hours_to_revert:
-        try:
-            db_manager.delete_reservation(date.strftime('%Y-%m-%d'), hour)
-            # Reembolsar crédito manualmente
-            user_result = db_manager.client.table('users').select('id, credits').eq('email',
-                                                                                    current_user['email']).execute()
-            if user_result.data:
-                user = user_result.data[0]
-                new_credits = (user['credits'] or 0) + 1
-                db_manager.client.table('users').update({'credits': new_credits}).eq('id', user['id']).execute()
-        except Exception as e:
-            print(f"Error revirtiendo reserva {hour}: {e}")
-
 
 def show_success_and_cleanup(current_user, date, hours):
     """Mostrar éxito y limpiar estado"""

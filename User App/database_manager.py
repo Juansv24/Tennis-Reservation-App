@@ -399,16 +399,25 @@ class SupabaseManager:
         except Exception as e:
             return False, f"Error: {str(e)}"
 
-    def verify_both_slots_available(self, date, hours):
-        """Verificar que ambos slots estén disponibles antes de reservar"""
+    def create_atomic_double_reservation(self, date, hour1, hour2, name, email):
+        """Crear reserva de 2 horas usando stored procedure atómica"""
         try:
-            unavailable = []
-            for hour in hours:
-                if not self.is_hour_available(date, hour):
-                    unavailable.append(hour)
-            return len(unavailable) == 0, unavailable
-        except Exception:
-            return False, hours
+            result = self.client.rpc('atomic_double_reservation_request', {
+                'p_date': date.strftime('%Y-%m-%d'),
+                'p_hour1': hour1,
+                'p_hour2': hour2,
+                'p_user_email': email,
+                'p_user_name': name
+            }).execute()
+
+            if result.data and len(result.data) > 0:
+                response = result.data[0]
+                return response['success'], response['message']
+            else:
+                return False, "Sin respuesta de la base de datos"
+
+        except Exception as e:
+            return False, f"Error: {str(e)}"
 
     def get_maintenance_slots_for_date(self, date: datetime.date) -> List[int]:
         """Obtener horarios de mantenimiento para una fecha"""
