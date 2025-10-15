@@ -425,6 +425,11 @@ def show_reservation_tab():
         st.error("Error de autenticación. Por favor actualiza la página.")
         return
 
+    # Si hay una reserva confirmada, mostrar solo el mensaje de éxito
+    if st.session_state.get('reservation_confirmed', False):
+        show_reservation_success_message()
+        return
+
     # Verificar si puede hacer reservas en este momento
     can_reserve_now, reservation_time_error = db_manager.can_user_make_reservation_now(current_user['email'])
 
@@ -481,10 +486,14 @@ def show_reservation_tab():
         show_mobile_layout(today, tomorrow, today_reservations, tomorrow_reservations, current_hour, current_user,
                            user_today_reservations, user_tomorrow_reservations)
 
+
 def show_reservation_success_message():
     """Mostrar mensaje de éxito de reserva con datos específicos"""
     if not st.session_state.get('last_reservation_data'):
         return
+
+    # Clear everything from the page except header
+    st.empty()
 
     data = st.session_state.last_reservation_data
     remaining_credits = db_manager.get_user_credits(st.session_state.user_info['email'])
@@ -493,6 +502,7 @@ def show_reservation_success_message():
     start_time = format_hour(min(sorted_hours))
     end_time = format_hour(max(sorted_hours) + 1)
 
+    # Show only the success message with the banner and upper buttons
     st.markdown(f"""
     <div class="success-message">
         <h3>✅ ¡Reserva Confirmada!</h3>
@@ -502,13 +512,15 @@ def show_reservation_success_message():
         <p><strong>Duración:</strong> {len(sorted_hours)} hora(s)</p>
         <p><strong>💰 Créditos usados:</strong> {data['credits_used']}</p>
         <p><strong>💳 Créditos restantes:</strong> {remaining_credits}</p>
-        <p>📧 <em>Email de confirmación enviado</em></p>
     </div>
     """, unsafe_allow_html=True)
 
-    # Limpiar los datos después de mostrar
-    if 'last_reservation_data' in st.session_state:
-        del st.session_state['last_reservation_data']
+    # Add "Hacer otra reserva" button below the success message
+    if st.button("Hacer otra reserva", key="nueva_reserva"):
+        # Reset states and redirect back to main reservation page
+        st.session_state.reservation_confirmed = False
+        st.session_state.last_reservation_data = None
+        st.rerun()
 
 def show_mobile_layout(today, tomorrow, today_reservations, tomorrow_reservations, current_hour, current_user,
                        user_today_reservations, user_tomorrow_reservations):
@@ -753,7 +765,7 @@ def confirm_reservation_callback(current_user, selected_date, selected_hours):
 
 
 def handle_reservation_submission(current_user, date, selected_hours):
-    """Nueva lógica simplificada con stored procedure"""
+    """Lógica simplificada con stored procedure con errores debajo de los slots"""
 
     if len(selected_hours) == 1:
         # Reserva de 1 hora - usar stored procedure atómica
@@ -766,13 +778,14 @@ def handle_reservation_submission(current_user, date, selected_hours):
             show_success_and_cleanup(current_user, date, [hour])
             return True
         else:
+            # Mostrar error debajo de los slots
             st.error(f"❌ {message}")
-            cleanup_selection()
             return False
 
     else:
         # Reserva de 2 horas - lógica todo-o-nada
         return handle_two_hour_reservation(current_user, date, selected_hours)
+
 
 
 def handle_two_hour_reservation(current_user, date, selected_hours):
@@ -790,8 +803,8 @@ def handle_two_hour_reservation(current_user, date, selected_hours):
         show_success_and_cleanup(current_user, date, selected_hours)
         return True
     else:
+        # Mostrar error debajo de los slots
         st.error(f"❌ {message}")
-        cleanup_selection()
         return False
 
 def show_success_and_cleanup(current_user, date, hours):
@@ -814,10 +827,11 @@ def cleanup_selection():
     st.session_state.selected_date = None
 
 def send_reservation_confirmation_email(current_user, date, selected_hours):
-    """Enviar email de confirmación de reserva"""
+    """Enviar email de confirmación de reserva con errores debajo de los slots"""
     try:
         # Verificar primero si el servicio de email está configurado
         if not email_manager.is_configured():
+            # Mostrar info debajo de los slots
             st.info("📧 Servicio de email no configurado - reserva guardada sin confirmación por email")
             return
 
@@ -833,19 +847,16 @@ def send_reservation_confirmation_email(current_user, date, selected_hours):
         )
 
         if success:
-            st.success("📧 ¡Email de confirmación enviado!")
+            # No mostrar nada adicional aquí, ya que esto es parte del proceso exitoso
+            pass
         else:
+            # Mostrar warning debajo de los slots
             st.warning(f"⚠️ Reserva guardada pero falló el email: {message}")
-            # Mostrar el error específico para depuración
-            with st.expander("Detalles del Error de Email"):
-                st.write(message)
-
     except Exception as e:
-        st.warning("⚠️ Reserva guardada pero falló la notificación por email")
-        # Mostrar detalles del error para depuración
-        with st.expander("Detalles del Error"):
-            st.write(f"Error: {str(e)}")
+        # Mostrar warning debajo de los slots
+        st.warning(f"⚠️ Reserva guardada pero falló la notificación por email: {str(e)}")
         st.info("💡 Tu reserva está confirmada aún sin el email")
+
 
 def show_success_message_with_credits(name, date_obj, selected_hours, credits_used):
     """Mostrar mensaje de éxito con información de créditos"""
