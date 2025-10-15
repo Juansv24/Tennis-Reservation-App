@@ -526,6 +526,11 @@ def show_mobile_layout(today, tomorrow, today_reservations, tomorrow_reservation
                        user_today_reservations, user_tomorrow_reservations):
     """Mostrar layout móvil optimizado"""
 
+    # Check for success message first
+    if st.session_state.get('reservation_confirmed', False):
+        show_reservation_success_message()
+        return
+
     # PARTE 1: Información del usuario y reservas existentes (ARRIBA)
     st.subheader("Detalles de la Reserva")
 
@@ -594,7 +599,6 @@ def show_mobile_layout(today, tomorrow, today_reservations, tomorrow_reservation
     # Mostrar mensaje de éxito debajo del calendario
     if st.session_state.get('reservation_confirmed', False):
         show_reservation_success_message()
-        st.session_state.reservation_confirmed = False
 
         # PARTE 4: SOLO Confirmación de reserva (ABAJO DEL CALENDARIO)
     selected_hours = st.session_state.get('selected_hours', [])
