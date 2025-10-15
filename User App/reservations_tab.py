@@ -532,12 +532,12 @@ def show_reservation_success_message():
         st.rerun()
 
 
-def show_reservation_error_message(error_message):
+def show_reservation_error_message(error_message=None):
     """Mostrar mensaje de error post-reserva con botón para intentar de nuevo"""
     # Clear everything from the page except header
     st.empty()
 
-    # Show error message with the same styling as success but different colors
+    # Show only a clean error message - no system errors
     st.markdown(f"""
     <div style="
         background: linear-gradient(135deg, #FFF5F5 0%, #FFEBEB 100%);
@@ -550,7 +550,6 @@ def show_reservation_error_message(error_message):
         animation: slide-in 0.5s ease-out;
     ">
         <h3>❌ No se pudo completar la reserva</h3>
-        <p>{error_message}</p>
         <p>Este horario ya no está disponible. Por favor intenta reservar otro horario.</p>
     </div>
     """, unsafe_allow_html=True)
