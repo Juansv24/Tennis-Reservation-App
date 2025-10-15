@@ -414,9 +414,13 @@ def show_reservation_tab():
     """Mostrar la pestaña de reservas con caché optimizado"""
     apply_custom_css()
 
-    # Initialize reservation workflow state
+    # Initialize reservation workflow states
     if "reservation_confirmed" not in st.session_state:
         st.session_state.reservation_confirmed = False
+    if "reservation_error" not in st.session_state:
+        st.session_state.reservation_error = False
+    if "error_message" not in st.session_state:
+        st.session_state.error_message = None
 
     # Obtener información del usuario actual
     current_user = get_current_user()
@@ -425,12 +429,17 @@ def show_reservation_tab():
         st.error("Error de autenticación. Por favor actualiza la página.")
         return
 
-    # Si hay una reserva confirmada, mostrar solo el mensaje de éxito
+    # Check for success message first
     if st.session_state.get('reservation_confirmed', False):
         show_reservation_success_message()
         return
 
-    # Verificar si puede hacer reservas en este momento
+    # Check for error message second
+    if st.session_state.get('reservation_error', False):
+        show_reservation_error_message(st.session_state.error_message)
+        return
+
+            # Verificar si puede hacer reservas en este momento
     can_reserve_now, reservation_time_error = db_manager.can_user_make_reservation_now(current_user['email'])
 
     if not can_reserve_now:
@@ -520,6 +529,37 @@ def show_reservation_success_message():
         # Reset states and redirect back to main reservation page
         st.session_state.reservation_confirmed = False
         st.session_state.last_reservation_data = None
+        st.rerun()
+
+
+def show_reservation_error_message(error_message):
+    """Mostrar mensaje de error post-reserva con botón para intentar de nuevo"""
+    # Clear everything from the page except header
+    st.empty()
+
+    # Show error message with the same styling as success but different colors
+    st.markdown(f"""
+    <div style="
+        background: linear-gradient(135deg, #FFF5F5 0%, #FFEBEB 100%);
+        border: 2px solid #DC3545;
+        border-radius: 12px;
+        padding: 25px;
+        margin: 20px 0;
+        color: #721C24;
+        box-shadow: 0 4px 8px rgba(220, 53, 69, 0.2);
+        animation: slide-in 0.5s ease-out;
+    ">
+        <h3>❌ No se pudo completar la reserva</h3>
+        <p>{error_message}</p>
+        <p>Este horario ya no está disponible. Por favor intenta reservar otro horario.</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Add "Intentar otra reserva" button below the error message
+    if st.button("Intentar otra reserva", key="intentar_nueva_reserva"):
+        # Reset states and redirect back to main reservation page
+        st.session_state.reservation_error = False
+        st.session_state.error_message = None
         st.rerun()
 
 def show_mobile_layout(today, tomorrow, today_reservations, tomorrow_reservations, current_hour, current_user,
@@ -782,8 +822,9 @@ def handle_reservation_submission(current_user, date, selected_hours):
             show_success_and_cleanup(current_user, date, [hour])
             return True
         else:
-            # Mostrar error debajo de los slots
-            st.error(f"❌ {message}")
+            # Configurar estado de error en lugar de mostrar error directamente
+            st.session_state.reservation_error = True
+            st.session_state.error_message = message
             return False
 
     else:
@@ -807,8 +848,9 @@ def handle_two_hour_reservation(current_user, date, selected_hours):
         show_success_and_cleanup(current_user, date, selected_hours)
         return True
     else:
-        # Mostrar error debajo de los slots
-        st.error(f"❌ {message}")
+        # Configurar estado de error en lugar de mostrar error directamente
+        st.session_state.reservation_error = True
+        st.session_state.error_message = message
         return False
 
 def show_success_and_cleanup(current_user, date, hours):
@@ -1040,14 +1082,10 @@ def handle_time_slot_click(hour, date, current_user):
     """Manejar clic en un slot de tiempo con validación en tiempo real"""
 
     # ===== STEP 1: REAL-TIME AVAILABILITY CHECK =====
-    # This prevents race conditions during peak hours
     if not db_manager.is_slot_still_available(date, hour):
-        st.error("⚠️ Este horario acaba de ser reservado por otro usuario")
-        # Force cache refresh
-        today, tomorrow = get_today_tomorrow()
-        cache_key = f"reservations_cache_{today}_{tomorrow}"
-        if cache_key in st.session_state:
-            del st.session_state[cache_key]
+        # Set error state instead of showing error directly
+        st.session_state.reservation_error = True
+        st.session_state.error_message = "Este horario acaba de ser reservado por otro usuario"
         st.rerun()
         return
 
