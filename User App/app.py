@@ -13,7 +13,6 @@ from auth_utils import (
     try_auto_login
 )
 from database_manager import db_manager
-from traffic_utils import smart_wake_up_service
 
 # Colores US Open
 US_OPEN_BLUE = "#001854"
@@ -114,12 +113,6 @@ def main():
 
         # PASO 2: Inicializar estado de sesión (incluye intento de inicio de sesión automático)
         init_session_state()
-
-        # PASO 2.5: Iniciar regularizador de tráfico
-        try:
-            smart_wake_up_service.start()
-        except Exception as e:
-            print(f"Error al iniciar el regularizador de tráfico: {e}")
 
         # PASO 3: Mostrar encabezado
         show_header()

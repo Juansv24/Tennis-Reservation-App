@@ -275,6 +275,28 @@ class SupabaseManager:
                 summary['reservation_names'][date_str] = {}
             return summary
 
+    def is_slot_still_available(self, date: datetime.date, hour: int) -> bool:
+        """Quick real-time check if slot is still available - single fast query"""
+        try:
+            # Check for active reservations
+            result = self.client.table('reservations').select('id').eq(
+                'date', date.strftime('%Y-%m-%d')
+            ).eq('hour', hour).execute()
+
+            if result.data:
+                return False
+
+            # Check for maintenance slots
+            maintenance_result = self.client.table('maintenance_slots').select('id').eq(
+                'date', date.strftime('%Y-%m-%d')
+            ).eq('hour', hour).execute()
+
+            return len(maintenance_result.data) == 0
+
+        except Exception as e:
+            print(f"Error checking slot availability: {e}")
+            return False  # Safer to assume unavailable on error
+
     def delete_reservation(self, date: str, hour: int) -> bool:
         """Eliminar una reserva específica"""
         try:

@@ -172,6 +172,17 @@ def apply_custom_css():
     """, unsafe_allow_html=True)
 
 
+def invalidate_reservation_cache():
+    """Force cache refresh by clearing cached data"""
+    today, tomorrow = get_today_tomorrow()
+    cache_key = f"reservations_cache_{today}_{tomorrow}"
+    cache_timestamp_key = f"cache_timestamp_{today}_{tomorrow}"
+
+    if cache_key in st.session_state:
+        del st.session_state[cache_key]
+    if cache_timestamp_key in st.session_state:
+        del st.session_state[cache_timestamp_key]
+
 def show_user_controls_bar():
     """Mostrar barra de controles para usuario - versión minimalista"""
     from auth_utils import logout_user
@@ -738,6 +749,7 @@ def confirm_reservation_callback(current_user, selected_date, selected_hours):
     success = handle_reservation_submission(current_user, selected_date, selected_hours)
     if success:
         st.session_state.reservation_confirmed = True
+        invalidate_reservation_cache()
 
 
 def handle_reservation_submission(current_user, date, selected_hours):
@@ -1008,72 +1020,88 @@ def show_day_schedule(date, reservations_dict, current_user, is_today=False, cur
         ):
             handle_time_slot_click(hour, date, current_user)
 
-def handle_time_slot_click(hour, date, current_user):
-    """Manejar clic en un slot de tiempo usando datos cacheados"""
 
+def handle_time_slot_click(hour, date, current_user):
+    """Manejar clic en un slot de tiempo con validación en tiempo real"""
+
+    # ===== STEP 1: REAL-TIME AVAILABILITY CHECK =====
+    # This prevents race conditions during peak hours
+    if not db_manager.is_slot_still_available(date, hour):
+        st.error("⚠️ Este horario acaba de ser reservado por otro usuario")
+        # Force cache refresh
+        today, tomorrow = get_today_tomorrow()
+        cache_key = f"reservations_cache_{today}_{tomorrow}"
+        if cache_key in st.session_state:
+            del st.session_state[cache_key]
+        st.rerun()
+        return
+
+    # ===== STEP 2: GET CACHED DATA FOR DISPLAY =====
     selected_hours = st.session_state.get('selected_hours', [])
     selected_date = st.session_state.get('selected_date', None)
 
-    # Get user existing hours from cached data (NO DATABASE CALL)
+    # Use cached data for user's existing reservations
     today, tomorrow = get_today_tomorrow()
-    cache_key = f"reservations_cache_{today}_{tomorrow}"
-
     summary = db_manager.get_date_reservations_summary([date], current_user['email'])
     date_str = date.strftime('%Y-%m-%d')
     user_existing_hours = summary['user_reservations'].get(date_str, [])
 
-    # Si es una fecha diferente, limpiar selección anterior
+    # ===== STEP 3: HANDLE DESELECTION =====
+    if hour in selected_hours and selected_date == date:
+        selected_hours.remove(hour)
+        if not selected_hours:
+            selected_date = None
+        st.session_state.selected_hours = selected_hours
+        st.session_state.selected_date = selected_date
+        st.rerun()  # Needed for CSS styling update
+        return
+
+    # ===== STEP 4: HANDLE NEW SELECTION =====
+    # If different date selected, clear previous selection
     if selected_date is not None and selected_date != date:
         selected_hours = []
         selected_date = date
 
-    if hour in selected_hours and selected_date == date:
-        # Deseleccionar
-        selected_hours.remove(hour)
-        if not selected_hours:
-            selected_date = None
-    else:
-        # Si no hay fecha seleccionada, establecer la fecha actual
-        if selected_date is None:
-            selected_date = date
-            selected_hours = []
+    if selected_date is None:
+        selected_date = date
+        selected_hours = []
 
-        # Verificar límite total de horas por día
-        total_hours_after_selection = len(user_existing_hours) + len(selected_hours) + 1
-        if total_hours_after_selection > 2:
-            st.error(f"Máximo 2 horas por día. Ya tienes {len(user_existing_hours)} hora(s) reservada(s).")
+    # ===== STEP 5: VALIDATE DAILY LIMIT =====
+    total_hours_after_selection = len(user_existing_hours) + len(selected_hours) + 1
+    if total_hours_after_selection > 2:
+        st.error(f"Máximo 2 horas por día. Ya tienes {len(user_existing_hours)} hora(s) reservada(s).")
+        return
+
+    # ===== STEP 6: VALIDATE CONSECUTIVE DAYS =====
+    if validate_consecutive_days_conflict(hour, date, current_user):
+        return
+
+    # ===== STEP 7: VALIDATE SELECTION LIMIT =====
+    if len(selected_hours) >= 2:
+        st.error("Máximo 2 horas por selección")
+        return
+
+    # ===== STEP 8: VALIDATE CREDITS =====
+    credits_needed = len(selected_hours) + 1
+    user_credits = db_manager.get_user_credits(current_user['email'])
+
+    if user_credits < credits_needed:
+        st.error(f"⚠️ Créditos insuficientes. Necesitas {credits_needed} créditos, tienes {user_credits}.")
+        st.info("💡 Contacta al administrador para recargar créditos.")
+        return
+
+    # ===== STEP 9: VALIDATE CONSECUTIVE HOURS =====
+    if selected_hours:
+        existing_hour = selected_hours[0]
+        if abs(hour - existing_hour) != 1:
+            st.error("Las horas seleccionadas deben ser consecutivas")
             return
 
-        # Validar si las horas son consecutivas con el día anterior
-        if validate_consecutive_days_conflict(hour, date, current_user):
-            return
-
-        # Seleccionar (verificar límites)
-        if len(selected_hours) >= 2:
-            st.error("Máximo 2 horas por selección")
-            return
-
-        # Verificar créditos antes de seleccionar
-        credits_needed = len(selected_hours) + 1  # +1 porque vamos a agregar esta hora
-        user_credits = db_manager.get_user_credits(current_user['email'])
-
-        if user_credits < credits_needed:
-            st.error(f"❌ Créditos insuficientes. Necesitas {credits_needed} créditos, tienes {user_credits}.")
-            st.info("💡 Contacta al administrador para recargar créditos.")
-            return
-
-        # Verificar que sea consecutiva si ya hay una hora seleccionada
-        if selected_hours:
-            existing_hour = selected_hours[0]
-            if abs(hour - existing_hour) != 1:
-                st.error("Las horas seleccionadas deben ser consecutivas")
-                return
-
-        selected_hours.append(hour)
-
+    # ===== STEP 10: ADD TO SELECTION =====
+    selected_hours.append(hour)
     st.session_state.selected_hours = selected_hours
     st.session_state.selected_date = selected_date
-    st.rerun()
+    st.rerun()  # Needed for CSS styling update
 
 def validate_consecutive_days_conflict(hour, date, current_user):
     """Validate that user doesn't reserve same time slot on consecutive days"""
