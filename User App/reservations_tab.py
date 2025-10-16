@@ -7,7 +7,7 @@ import datetime
 from datetime import timedelta
 from database_manager import db_manager
 from auth_utils import get_current_user
-from timezone_utils import get_colombia_today, get_colombia_now
+from timezone_utils import get_colombia_today, get_colombia_now, format_date_short, format_date_full
 from email_config import email_manager
 
 # Configuración
@@ -29,28 +29,6 @@ def get_current_hour():
 def format_hour(hour: int) -> str:
     """Formatear hora para mostrar"""
     return f"{hour:02d}:00"
-
-def format_date_short(date: datetime.date) -> str:
-    """Formatear fecha corta"""
-    days = ['LUN', 'MAR', 'MIÉ', 'JUE', 'VIE', 'SÁB', 'DOM']
-    months = ['ENE', 'FEB', 'MAR', 'ABR', 'MAY', 'JUN',
-              'JUL', 'AGO', 'SEP', 'OCT', 'NOV', 'DIC']
-
-    day_name = days[date.weekday()]
-    month_name = months[date.month - 1]
-
-    return f"{day_name} {date.day} {month_name}"
-
-def format_date_full(date: datetime.date) -> str:
-    """Formatear fecha completa"""
-    days = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo']
-    months = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
-              'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
-
-    day_name = days[date.weekday()]
-    month_name = months[date.month - 1]
-
-    return f"{day_name}, {date.day} de {month_name} de {date.year}"
 
 def apply_custom_css():
     """Aplicar CSS personalizado con colores US Open"""
