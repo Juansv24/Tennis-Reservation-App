@@ -323,7 +323,7 @@ class SupabaseAuthManager:
 
             email = email.strip().lower()
 
-            # PRIMERO: Verificar si el correo está registrado
+            # Verificar si el correo está registrado
             result = self.client.table('users').select('id').eq('email', email).execute()
             if not result.data:
                 return False, "No existe una cuenta con este email", None
@@ -499,9 +499,6 @@ class SupabaseAuthManager:
             token = secrets.token_urlsafe(32)
             expires_at = current_utc + timedelta(minutes=30)
 
-            print(f"DEBUG - Creando token que expira: {expires_at.isoformat()}")
-            print(f"DEBUG - Hora actual UTC: {current_utc.isoformat()}")
-
             # Guardar token
             token_result = self.client.table('password_reset_tokens').insert({
                 'user_id': user_id,
@@ -544,19 +541,10 @@ class SupabaseAuthManager:
                 expires_at = datetime.datetime.fromisoformat(expires_at_str)
                 current_utc = datetime.datetime.utcnow()
 
-                print(f"DEBUG - Token expira: {expires_at.isoformat()}")
-                print(f"DEBUG - Hora actual UTC: {current_utc.isoformat()}")
-                print(f"DEBUG - Diferencia en minutos: {(expires_at - current_utc).total_seconds() / 60}")
-
                 if expires_at < current_utc:
-                    print(f"DEBUG - Token expirado: {expires_at} < {current_utc}")
                     return False, "Token expirado", None
-                else:
-                    print(
-                        f"DEBUG - Token válido, expira en {(expires_at - current_utc).total_seconds() / 60:.1f} minutos")
 
-            except ValueError as e:
-                print(f"DEBUG - Error parseando fecha: {e}")
+            except ValueError:
                 return False, "Token inválido", None
 
             return True, f"Token válido para {user_email}", token_data['user_id']

@@ -323,7 +323,6 @@ class SupabaseManager:
                 'is_used': False
             }).execute()
 
-            print(f"DEBUG - Código guardado: {code} para {email}, expira: {expires_at.isoformat()}")
             return len(result.data) > 0
         except Exception as e:
             st.error(f"Error guardando código de verificación: {e}")
@@ -335,19 +334,12 @@ class SupabaseManager:
             import datetime
             current_time = datetime.datetime.utcnow().isoformat()
 
-            print(f"DEBUG - Verificando código: {code} para email: {email}")
-            print(f"DEBUG - Hora actual UTC: {current_time}")
-
             # Buscar código válido
             result = self.client.table('email_verifications').select('id, expires_at').eq(
                 'email', email.strip().lower()
             ).eq('code', code.strip().upper()).eq('is_used', False).gt(
                 'expires_at', current_time
             ).execute()
-
-            print(f"DEBUG - Resultados encontrados: {len(result.data)}")
-            if result.data:
-                print(f"DEBUG - Código expira: {result.data[0]['expires_at']}")
 
             if result.data:
                 # Marcar como usado
@@ -357,7 +349,6 @@ class SupabaseManager:
                 return True
             return False
         except Exception as e:
-            print(f"DEBUG - Error verificando código: {e}")
             st.error(f"Error verificando código: {e}")
             return False
 

@@ -202,7 +202,6 @@ def show_admin_dashboard():
                     credits_data = admin_db_manager.get_credit_transactions_for_export()
 
                     # Crear archivo Excel
-                    import pandas as pd
                     from io import BytesIO
 
                     # Crear buffer en memoria
@@ -228,8 +227,7 @@ def show_admin_dashboard():
                     buffer.seek(0)
 
                     # Generar nombre de archivo con fecha
-                    from datetime import datetime
-                    fecha_actual = datetime.now().strftime('%Y%m%d_%H%M%S')
+                    fecha_actual = get_colombia_now().strftime('%Y%m%d_%H%M%S')
                     filename = f"reservas_tenis_export_{fecha_actual}.xlsx"
 
                     # Botón de descarga
@@ -605,9 +603,9 @@ def show_reservations_management_tab():
 
         for i, reservation in enumerate(user_reservations):
             # Formatear fecha más legible
-            from datetime import datetime
             try:
-                fecha_obj = datetime.strptime(reservation['date'], '%Y-%m-%d')
+                from datetime import datetime as dt
+                fecha_obj = dt.strptime(reservation['date'], '%Y-%m-%d')
                 fecha_formateada = fecha_obj.strftime('%d/%m/%Y')
                 dia_semana = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'][fecha_obj.weekday()]
                 fecha_display = f"{dia_semana} {fecha_formateada}"
@@ -1162,27 +1160,6 @@ def show_user_history(user_id):
     st.subheader("📊 Historial de Usuario")
     # Implementar vista de historial
 
-def mantener_expander_abierto_admin(item_id, accion='actualizacion', duracion=15):
-    """Mantener expander abierto después de una acción administrativa"""
-    key = f"expander_admin_{item_id}"
-    st.session_state[key] = {
-        'timestamp': get_colombia_now(),
-        'accion': accion,
-        'duracion': duracion
-    }
-
-def verificar_expander_abierto_admin(item_id):
-    """Verificar si un expander debe mantenerse abierto"""
-    key = f"expander_admin_{item_id}"
-    if key in st.session_state:
-        estado = st.session_state[key]
-        tiempo_transcurrido = (get_colombia_now() - estado['timestamp']).total_seconds()
-        if tiempo_transcurrido < estado['duracion']:
-            return True
-        else:
-            del st.session_state[key]
-    return False
-
 def toggle_user_status_callback(user_id, current_status):
     """Callback para cambiar estado de usuario"""
     status_text = "desactivado" if current_status else "activado"
@@ -1703,8 +1680,8 @@ def show_maintenance_tab():
         for slot in maintenance_slots:
             # Formatear fecha
             try:
-                from datetime import datetime
-                date_obj = datetime.strptime(slot['date'], '%Y-%m-%d')
+                from datetime import datetime as dt
+                date_obj = dt.strptime(slot['date'], '%Y-%m-%d')
                 formatted_date = date_obj.strftime('%d/%m/%Y')
                 day_name = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'][date_obj.weekday()]
                 date_display = f"{day_name} {formatted_date}"

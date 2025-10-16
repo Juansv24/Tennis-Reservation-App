@@ -265,7 +265,7 @@ class EmailManager:
         cal_start = event_start.strftime('%Y%m%dT%H%M%S')
         cal_end = event_end.strftime('%Y%m%dT%H%M%S')
 
-        # Nombres de meses en español
+        # Nombres de meses y días en español
         months_es = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
                      'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
         days_es = ['lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado', 'domingo']
@@ -327,15 +327,6 @@ class EmailManager:
         </body>
         </html>
         """
-
-        # Nombres de meses en español
-        months_es = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
-                     'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
-        days_es = ['lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado', 'domingo']
-
-        day_name = days_es[date.weekday()]
-        month_name = months_es[date.month - 1]
-        formatted_date = f"{day_name}, {date.day} de {month_name} de {date.year}"
 
         text_body = f"""
         ¡Reserva de Cancha de Tenis Confirmada!
