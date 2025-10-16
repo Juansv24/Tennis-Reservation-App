@@ -451,6 +451,18 @@ def show_reservation_tab():
         user_today_reservations = summary['user_reservations'].get(today_str, [])
         user_tomorrow_reservations = summary['user_reservations'].get(tomorrow_str, [])
 
+        # Cache user credits for validation during clicks (avoids DB call on every click)
+        user_credits = db_manager.get_user_credits(current_user['email'])
+
+        # Store validation data in session state for fast access during clicks
+        st.session_state.validation_cache = {
+            'user_credits': user_credits,
+            'user_today_reservations': user_today_reservations,
+            'user_tomorrow_reservations': user_tomorrow_reservations,
+            'today': today,
+            'tomorrow': tomorrow
+        }
+
     # Mostrar barra de controles
     show_user_controls_bar()
 
@@ -1031,15 +1043,23 @@ def handle_time_slot_click(hour, date, current_user):
         st.rerun()
         return
 
-    # ===== STEP 2: GET CACHED DATA FOR DISPLAY =====
+    # ===== STEP 2: GET CACHED DATA FOR VALIDATION =====
     selected_hours = st.session_state.get('selected_hours', [])
     selected_date = st.session_state.get('selected_date', None)
 
-    # Use cached data for user's existing reservations
-    today, tomorrow = get_today_tomorrow()
-    summary = db_manager.get_date_reservations_summary([date], current_user['email'])
-    date_str = date.strftime('%Y-%m-%d')
-    user_existing_hours = summary['user_reservations'].get(date_str, [])
+    # Use cached validation data (loaded at page render - no DB calls!)
+    validation_cache = st.session_state.get('validation_cache', {})
+    today = validation_cache.get('today')
+    tomorrow = validation_cache.get('tomorrow')
+
+    # Get user's existing reservations from cache
+    if date == today:
+        user_existing_hours = validation_cache.get('user_today_reservations', [])
+    elif date == tomorrow:
+        user_existing_hours = validation_cache.get('user_tomorrow_reservations', [])
+    else:
+        # Fallback if date doesn't match (shouldn't happen)
+        user_existing_hours = []
 
     # ===== STEP 3: HANDLE DESELECTION =====
     if hour in selected_hours and selected_date == date:
@@ -1078,7 +1098,7 @@ def handle_time_slot_click(hour, date, current_user):
 
     # ===== STEP 8: VALIDATE CREDITS =====
     credits_needed = len(selected_hours) + 1
-    user_credits = db_manager.get_user_credits(current_user['email'])
+    user_credits = validation_cache.get('user_credits', 0)  # Use cached credits - no DB call!
 
     if user_credits < credits_needed:
         st.error(f"⚠️ Créditos insuficientes. Necesitas {credits_needed} créditos, tienes {user_credits}.")
@@ -1100,22 +1120,13 @@ def handle_time_slot_click(hour, date, current_user):
 
 def validate_consecutive_days_conflict(hour, date, current_user):
     """Validate that user doesn't reserve same time slot on consecutive days"""
-    today, tomorrow = get_today_tomorrow()
 
-    # Get cached data to avoid database calls
-    cache_key = f"reservations_cache_{today}_{tomorrow}"
-
-    if cache_key in st.session_state:
-        cached_data = st.session_state[cache_key]
-        user_today_reservations = cached_data['user_today_reservations']
-        user_tomorrow_reservations = cached_data['user_tomorrow_reservations']
-    else:
-        # Fallback if no cache
-        summary = db_manager.get_date_reservations_summary([today, tomorrow], current_user['email'])
-        today_str = today.strftime('%Y-%m-%d')
-        tomorrow_str = tomorrow.strftime('%Y-%m-%d')
-        user_today_reservations = summary['user_reservations'].get(today_str, [])
-        user_tomorrow_reservations = summary['user_reservations'].get(tomorrow_str, [])
+    # Use cached validation data - no DB calls!
+    validation_cache = st.session_state.get('validation_cache', {})
+    today = validation_cache.get('today')
+    tomorrow = validation_cache.get('tomorrow')
+    user_today_reservations = validation_cache.get('user_today_reservations', [])
+    user_tomorrow_reservations = validation_cache.get('user_tomorrow_reservations', [])
 
     # Check if trying to book same hour on consecutive days
     if date == today and hour in user_tomorrow_reservations:
