@@ -2,7 +2,6 @@
 Pestaña de Reservas para Sistema de Reservas de Cancha de Tenis
 VERSIÓN ACTUALIZADA con Integración de Autenticación
 """
-import time
 import streamlit as st
 import datetime
 from datetime import timedelta
