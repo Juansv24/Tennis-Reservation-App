@@ -160,6 +160,29 @@ def invalidate_reservation_cache():
     if cache_timestamp_key in st.session_state:
         del st.session_state[cache_timestamp_key]
 
+def show_credit_info_expander():
+    """Mostrar expander con información de créditos (componente reutilizable)"""
+    with st.expander("💰 ¿Cómo Adquirir Créditos?"):
+        st.markdown("""
+        **💳 Costo de Créditos:**
+        • Cada crédito = 1 hora de cancha
+        • Precio por crédito: **$15.000 COP**
+
+        **📞 Contacto para Recargar:**
+
+        **Orlando**
+        **WhatsApp:** [3193368749](https://wa.me/573193368749)
+
+        **⏰ Horarios de Atención:**
+        • **Lunes a Sábado:** 9:00 AM - 11:00 AM
+        • **Domingos y Festivos:** 5:00 PM - 7:00 PM
+
+        **💡 Recomendaciones:**
+        • Planifica tu recarga con anticipación para evitar quedarte sin créditos
+        • Contacta únicamente en los horarios establecidos para una respuesta rápida
+        • Puedes recargar múltiples créditos en una sola transacción
+        """)
+
 def show_user_controls_bar():
     """Mostrar barra de controles para usuario - versión minimalista"""
     from auth_utils import logout_user
@@ -242,26 +265,7 @@ def show_read_only_schedule_view(current_user):
             """, unsafe_allow_html=True)
 
         # Mostrar info créditos
-        with st.expander("💰 ¿Cómo Adquirir Créditos?"):
-            st.markdown("""
-            **💳 Costo de Créditos:**  
-            • Cada crédito = 1 hora de cancha  
-            • Precio por crédito: **$15.000 COP**
-
-            **📞 Contacto para Recargar:**
-
-            **Orlando**  
-            **WhatsApp:** [3193368749](https://wa.me/573193368749)
-
-            **⏰ Horarios de Atención:**  
-            • **Lunes a Sábado:** 9:00 AM - 11:00 AM  
-            • **Domingos y Festivos:** 5:00 PM - 7:00 PM
-
-            **💡 Recomendaciones:**  
-            • Planifica tu recarga con anticipación para evitar quedarte sin créditos  
-            • Contacta únicamente en los horarios establecidos para una respuesta rápida  
-            • Puedes recargar múltiples créditos en una sola transacción
-            """)
+        show_credit_info_expander()
 
 
     # Mostrar calendario en modo de solo lectura
@@ -588,26 +592,7 @@ def show_mobile_layout(today, tomorrow, today_reservations, tomorrow_reservation
         """, unsafe_allow_html=True)
 
     # Mostrar info créditos
-    with st.expander("💰 ¿Cómo Adquirir Créditos?"):
-        st.markdown("""
-        **💳 Costo de Créditos:**  
-        • Cada crédito = 1 hora de cancha  
-        • Precio por crédito: **$15.000 COP**
-
-        **📞 Contacto para Recargar:**
-
-        **Orlando**  
-        **WhatsApp:** [3193368749](https://wa.me/573193368749)
-
-        **⏰ Horarios de Atención:**  
-        • **Lunes a Sábado:** 9:00 AM - 11:00 AM  
-        • **Domingos y Festivos:** 5:00 PM - 7:00 PM
-
-        **💡 Recomendaciones:**  
-        • Planifica tu recarga con anticipación para evitar quedarte sin créditos  
-        • Contacta únicamente en los horarios establecidos para una respuesta rápida  
-        • Puedes recargar múltiples créditos en una sola transacción
-        """)
+    show_credit_info_expander()
 
     # PARTE 3: Vista de calendario (MEDIO)
     show_calendar_view(today, tomorrow, today_reservations, tomorrow_reservations, current_hour, current_user)
@@ -695,26 +680,7 @@ def show_reservation_details(today_date, tomorrow_date, current_user, user_today
         """, unsafe_allow_html=True)
 
     # Mostrar info créditos
-    with st.expander("💰 ¿Cómo Adquirir Créditos?"):
-        st.markdown("""
-        **💳 Costo de Créditos:**  
-        • Cada crédito = 1 hora de cancha  
-        • Precio por crédito: **$15.000 COP**
-
-        **📞 Contacto para Recargar:**
-
-        **Orlando**  
-        **WhatsApp:** [3193368749](https://wa.me/573193368749)
-
-        **⏰ Horarios de Atención:**  
-        • **Lunes a Sábado:** 9:00 AM - 11:00 AM  
-        • **Domingos y Festivos:** 5:00 PM - 7:00 PM
-
-        **💡 Recomendaciones:**  
-        • Planifica tu recarga con anticipación para evitar quedarte sin créditos  
-        • Contacta únicamente en los horarios establecidos para una respuesta rápida  
-        • Puedes recargar múltiples créditos en una sola transacción
-        """)
+    show_credit_info_expander()
 
     # Mostrar selección actual
     if selected_hours and selected_date is not None:
