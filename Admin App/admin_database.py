@@ -206,7 +206,36 @@ class AdminDatabaseManager:
             return []
 
     def get_users_detailed_statistics(self) -> List[Dict]:
-        """Get detailed statistics for all users"""
+        """Get detailed statistics for all users using optimized SQL function"""
+        try:
+            # Call optimized PostgreSQL function that does all processing in the database
+            result = self.client.rpc('get_users_detailed_statistics').execute()
+
+            if not result.data:
+                return []
+
+            # Convert to expected format
+            user_stats = []
+            for row in result.data:
+                user_stats.append({
+                    'email': row['email'],
+                    'name': row['full_name'],
+                    'registered_date': row['registered_date'],
+                    'total_credits_bought': row['total_credits_bought'],
+                    'total_reservations': row['total_reservations'],
+                    'favorite_day': row['favorite_day'],
+                    'favorite_time': row['favorite_time']
+                })
+
+            return user_stats
+
+        except Exception as e:
+            print(f"Error getting detailed user statistics: {e}")
+            # Fallback to old method if SQL function doesn't exist yet
+            return self._get_users_detailed_statistics_fallback()
+
+    def _get_users_detailed_statistics_fallback(self) -> List[Dict]:
+        """Fallback method using Python processing (for backwards compatibility)"""
         try:
             # Get all users with their IDs
             users_result = self.client.table('users').select('id, email, full_name, created_at, credits').execute()
@@ -222,11 +251,10 @@ class AdminDatabaseManager:
             credits_transactions = self.client.table('credit_transactions').select(
                 'user_id, amount, transaction_type').execute()
 
-            # Calculate total credits bought per user (by user_id first, then convert to email)
+            # Calculate total credits bought per user
             credits_by_user_id = {}
             for transaction in credits_transactions.data:
                 user_id = transaction['user_id']
-                # Only count purchases (admin_grant, purchase, etc.)
                 if transaction['transaction_type'] in ['admin_grant', 'purchase', 'bonus']:
                     if user_id not in credits_by_user_id:
                         credits_by_user_id[user_id] = 0
@@ -295,7 +323,7 @@ class AdminDatabaseManager:
             return user_stats
 
         except Exception as e:
-            print(f"Error getting detailed user statistics: {e}")
+            print(f"Error in fallback method: {e}")
             return []
 
     def cancel_reservation_with_notification(self, reservation_id: int, user_email: str,
