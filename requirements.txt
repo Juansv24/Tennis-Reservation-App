@@ -3,3 +3,4 @@ supabase==2.18.0
 pytz
 pandas
 openpyxl
+plotly
