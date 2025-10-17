@@ -1603,12 +1603,43 @@ def show_maintenance_tab():
                 help="Selecciona la fecha para el mantenimiento"
             )
 
-            # Selector de hora
-            maintenance_hour = st.selectbox(
-                "Hora de inicio",
-                options=list(range(6, 22)),
-                format_func=lambda x: f"{x:02d}:00 - {x + 1:02d}:00"
+            # Opción de día completo
+            is_whole_day = st.checkbox(
+                "🔧 Mantenimiento de día completo (6:00 - 22:00)",
+                help="Bloquea todas las horas del día (6:00 AM a 10:00 PM)"
             )
+
+            # Selectores de rango de horas (solo si no es día completo)
+            if not is_whole_day:
+                col_start, col_end = st.columns(2)
+
+                with col_start:
+                    start_hour = st.selectbox(
+                        "Hora de inicio",
+                        options=list(range(6, 22)),
+                        format_func=lambda x: f"{x:02d}:00",
+                        help="Hora de inicio del mantenimiento"
+                    )
+
+                with col_end:
+                    end_hour = st.selectbox(
+                        "Hora de fin",
+                        options=list(range(7, 23)),
+                        index=min(15-7, len(list(range(7, 23)))-1),  # Default a las 3 PM
+                        format_func=lambda x: f"{x:02d}:00",
+                        help="Hora de fin del mantenimiento (no incluida)"
+                    )
+
+                # Mostrar resumen del rango
+                if start_hour < end_hour:
+                    hours_count = end_hour - start_hour
+                    st.info(f"📊 Se bloquearán {hours_count} hora(s): {start_hour}:00 - {end_hour}:00")
+                else:
+                    st.warning("⚠️ La hora de inicio debe ser menor que la hora de fin")
+            else:
+                st.info("📊 Se bloquearán 16 horas: 6:00 - 22:00 (día completo)")
+                start_hour = 6
+                end_hour = 22
 
             # Motivo
             maintenance_reason = st.text_area(
@@ -1627,23 +1658,29 @@ def show_maintenance_tab():
                 )
 
             if submit_button:
-                admin_user = st.session_state.get('admin_user', {})
-
-                success, message = admin_db_manager.add_maintenance_slot(
-                    maintenance_date.strftime('%Y-%m-%d'),
-                    maintenance_hour,
-                    maintenance_reason.strip() if maintenance_reason else "Mantenimiento programado",
-                    admin_user.get('username', 'admin')
-                )
-
-                if success:
-                    st.success(f"✅ {message}")
-                    st.balloons()
-                    import time
-                    time.sleep(1)
-                    st.rerun()
+                # Validar horas
+                if not is_whole_day and start_hour >= end_hour:
+                    st.error("❌ La hora de inicio debe ser menor que la hora de fin")
                 else:
-                    st.error(f"❌ {message}")
+                    admin_user = st.session_state.get('admin_user', {})
+
+                    success, message = admin_db_manager.add_maintenance_slot(
+                        maintenance_date.strftime('%Y-%m-%d'),
+                        start_hour,
+                        end_hour,
+                        maintenance_reason.strip() if maintenance_reason else "Mantenimiento programado",
+                        admin_user.get('username', 'admin'),
+                        is_whole_day
+                    )
+
+                    if success:
+                        st.success(f"✅ {message}")
+                        st.balloons()
+                        import time
+                        time.sleep(1)
+                        st.rerun()
+                    else:
+                        st.error(f"❌ {message}")
 
     st.markdown("---")
 
@@ -1688,29 +1725,66 @@ def show_maintenance_tab():
             except:
                 date_display = slot['date']
 
-            hour_display = f"{slot['hour']:02d}:00 - {slot['hour'] + 1:02d}:00"
+            # Determinar el tipo de mantenimiento y formato de hora
+            maintenance_type = slot.get('maintenance_type', 'single_hour')
+            start_hour = slot.get('start_hour', slot.get('hour', 6))
+            end_hour = slot.get('end_hour', slot.get('hour', 6) + 1)
+
+            if maintenance_type == 'whole_day':
+                hour_display = "🌅 DÍA COMPLETO (6:00 - 22:00)"
+                type_badge = "🔧 Día Completo"
+            elif maintenance_type == 'time_range':
+                hour_display = f"⏰ {start_hour:02d}:00 - {end_hour:02d}:00"
+                hours_count = slot.get('hour_count', end_hour - start_hour)
+                type_badge = f"⏱️ Rango ({hours_count}h)"
+            else:
+                hour_display = f"{start_hour:02d}:00 - {end_hour:02d}:00"
+                type_badge = "🕐 Individual"
 
             with st.expander(f"🔧 {date_display} • {hour_display}", expanded=False):
                 col1, col2 = st.columns([3, 1])
 
                 with col1:
                     st.markdown(f"""
-                    **📅 Fecha:** {date_display}  
-                    **🕐 Hora:** {hour_display}  
-                    **📝 Motivo:** {slot.get('reason', 'No especificado')}  
-                    **👤 Programado por:** {slot.get('created_by', 'N/A')}  
+                    **📅 Fecha:** {date_display}
+                    **🕐 Horario:** {hour_display}
+                    **🏷️ Tipo:** {type_badge}
+                    **📝 Motivo:** {slot.get('reason', 'No especificado')}
+                    **👤 Programado por:** {slot.get('created_by', 'N/A')}
                     **📆 Creado:** {slot.get('created_at', 'N/A')}
                     """)
 
+                    # Mostrar detalles de horas individuales bloqueadas si es rango
+                    if maintenance_type in ['time_range', 'whole_day']:
+                        hours_list = slot.get('hours_list', [])
+                        if hours_list:
+                            st.caption(f"🔒 Horas bloqueadas: {', '.join([f'{h:02d}:00' for h in sorted(hours_list)])}")
+
                 with col2:
-                    if st.button("🗑️ Eliminar", key=f"delete_maintenance_{slot['id']}"):
-                        if admin_db_manager.remove_maintenance_slot(slot['id']):
-                            st.success("✅ Mantenimiento eliminado")
-                            import time
-                            time.sleep(1)
-                            st.rerun()
+                    # Botón para eliminar
+                    delete_key = f"delete_maintenance_{slot['date']}_{start_hour}_{end_hour}"
+                    if st.button("🗑️ Eliminar", key=delete_key):
+                        # Si es un rango, eliminar todos los slots del rango
+                        if maintenance_type in ['time_range', 'whole_day']:
+                            success, message = admin_db_manager.remove_maintenance_range(
+                                slot['date'], start_hour, end_hour
+                            )
+                            if success:
+                                st.success(f"✅ {message}")
+                                import time
+                                time.sleep(1)
+                                st.rerun()
+                            else:
+                                st.error(f"❌ {message}")
                         else:
-                            st.error("❌ Error al eliminar")
+                            # Eliminar slot individual
+                            if admin_db_manager.remove_maintenance_slot(slot['id']):
+                                st.success("✅ Mantenimiento eliminado")
+                                import time
+                                time.sleep(1)
+                                st.rerun()
+                            else:
+                                st.error("❌ Error al eliminar")
     else:
         st.info("📅 No hay mantenimientos programados en este período")
 

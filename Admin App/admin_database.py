@@ -1270,7 +1270,7 @@ class AdminDatabaseManager:
             return []
 
     def get_maintenance_slots(self, start_date: str = None, end_date: str = None) -> List[Dict]:
-        """Obtener horarios de mantenimiento"""
+        """Obtener horarios de mantenimiento agrupados por rangos"""
         try:
             query = self.client.table('maintenance_slots').select('*')
 
@@ -1279,59 +1279,143 @@ class AdminDatabaseManager:
             if end_date:
                 query = query.lte('date', end_date)
 
-            result = query.order('date').order('hour').execute()
+            result = query.order('date').order('start_hour').order('hour').execute()
 
-            # Formatear fechas
+            # Agrupar por fecha + start_hour + end_hour para mostrar rangos
+            grouped_maintenance = {}
             for slot in result.data:
-                if 'created_at' in slot:
-                    slot['created_at'] = self._format_colombia_datetime(slot['created_at'])
+                key = f"{slot['date']}_{slot.get('start_hour', slot['hour'])}_{slot.get('end_hour', slot['hour']+1)}"
 
-            return result.data
+                if key not in grouped_maintenance:
+                    # Tomar el primer slot como representante del grupo
+                    grouped_maintenance[key] = {
+                        'id': slot['id'],  # ID del primer slot (para eliminar)
+                        'date': slot['date'],
+                        'start_hour': slot.get('start_hour', slot['hour']),
+                        'end_hour': slot.get('end_hour', slot['hour'] + 1),
+                        'maintenance_type': slot.get('maintenance_type', 'single_hour'),
+                        'reason': slot.get('reason', 'Mantenimiento programado'),
+                        'created_by': slot.get('created_by', 'N/A'),
+                        'created_at': self._format_colombia_datetime(slot.get('created_at')),
+                        'hour_count': 0,
+                        'hours_list': []
+                    }
+
+                # Contar horas en el rango
+                grouped_maintenance[key]['hour_count'] += 1
+                grouped_maintenance[key]['hours_list'].append(slot['hour'])
+
+            # Convertir a lista
+            return list(grouped_maintenance.values())
+
         except Exception as e:
             print(f"Error getting maintenance slots: {e}")
             return []
 
-    def add_maintenance_slot(self, date: str, hour: int, reason: str, admin_username: str) -> Tuple[bool, str]:
-        """Agregar horario de mantenimiento"""
+    def add_maintenance_slot(self, date: str, start_hour: int, end_hour: int, reason: str, admin_username: str, is_whole_day: bool = False) -> Tuple[bool, str]:
+        """Agregar horario de mantenimiento con rango de horas o día completo"""
         try:
-            # Verificar si ya existe una reserva
-            existing_reservation = self.client.table('reservations').select('id, email').eq(
-                'date', date
-            ).eq('hour', hour).execute()
+            # Si es mantenimiento de día completo, establecer rango 6-22
+            if is_whole_day:
+                start_hour = 6
+                end_hour = 22
 
-            if existing_reservation.data:
-                return False, "Ya existe una reserva en este horario"
+            # Validar rango de horas
+            if start_hour >= end_hour:
+                return False, "La hora de inicio debe ser menor que la hora de fin"
 
-            # Verificar si ya existe mantenimiento
-            existing_maintenance = self.client.table('maintenance_slots').select('id').eq(
-                'date', date
-            ).eq('hour', hour).execute()
+            if start_hour < 6 or end_hour > 22:
+                return False, "El horario debe estar entre 6:00 y 22:00"
 
-            if existing_maintenance.data:
-                return False, "Ya existe mantenimiento programado en este horario"
+            # Generar lista de horas en el rango
+            hours_to_block = list(range(start_hour, end_hour))
 
-            # Insertar mantenimiento
-            result = self.client.table('maintenance_slots').insert({
-                'date': date,
-                'hour': hour,
-                'reason': reason or 'Mantenimiento programado',
-                'created_by': admin_username,
-                'created_at': datetime.now().isoformat()
-            }).execute()
+            # Verificar si ya existen reservas en alguna de las horas
+            conflicting_reservations = []
+            for hour in hours_to_block:
+                existing_reservation = self.client.table('reservations').select('id, email, hour').eq(
+                    'date', date
+                ).eq('hour', hour).execute()
 
-            return len(result.data) > 0, "Mantenimiento programado exitosamente"
+                if existing_reservation.data:
+                    conflicting_reservations.append(f"{hour}:00")
+
+            if conflicting_reservations:
+                hours_str = ", ".join(conflicting_reservations)
+                return False, f"Ya existen reservas en las horas: {hours_str}"
+
+            # Verificar si ya existe mantenimiento en alguna de las horas
+            conflicting_maintenance = []
+            for hour in hours_to_block:
+                existing_maintenance = self.client.table('maintenance_slots').select('id, hour').eq(
+                    'date', date
+                ).eq('hour', hour).execute()
+
+                if existing_maintenance.data:
+                    conflicting_maintenance.append(f"{hour}:00")
+
+            if conflicting_maintenance:
+                hours_str = ", ".join(conflicting_maintenance)
+                return False, f"Ya existe mantenimiento en las horas: {hours_str}"
+
+            # Insertar mantenimiento para cada hora en el rango
+            maintenance_type = 'whole_day' if is_whole_day else 'time_range'
+
+            for hour in hours_to_block:
+                self.client.table('maintenance_slots').insert({
+                    'date': date,
+                    'hour': hour,
+                    'start_hour': start_hour,
+                    'end_hour': end_hour,
+                    'maintenance_type': maintenance_type,
+                    'reason': reason or 'Mantenimiento programado',
+                    'created_by': admin_username,
+                    'created_at': datetime.now().isoformat()
+                }).execute()
+
+            hours_count = len(hours_to_block)
+            time_desc = "día completo" if is_whole_day else f"{start_hour}:00 - {end_hour}:00"
+            return True, f"Mantenimiento programado exitosamente ({time_desc}, {hours_count} horas bloqueadas)"
+
         except Exception as e:
             print(f"Error adding maintenance slot: {e}")
             return False, f"Error: {str(e)}"
 
     def remove_maintenance_slot(self, maintenance_id: int) -> bool:
-        """Eliminar horario de mantenimiento"""
+        """Eliminar horario de mantenimiento individual"""
         try:
             result = self.client.table('maintenance_slots').delete().eq('id', maintenance_id).execute()
             return len(result.data) > 0
         except Exception as e:
             print(f"Error removing maintenance slot: {e}")
             return False
+
+    def remove_maintenance_range(self, date: str, start_hour: int, end_hour: int) -> Tuple[bool, str]:
+        """Eliminar un rango completo de mantenimiento"""
+        try:
+            # Obtener todos los mantenimientos en ese rango
+            result = self.client.table('maintenance_slots').select('id').eq('date', date).eq(
+                'start_hour', start_hour
+            ).eq('end_hour', end_hour).execute()
+
+            if not result.data:
+                return False, "No se encontró mantenimiento en ese rango"
+
+            # Eliminar todos los slots del rango
+            deleted_count = 0
+            for slot in result.data:
+                delete_result = self.client.table('maintenance_slots').delete().eq('id', slot['id']).execute()
+                if delete_result.data:
+                    deleted_count += 1
+
+            if deleted_count > 0:
+                return True, f"Se eliminaron {deleted_count} horas de mantenimiento"
+            else:
+                return False, "No se pudo eliminar el mantenimiento"
+
+        except Exception as e:
+            print(f"Error removing maintenance range: {e}")
+            return False, f"Error: {str(e)}"
 
     def get_maintenance_for_date(self, date: str) -> List[int]:
         """Obtener horas de mantenimiento para una fecha específica"""
