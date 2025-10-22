@@ -451,5 +451,14 @@ class SupabaseManager:
         except Exception:
             return []
 
+    def get_current_lock_code(self) -> Optional[str]:
+        """Obtener la contraseña actual del candado"""
+        try:
+            result = self.client.table('lock_code').select('code').order('created_at', desc=True).limit(1).execute()
+            return result.data[0]['code'] if result.data else None
+        except Exception as e:
+            print(f"Error getting lock code: {e}")
+            return None
+
 # Instancia global
 db_manager = SupabaseManager()

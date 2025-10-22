@@ -996,8 +996,127 @@ class AdminDatabaseManager:
             print(f"Error getting lock code: {e}")
             return None
 
+    def get_users_with_active_reservations(self) -> List[Dict]:
+        """Obtener lista de usuarios con reservas activas (que no han pasado)"""
+        try:
+            today = get_colombia_today().strftime('%Y-%m-%d')
+
+            # Obtener todas las reservas futuras
+            result = self.client.table('reservations').select('email, full_name').gte('date', today).execute()
+
+            # Crear un diccionario para evitar duplicados
+            users_dict = {}
+            for reservation in result.data:
+                email = reservation['email']
+                if email not in users_dict:
+                    users_dict[email] = {
+                        'email': email,
+                        'name': reservation.get('full_name', 'Usuario')
+                    }
+
+            return list(users_dict.values())
+        except Exception as e:
+            print(f"Error getting users with active reservations: {e}")
+            return []
+
+    def _send_lock_code_change_notification(self, user_email: str, user_name: str, new_lock_code: str) -> bool:
+        """Enviar notificación de cambio de contraseña del candado"""
+        try:
+            from email_config import email_manager
+
+            if not email_manager.is_configured():
+                print(f"Email not configured, skipping notification for {user_email}")
+                return False
+
+            subject = "🔐 Nueva Contraseña del Candado - Sistema de Reservas"
+
+            html_body = f"""
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <style>
+                    body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
+                    .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
+                    .header {{ background: linear-gradient(135deg, #001854 0%, #2478CC 100%); color: white; padding: 30px; text-align: center; border-radius: 10px; }}
+                    .content {{ background: #f9f9f9; padding: 30px; border-radius: 10px; margin: 20px 0; }}
+                    .lock-code-section {{ background: linear-gradient(135deg, #001854 0%, #2478CC 100%); border-radius: 12px; padding: 25px; margin: 25px 0; text-align: center; color: white; }}
+                    .lock-code {{ font-size: 3.5rem; font-weight: bold; font-family: 'Courier New', monospace; letter-spacing: 8px; margin: 15px 0; }}
+                    .info-box {{ background: white; padding: 15px; border-radius: 8px; border-left: 5px solid #FFD400; margin: 15px 0; }}
+                    .footer {{ text-align: center; color: #666; font-size: 14px; }}
+                </style>
+            </head>
+            <body>
+                <div class="container">
+                    <div class="header">
+                        <h1>🔐 Nueva Contraseña del Candado</h1>
+                        <p>Sistema de Reservas de Cancha de Tenis</p>
+                    </div>
+
+                    <div class="content">
+                        <h2>¡Hola {user_name}!</h2>
+                        <p>Te notificamos que la <strong>contraseña del candado de la cancha ha sido actualizada</strong>.</p>
+
+                        <p>Si tienes una reserva activa, usa esta nueva contraseña para acceder a la cancha:</p>
+
+                        <div class="lock-code-section">
+                            <div>Nueva Contraseña:</div>
+                            <div class="lock-code">{new_lock_code}</div>
+                        </div>
+
+                        <div class="info-box">
+                            <h4 style="margin-top: 0;">📝 Información Importante</h4>
+                            <ul>
+                                <li>Esta es la nueva contraseña para abrir el candado de la cancha</li>
+                                <li>La contraseña anterior ya no funcionará</li>
+                                <li>Asegúrate de anotar esta contraseña para tu próxima visita</li>
+                            </ul>
+                        </div>
+
+                        <p>Si no tienes una reserva activa, puedes ignorar este mensaje.</p>
+                        <p>Si tienes preguntas, contacta al administrador.</p>
+                    </div>
+
+                    <div class="footer">
+                        <p>Sistema de Reservas de Cancha de Tenis - Colina Campestre</p>
+                        <p>Este es un mensaje automatizado, por favor no respondas a este email.</p>
+                    </div>
+                </div>
+            </body>
+            </html>
+            """
+
+            text_body = f"""
+            Nueva Contraseña del Candado - Sistema de Reservas
+
+            ¡Hola {user_name}!
+
+            Te notificamos que la contraseña del candado de la cancha ha sido actualizada.
+
+            Si tienes una reserva activa, usa esta nueva contraseña para acceder a la cancha:
+
+            NUEVA CONTRASEÑA: {new_lock_code}
+
+            INFORMACIÓN IMPORTANTE:
+            - Esta es la nueva contraseña para abrir el candado de la cancha
+            - La contraseña anterior ya no funcionará
+            - Asegúrate de anotar esta contraseña para tu próxima visita
+
+            Si no tienes una reserva activa, puedes ignorar este mensaje.
+
+            Si tienes preguntas, contacta al administrador.
+
+            Sistema de Reservas de Cancha de Tenis - Colina Campestre
+            """
+
+            success, message = email_manager.send_email(user_email, subject, html_body, text_body)
+            return success
+
+        except Exception as e:
+            print(f"Error sending lock code change notification: {e}")
+            return False
+
     def update_lock_code(self, new_code: str, admin_username: str) -> bool:
-        """Actualizar contraseña del candado"""
+        """Actualizar contraseña del candado y notificar a usuarios con reservas activas"""
         try:
             from datetime import datetime
 
@@ -1011,6 +1130,27 @@ class AdminDatabaseManager:
             # Verificar que se insertó correctamente
             if result.data and len(result.data) > 0:
                 print(f"Lock code updated successfully: {new_code}")
+
+                # Obtener usuarios con reservas activas y enviar notificaciones
+                users_with_active_reservations = self.get_users_with_active_reservations()
+
+                if users_with_active_reservations:
+                    print(f"Notifying {len(users_with_active_reservations)} users about lock code change")
+
+                    for user in users_with_active_reservations:
+                        # Enviar email a cada usuario
+                        success = self._send_lock_code_change_notification(
+                            user['email'],
+                            user['name'],
+                            new_code
+                        )
+                        if success:
+                            print(f"Lock code change notification sent to {user['email']}")
+                        else:
+                            print(f"Failed to send notification to {user['email']}")
+                else:
+                    print("No users with active reservations to notify")
+
                 return True
             else:
                 print("Failed to insert lock code")

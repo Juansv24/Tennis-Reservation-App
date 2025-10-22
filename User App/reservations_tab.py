@@ -470,9 +470,51 @@ def show_reservation_tab():
 
     st.markdown(" ")
 
-    # Rest of the layout code remains the same
-    use_desktop_layout = st.checkbox("🖥️ Usar vista desktop", key="desktop_layout",
-                                     help="Activa para pantallas grandes")
+    # Display lock code in the upper right corner if user has active reservations
+    col_checkbox, col_lock_code = st.columns([1, 1])
+
+    with col_checkbox:
+        # Rest of the layout code remains the same
+        use_desktop_layout = st.checkbox("🖥️ Usar vista desktop", key="desktop_layout",
+                                         help="Activa para pantallas grandes")
+
+    # Show lock code in upper right if user has active reservations
+    with col_lock_code:
+        # Check if user has active reservations
+        user_has_active_reservations = bool(user_today_reservations or user_tomorrow_reservations)
+
+        if user_has_active_reservations:
+            # Get current lock code
+            lock_code = db_manager.get_current_lock_code()
+            if lock_code:
+                st.markdown(f"""
+                <div style="
+                    text-align: right;
+                    padding: 8px 0;
+                ">
+                    <div style="
+                        font-size: 0.75rem;
+                        color: #666;
+                        margin-bottom: 4px;
+                        letter-spacing: 1px;
+                        font-weight: 500;
+                    ">
+                        🔐 CANDADO
+                    </div>
+                    <div style="
+                        font-size: 1.6rem;
+                        font-weight: 600;
+                        font-family: 'Courier New', monospace;
+                        color: #001854;
+                        letter-spacing: 3px;
+                        border-bottom: 2px solid #2478CC;
+                        padding-bottom: 4px;
+                        display: inline-block;
+                    ">
+                        {lock_code}
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
 
     if use_desktop_layout:
         # Layout desktop
