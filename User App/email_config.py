@@ -390,7 +390,7 @@ class EmailManager:
         subject = "🔒 Recuperación de Contraseña - Sistema de Reservas"
 
         # Crear enlace de recuperación (ajusta la URL según tu despliegue)
-        reset_link = f"https://reservas-tenis-colina.streamlit.app/?reset_token={reset_token}"
+        reset_link = f"https://reservas-cancha-tenis-colina.streamlit.app/?reset_token={reset_token}"
 
         html_body = f"""
         <!DOCTYPE html>
