@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Tuple
 import contextlib
 from timezone_utils import get_colombia_now
+from database_exceptions import DatabaseConnectionError, DatabaseOperationError, InvalidResponseError, AtomicOperationError
 
 
 class SupabaseManager:
@@ -14,13 +15,32 @@ class SupabaseManager:
 
     def __init__(self):
         try:
-            self.url = st.secrets["supabase"]["url"]
-            self.key = st.secrets["supabase"]["key"]
+            # Verificar que las credenciales existan
+            try:
+                self.url = st.secrets["supabase"]["url"]
+                self.key = st.secrets["supabase"]["key"]
+            except KeyError as e:
+                st.error(f"❌ Error de Configuración: Credenciales de Supabase faltantes - {e}")
+                st.stop()
+
+            # Validar que las credenciales no estén vacías
+            if not self.url or not self.key:
+                st.error("❌ Error de Configuración: URL o clave de Supabase está vacía")
+                st.stop()
+
             self.client: Client = create_client(self.url, self.key)
-            self.init_tables()
+
+            # Verificar que la conexión funciona
+            try:
+                self.init_tables()
+            except Exception as e:
+                st.error("❌ Error de Conexión: No se puede conectar a Supabase")
+                st.error(f"Detalles: {str(e)}")
+                st.stop()
+
         except Exception as e:
-            st.error(f"Error al conectar con Supabase: {e}")
-            self.client = None
+            st.error(f"❌ Error de Inicialización: {str(e)}")
+            st.stop()
 
     def init_tables(self):
         """Verificar que las tablas existan en Supabase"""
@@ -30,9 +50,8 @@ class SupabaseManager:
             # Probar conexión
             result = self.client.table('reservations').select('id').limit(1).execute()
             return True
-        except Exception:
-            st.error("Tablas no encontradas. Por favor ejecuta el SQL de configuración en el dashboard de Supabase.")
-            return False
+        except Exception as e:
+            raise DatabaseConnectionError(f"Tablas no encontradas o error de conexión: {str(e)}")
 
     def set_session_context(self, session_token: str):
         """Set session token for RLS context"""
@@ -118,8 +137,8 @@ class SupabaseManager:
                 return result.data[0]['credits'] or 0
             return 0
         except Exception as e:
-            print(f"Error getting user credits: {e}")
-            return 0
+            # Distinguish between connection error and no data found
+            raise DatabaseConnectionError(f"Failed to fetch user credits: {str(e)}")
 
     def has_sufficient_credits(self, email: str, required_credits: int) -> bool:
         """Verificar si el usuario tiene suficientes créditos"""
@@ -186,8 +205,8 @@ class SupabaseManager:
                 'date', date.strftime('%Y-%m-%d')
             ).eq('hour', hour).execute()
             return len(result.data) == 0
-        except Exception:
-            return False
+        except Exception as e:
+            raise DatabaseConnectionError(f"Failed to check hour availability: {str(e)}")
 
     def get_reservations_for_date(self, date: datetime.date) -> List[int]:
         """Obtener horas reservadas para una fecha específica"""
@@ -196,8 +215,8 @@ class SupabaseManager:
                 'date', date.strftime('%Y-%m-%d')
             ).order('hour').execute()
             return [row['hour'] for row in result.data]
-        except Exception:
-            return []
+        except Exception as e:
+            raise DatabaseConnectionError(f"Failed to fetch reservations for date: {str(e)}")
 
     def get_reservations_with_names_for_date(self, date: datetime.date) -> Dict[int, str]:
         """Obtener reservas con nombres de usuarios para una fecha"""
@@ -412,14 +431,26 @@ class SupabaseManager:
                 'p_user_name': name
             }).execute()
 
-            if result.data and len(result.data) > 0:
-                response = result.data[0]
-                return response['success'], response['message']
-            else:
-                return False, "Sin respuesta de la base de datos"
+            # Validate response structure
+            if not result.data or len(result.data) == 0:
+                return False, "Error de base de datos: Sin respuesta del servidor"
 
+            response = result.data[0]
+
+            # Validate response has required keys
+            if 'success' not in response or 'message' not in response:
+                return False, "Error de base de datos: Respuesta con formato inválido"
+
+            return response['success'], response['message']
+
+        except ConnectionError:
+            return False, "Conexión perdida. Por favor intenta de nuevo."
+        except TimeoutError:
+            return False, "La solicitud expiró. Por favor verifica tu conexión e intenta de nuevo."
         except Exception as e:
-            return False, f"Error: {str(e)}"
+            # Log the actual error server-side, return generic to user
+            print(f"🔴 RPC Error in atomic_reservation_request: {str(e)}")
+            return False, "Error del sistema. Por favor contacta con soporte."
 
     def create_atomic_double_reservation(self, date, hour1, hour2, name, email):
         """Crear reserva de 2 horas usando stored procedure atómica"""
@@ -432,14 +463,26 @@ class SupabaseManager:
                 'p_user_name': name
             }).execute()
 
-            if result.data and len(result.data) > 0:
-                response = result.data[0]
-                return response['success'], response['message']
-            else:
-                return False, "Sin respuesta de la base de datos"
+            # Validate response structure
+            if not result.data or len(result.data) == 0:
+                return False, "Error de base de datos: Sin respuesta del servidor"
 
+            response = result.data[0]
+
+            # Validate response has required keys
+            if 'success' not in response or 'message' not in response:
+                return False, "Error de base de datos: Respuesta con formato inválido"
+
+            return response['success'], response['message']
+
+        except ConnectionError:
+            return False, "Conexión perdida. Por favor intenta de nuevo."
+        except TimeoutError:
+            return False, "La solicitud expiró. Por favor verifica tu conexión e intenta de nuevo."
         except Exception as e:
-            return False, f"Error: {str(e)}"
+            # Log the actual error server-side, return generic to user
+            print(f"🔴 RPC Error in atomic_double_reservation_request: {str(e)}")
+            return False, "Error del sistema. Por favor contacta con soporte."
 
     def get_maintenance_slots_for_date(self, date: datetime.date) -> List[int]:
         """Obtener horarios de mantenimiento para una fecha"""
@@ -448,16 +491,25 @@ class SupabaseManager:
                 'date', date.strftime('%Y-%m-%d')
             ).execute()
             return [row['hour'] for row in result.data]
-        except Exception:
+        except Exception as e:
+            # Log error but return empty list as safe fallback (no maintenance slots)
+            print(f"⚠️ Error getting maintenance slots for date {date}: {str(e)}")
             return []
 
     def get_current_lock_code(self) -> Optional[str]:
-        """Obtener la contraseña actual del candado"""
+        """Obtener la contraseña actual del candalo"""
         try:
             result = self.client.table('lock_code').select('code').order('created_at', desc=True).limit(1).execute()
-            return result.data[0]['code'] if result.data else None
+            if result.data and len(result.data) > 0:
+                lock_code = result.data[0].get('code')
+                if lock_code:
+                    return lock_code
+            # No lock code found
+            print("⚠️ No lock code found in database")
+            return None
         except Exception as e:
-            print(f"Error getting lock code: {e}")
+            # Log error but return None as safe fallback
+            print(f"⚠️ Error getting lock code: {str(e)}")
             return None
 
 # Instancia global

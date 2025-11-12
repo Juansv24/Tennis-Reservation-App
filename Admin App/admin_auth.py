@@ -90,11 +90,23 @@ class AdminAuthManager:
                     admin_password = st.secrets["admin"]["default_password"]
                     salt = st.secrets["admin"]["salt"]
                 except KeyError:
-                    st.error("❌ Admin credentials not configured in secrets")
+                    st.error("❌ Credenciales de administrador no configuradas en secretos")
+                    st.info("""
+                    Para configurar el acceso de administrador, agrega a tus secretos de Streamlit:
+
+                    [admin]
+                    default_password = "TuContraseñaSeguraAquí"
+                    salt = "TuSaltSeguroAquíAlMenos16Caracteres"
+                    """)
                     return False
 
                 if len(admin_password) < 8 or len(salt) < 16:
-                    st.error("❌ Admin credentials don't meet security requirements")
+                    st.error("❌ Las credenciales de administrador no cumplen los requisitos de seguridad")
+                    st.info("""
+                    Las credenciales de administrador deben cumplir:
+                    - default_password: al menos 8 caracteres
+                    - salt: al menos 16 caracteres
+                    """)
                     return False
 
                 password_hash = self._hash_password(admin_password, salt)
@@ -147,7 +159,14 @@ class AdminAuthManager:
 
             return True
         except KeyError:
-            st.error("❌ Admin credentials not found in secrets")
+            st.error("❌ Credenciales de administrador no encontradas en secretos")
+            st.info("""
+            Para configurar el acceso de administrador, agrega a tus secretos de Streamlit:
+
+            [admin]
+            default_password = "TuContraseñaSeguraAquí"
+            salt = "TuSaltSeguroAquíAlMenos32Caracteres"
+            """)
             return False
 
     def login_admin(self, username: str, password: str) -> bool:
@@ -160,8 +179,6 @@ class AdminAuthManager:
                 'username', username.strip()
             ).eq('is_active', True).execute()
 
-            print(f"Database query result: {result.data}")
-
             if not result.data:
                 print("No admin user found in database")
                 return False
@@ -173,11 +190,11 @@ class AdminAuthManager:
             password_hash = self._hash_password(password, admin['salt'])
             stored_hash = admin['password_hash']
 
-            print(f"Calculated hash: {password_hash}")
-            print(f"Stored hash: {stored_hash}")
-            print(f"Hashes match: {password_hash == stored_hash}")
+            # NOTE: DO NOT log password hashes for security reasons
+            hashes_match = password_hash == stored_hash
+            print(f"Authentication result: {'SUCCESS' if hashes_match else 'FAILED'}")
 
-            if password_hash != stored_hash:
+            if not hashes_match:
                 return False
 
             # Guardar sesión de admin

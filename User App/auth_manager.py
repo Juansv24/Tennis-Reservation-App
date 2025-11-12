@@ -194,14 +194,24 @@ class SupabaseAuthManager:
                 'session_token': session_token
             }
 
+        except ConnectionError as e:
+            # Transient network error - don't invalidate session, just warn user
+            st.warning("⚠️ Problema de conexión temporal. Por favor recarga la página.")
+            print(f"Network error during session validation: {e}")
+            return None
+        except TimeoutError as e:
+            # Timeout - transient network error
+            st.warning("⚠️ Tiempo de conexión agotado. Por favor intenta de nuevo.")
+            print(f"Timeout during session validation: {e}")
+            return None
         except Exception as e:
-            # En caso de cualquier error, limpiar contexto RLS y retornar None
+            # Actual authentication error - invalidate session
+            print(f"🔴 Session validation error: {str(e)}")
             try:
                 self.client.rpc('set_session_token', {'token': None}).execute()
             except Exception:
                 pass
-
-            st.error(f"Error validando sesión: {e}")
+            st.error("Error de sesión. Por favor inicia sesión de nuevo.")
             return None
 
     def destroy_session(self, session_token: str) -> bool:
@@ -522,7 +532,7 @@ class SupabaseAuthManager:
             ).eq('token', token).eq('is_used', False).execute()
 
             if not result.data:
-                return False, "Token inválido o ya usado. Ingresa a https://reservas-tenis-colina.streamlit.app para volver a iniciar sesión", None
+                return False, "Token inválido o ya usado. Por favor solicita un nuevo enlace de recuperación.", None
 
             token_data = result.data[0]
             user_email = token_data['users']['email']

@@ -4,3 +4,37 @@
 # Ignore all files and folders within the "Data" folder
 /Data/**
 
+# Documentation folder
+/Docs/
+
+# Python cache files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv
+
+# IDE and editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Streamlit cache and temporary files
+.streamlit/cache/
+.streamlit/.streamlit/
+*.streamlit
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
