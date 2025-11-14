@@ -33,6 +33,10 @@ ENV/
 .streamlit/.streamlit/
 *.streamlit
 
+# Tests folder
+Tests/
+
+
 # Environment files
 .env
 .env.local
