@@ -183,7 +183,7 @@ class SupabaseManager:
                         return False, "Las reservas están disponibles hasta las 8:00 PM"
             else:
                 # Usuarios regulares: pueden reservar de 8 AM - 5 PM (17:00)
-                if 8 <= current_hour <= 19:
+                if 8 <= current_hour <= 17:
                     return True, ""
                 else:
                     if current_hour < 8:
