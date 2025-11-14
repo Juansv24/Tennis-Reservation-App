@@ -135,27 +135,38 @@ def main():
             st.rerun()
 
 def check_system_health():
-    """Verificar salud del sistema"""
+    """Verificar salud del sistema - LIGHTWEIGHT version para no bloquear startup
+
+    FIX #2: Reemplazado verificación pesada por simple query con limit
+    Esto reduce de ~10 DB calls a 2 lightweight queries bajo concurrencia
+    """
     try:
-        # Probar base de datos
-        db_manager.get_all_reservations()
+        # FIX #2a: Reemplazar get_all_reservations() (full table scan) con simple limit query
+        # Esto evita traer TODOS los registros de la tabla
+        db_manager.client.table('reservations').select('id').limit(1).execute()
 
         from auth_manager import auth_manager
-        # Simplemente verificar que auth_manager existe y funciona
+        # Verificación ligera - solo verificar que la tabla existe
         auth_manager.client.table('users').select('id').limit(1).execute()
 
         return True, "Sistema operacional"
 
     except Exception as e:
-        return False, f"Error del sistema: {str(e)}"
+        # FIX #2b: Log pero no bloquear - la app debería cargar incluso si health check falla
+        print(f"⚠️ Health check warning: {str(e)}")
+        return False, f"Health check: {str(e)}"
 
 if __name__ == "__main__":
-    # Verificar salud del sistema
+    # FIX #2c: No bloquear en health check - mostrar warning pero dejar que app cargue
     is_healthy, health_message = check_system_health()
 
-    if is_healthy:
+    try:
         main()
-    else:
-        st.error(f"🚨 Falló la Verificación de Salud del Sistema: {health_message}")
+    except Exception as e:
+        # Si health check falló previamente, mostrar warning + error app
+        if not is_healthy:
+            st.warning(f"⚠️ Verificación de Salud: {health_message}")
+        st.error("🚨 Error en la aplicacion")
+        st.exception(e)
         if st.button("🔄 Reintentar"):
             st.rerun()

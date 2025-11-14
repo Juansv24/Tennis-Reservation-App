@@ -3,11 +3,47 @@ Gestor de Base de Datos Supabase para Sistema de Reservas de Cancha de Tenis
 """
 import streamlit as st
 from supabase import create_client, Client
+from supabase.client import ClientOptions  # FIX: Use official ClientOptions class
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Tuple
 import contextlib
 from timezone_utils import get_colombia_now
 from database_exceptions import DatabaseConnectionError, DatabaseOperationError, InvalidResponseError, AtomicOperationError
+import httpx
+import time
+from functools import wraps
+
+
+def retry_on_timeout(max_retries=3, backoff_factor=1.0):
+    """Decorator para reintentar operaciones de DB en caso de timeout
+
+    Args:
+        max_retries: Número máximo de reintentos (default 3)
+        backoff_factor: Factor de espera exponencial entre reintentos (default 1.0 = sin espera)
+    """
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            last_exception = None
+            for attempt in range(max_retries):
+                try:
+                    return func(*args, **kwargs)
+                except (TimeoutError, httpx.TimeoutException, httpx.ConnectError) as e:
+                    last_exception = e
+                    if attempt < max_retries - 1:
+                        wait_time = backoff_factor * (2 ** attempt)  # Espera exponencial: 0, 1, 2, 4, 8...
+                        print(f"⚠️ Reintentando {func.__name__} (intento {attempt + 2}/{max_retries}) tras {wait_time}s...")
+                        time.sleep(wait_time)
+                    else:
+                        print(f"❌ {func.__name__} falló después de {max_retries} intentos")
+                except Exception as e:
+                    # No reintentar otros tipos de errores
+                    raise
+
+            # Si llegamos aquí, todos los reintentos fallaron
+            raise last_exception
+        return wrapper
+    return decorator
 
 
 class SupabaseManager:
@@ -28,7 +64,40 @@ class SupabaseManager:
                 st.error("❌ Error de Configuración: URL o clave de Supabase está vacía")
                 st.stop()
 
-            self.client: Client = create_client(self.url, self.key)
+            # FIX #1: Configurar cliente Supabase con timeout, connection pooling y retry
+            # Esto previene EAGAIN errors bajo carga concurrente
+            # Alineado con supabase-py v2.18.0 official API
+
+            limits = httpx.Limits(
+                max_connections=20,           # Máximo 20 conexiones simultáneas
+                max_keepalive_connections=10  # Reutilizar hasta 10 conexiones
+            )
+
+            # Crear cliente HTTP con configuración de concurrencia
+            httpx_client = httpx.Client(
+                limits=limits,
+                timeout=httpx.Timeout(30.0, connect=10.0),
+                http2=True,          # Habilitar HTTP/2 para mejor multiplexing
+                verify=True          # Verificar certificados SSL
+            )
+
+            # Crear opciones de cliente usando oficial ClientOptions (v2.18.0 recomendado)
+            postgrest_timeout = httpx.Timeout(30.0, connect=10.0)
+            storage_timeout = httpx.Timeout(30.0, connect=10.0)
+            function_timeout = httpx.Timeout(30.0, connect=10.0)
+
+            options = ClientOptions(
+                schema="public",
+                auto_refresh_token=True,
+                persist_session=True,
+                httpx_client=httpx_client,
+                postgrest_client_timeout=postgrest_timeout,
+                storage_client_timeout=storage_timeout,
+                function_client_timeout=function_timeout
+            )
+
+            # Crear cliente Supabase con ClientOptions oficial
+            self.client: Client = create_client(self.url, self.key, options)
 
             # Verificar que la conexión funciona
             try:
@@ -73,8 +142,12 @@ class SupabaseManager:
         self.set_session_context(None)
         self._current_session_token = None
 
+    @retry_on_timeout(max_retries=2, backoff_factor=0.3)
     def is_vip_user(self, email: str) -> bool:
-        """Verificar si un usuario es VIP (tiene horario extendido)"""
+        """Verificar si un usuario es VIP (tiene horario extendido)
+
+        FIX #3: Aplica retry para manejar timeouts bajo carga
+        """
         try:
             result = self.client.table('vip_users').select('id').eq(
                 'email', email.strip().lower()
@@ -126,8 +199,12 @@ class SupabaseManager:
                 return True, ""
             return False, "Error verificando horarios disponibles"
 
+    @retry_on_timeout(max_retries=3, backoff_factor=0.5)
     def get_user_credits(self, user_email: str) -> int:
-        """Obtener créditos actuales del usuario"""
+        """Obtener créditos actuales del usuario
+
+        FIX #3: Aplica retry con backoff exponencial para manejar timeouts bajo carga
+        """
         try:
             result = self.client.table('users').select('credits').eq(
                 'email', user_email.strip().lower()
@@ -247,8 +324,12 @@ class SupabaseManager:
         except Exception:
             return []
 
+    @retry_on_timeout(max_retries=3, backoff_factor=0.5)
     def get_date_reservations_summary(self, dates: List[datetime.date], user_email: str) -> Dict:
-        """Get all reservation data for multiple dates in one call"""
+        """Get all reservation data for multiple dates in one call
+
+        FIX #3: Aplica retry para manejar timeouts bajo carga
+        """
         try:
             date_strings = [d.strftime('%Y-%m-%d') for d in dates]
 
