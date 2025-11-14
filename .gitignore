@@ -34,7 +34,7 @@ ENV/
 *.streamlit
 
 # Tests folder
-Tests/
+/Tests/
 
 
 # Environment files
