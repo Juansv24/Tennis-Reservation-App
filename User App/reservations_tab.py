@@ -805,13 +805,23 @@ def confirm_reservation_callback(current_user, selected_date, selected_hours):
 
 
 def handle_reservation_submission(current_user, date, selected_hours):
-    """Lógica simplificada con stored procedure con errores debajo de los slots"""
+    """Lógica simplificada con stored procedure con errores debajo de los slots
+
+    Uses request queue manager for extreme load handling (15-20+ users)
+    """
+    from database_queue_adapter import queue_atomic_reservation, queue_double_reservation, is_system_overloaded
+
+    # Check if system is overloaded
+    if is_system_overloaded():
+        st.session_state.reservation_error = True
+        st.session_state.error_message = "Sistema muy cargado - intenta en unos segundos"
+        return False
 
     if len(selected_hours) == 1:
-        # Reserva de 1 hora - usar stored procedure atómica
+        # Reserva de 1 hora - usar cola de solicitudes con circuit breaker
         hour = selected_hours[0]
-        success, message = db_manager.create_atomic_reservation(
-            date, hour, current_user['full_name'], current_user['email']
+        success, message = queue_atomic_reservation(
+            db_manager, date, hour, current_user['full_name'], current_user['email']
         )
 
         if success:
@@ -830,14 +840,24 @@ def handle_reservation_submission(current_user, date, selected_hours):
 
 
 def handle_two_hour_reservation(current_user, date, selected_hours):
-    """Manejar reserva de 2 horas con stored procedure atómica"""
+    """Manejar reserva de 2 horas con stored procedure atómica
+
+    Uses request queue manager for extreme load handling (15-20+ users)
+    """
+    from database_queue_adapter import queue_double_reservation, is_system_overloaded
+
+    # Check if system is overloaded
+    if is_system_overloaded():
+        st.session_state.reservation_error = True
+        st.session_state.error_message = "Sistema muy cargado - intenta en unos segundos"
+        return False
 
     # Sort hours to ensure correct order
     hour1, hour2 = sorted(selected_hours)
 
-    # Single atomic call for both reservations
-    success, message = db_manager.create_atomic_double_reservation(
-        date, hour1, hour2, current_user['full_name'], current_user['email']
+    # Single atomic call for both reservations via queue
+    success, message = queue_double_reservation(
+        db_manager, date, hour1, hour2, current_user['full_name'], current_user['email']
     )
 
     if success:
