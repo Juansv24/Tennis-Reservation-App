@@ -69,14 +69,14 @@ class SupabaseManager:
             # Alineado con supabase-py v2.18.0 official API
 
             limits = httpx.Limits(
-                max_connections=20,           # Máximo 20 conexiones simultáneas
-                max_keepalive_connections=10  # Reutilizar hasta 10 conexiones
+                max_connections=50,           # Increased from 20 for 15-20 concurrent users
+                max_keepalive_connections=25  # Proportional increase for connection reuse
             )
 
             # Crear cliente HTTP con configuración de concurrencia
             httpx_client = httpx.Client(
                 limits=limits,
-                timeout=httpx.Timeout(30.0, connect=10.0),
+                timeout=httpx.Timeout(30.0, connect=15.0),  # Increased connect timeout from 10 to 15
                 http2=True,          # Habilitar HTTP/2 para mejor multiplexing
                 verify=True          # Verificar certificados SSL
             )
