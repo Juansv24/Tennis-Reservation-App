@@ -12,10 +12,13 @@ from database_exceptions import DatabaseConnectionError, DatabaseOperationError,
 import httpx
 import time
 from functools import wraps
+import random
 
 
 def retry_on_timeout(max_retries=3, backoff_factor=1.0):
     """Decorator para reintentar operaciones de DB en caso de timeout
+
+    Implementa exponential backoff with jitter para prevenir retry storms.
 
     Args:
         max_retries: Número máximo de reintentos (default 3)
@@ -31,8 +34,11 @@ def retry_on_timeout(max_retries=3, backoff_factor=1.0):
                 except (TimeoutError, httpx.TimeoutException, httpx.ConnectError) as e:
                     last_exception = e
                     if attempt < max_retries - 1:
-                        wait_time = backoff_factor * (2 ** attempt)  # Espera exponencial: 0, 1, 2, 4, 8...
-                        print(f"⚠️ Reintentando {func.__name__} (intento {attempt + 2}/{max_retries}) tras {wait_time}s...")
+                        # Exponential backoff with jitter to prevent retry storms
+                        base_wait = backoff_factor * (2 ** attempt)
+                        jitter = random.uniform(0, 0.5)  # Random 0-0.5 seconds
+                        wait_time = base_wait + jitter
+                        print(f"⚠️ Reintentando {func.__name__} (intento {attempt + 2}/{max_retries}) tras {wait_time:.2f}s...")
                         time.sleep(wait_time)
                     else:
                         print(f"❌ {func.__name__} falló después de {max_retries} intentos")
