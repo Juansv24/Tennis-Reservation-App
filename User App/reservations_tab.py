@@ -879,6 +879,10 @@ def show_success_and_cleanup(current_user, date, hours):
         'credits_used': len(hours)
     }
     cleanup_selection()
+
+    # Invalidate user's cached data since credits changed
+    db_manager.invalidate_user_cache(current_user['email'])
+
     send_reservation_confirmation_email(current_user, date, hours)
     st.balloons()
 

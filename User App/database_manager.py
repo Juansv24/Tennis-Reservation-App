@@ -153,12 +153,26 @@ class SupabaseManager:
         """Verificar si un usuario es VIP (tiene horario extendido)
 
         FIX #3: Aplica retry para manejar timeouts bajo carga
+        FIX #4: Implementa caching con TTL de 24 horas (VIP status rarely changes)
         """
+        from cache_manager import get_cache
+
+        cache = get_cache()
+        cache_key = f"vip:{email.strip().lower()}"
+
+        # Try to get from cache first (24 hour TTL - VIP status rarely changes)
+        cached_is_vip = cache.get(cache_key)
+        if cached_is_vip is not None:
+            return cached_is_vip
+
         try:
             result = self.client.table('vip_users').select('id').eq(
                 'email', email.strip().lower()
             ).execute()
-            return len(result.data) > 0
+            is_vip = len(result.data) > 0
+            # Store in cache with 24 hour TTL
+            cache.set(cache_key, is_vip, ttl_seconds=86400)
+            return is_vip
         except Exception as e:
             print(f"Error verificando usuario VIP: {e}")
             return False
@@ -210,14 +224,30 @@ class SupabaseManager:
         """Obtener créditos actuales del usuario
 
         FIX #3: Aplica retry con backoff exponencial para manejar timeouts bajo carga
+        FIX #4: Implementa caching con TTL de 5 minutos para reducir carga de DB
         """
+        from cache_manager import get_cache
+
+        cache = get_cache()
+        cache_key = f"credits:{user_email.strip().lower()}"
+
+        # Try to get from cache first (5 minute TTL)
+        cached_credits = cache.get(cache_key)
+        if cached_credits is not None:
+            return cached_credits
+
         try:
             result = self.client.table('users').select('credits').eq(
                 'email', user_email.strip().lower()
             ).execute()
 
             if result.data:
-                return result.data[0]['credits'] or 0
+                credits = result.data[0]['credits'] or 0
+                # Store in cache with 5 minute TTL
+                cache.set(cache_key, credits, ttl_seconds=300)
+                return credits
+
+            cache.set(cache_key, 0, ttl_seconds=300)
             return 0
         except Exception as e:
             # Distinguish between connection error and no data found
@@ -262,6 +292,22 @@ class SupabaseManager:
         except Exception as e:
             print(f"Error using credits: {e}")
             return False
+
+    def invalidate_user_cache(self, email: str):
+        """Invalidate cached data for a user after reservation
+
+        Should be called after:
+        - Credit deduction
+        - Reservation creation
+        - Profile updates
+
+        Args:
+            email: User email to invalidate cache for
+        """
+        from cache_manager import get_cache
+        cache = get_cache()
+        # Invalidate credits cache - will be reloaded on next check
+        cache.invalidate(f"credits:{email.strip().lower()}")
 
     def save_reservation(self, date: datetime.date, hour: int, name: str, email: str) -> bool:
         """Guardar nueva reserva"""
