@@ -13,12 +13,115 @@ import httpx
 import time
 from functools import wraps
 import random
+import errno
+import os
+import threading
+from queue import Queue, Empty
+
+
+def _get_error_details(e: Exception) -> Dict:
+    """Extract detailed error information for diagnostics"""
+    details = {
+        'error_type': type(e).__name__,
+        'error_message': str(e),
+        'is_timeout': False,
+        'is_connection': False,
+        'is_resource_exhaustion': False,
+        'error_code': None,
+        'timestamp': datetime.now().isoformat()
+    }
+
+    # Check for specific error types
+    if isinstance(e, (TimeoutError, httpx.TimeoutException)):
+        details['is_timeout'] = True
+    elif isinstance(e, httpx.ConnectError):
+        details['is_connection'] = True
+    elif isinstance(e, OSError):
+        details['error_code'] = e.errno
+        if e.errno == errno.EAGAIN or e.errno == errno.EWOULDBLOCK:
+            details['is_resource_exhaustion'] = True
+            details['error_message'] = f"EAGAIN/EWOULDBLOCK: OS socket resources exhausted - {str(e)}"
+        elif e.errno == errno.EMFILE or e.errno == errno.ENFILE:
+            details['is_resource_exhaustion'] = True
+            details['error_message'] = f"EMFILE/ENFILE: Too many open files - {str(e)}"
+
+    return details
+
+
+class StreamlitRequestLimiter:
+    """Limita solicitudes concurrentes a Supabase para prevenir agotamiento de recursos
+
+    Bajo Streamlit, múltiples reruns pueden causar picos simultáneos de solicitudes.
+    Este limitador evita que demasiadas solicitudes golpeen a Supabase/OS al mismo tiempo.
+    """
+    def __init__(self, max_concurrent=5):
+        self.semaphore = threading.Semaphore(max_concurrent)
+        self.max_concurrent = max_concurrent
+        self.active_requests = 0
+        self.lock = threading.Lock()
+
+    def acquire(self, timeout=2.0):
+        """Acquire permission to make a request. Returns True if acquired within timeout."""
+        acquired = self.semaphore.acquire(timeout=timeout)
+        if acquired:
+            with self.lock:
+                self.active_requests += 1
+        return acquired
+
+    def release(self):
+        """Release permission after request completes."""
+        with self.lock:
+            self.active_requests = max(0, self.active_requests - 1)
+        self.semaphore.release()
+
+    def get_stats(self) -> Dict:
+        """Get current limiter statistics"""
+        with self.lock:
+            return {
+                'active_requests': self.active_requests,
+                'max_concurrent': self.max_concurrent,
+                'available_slots': self.max_concurrent - self.active_requests
+            }
+
+
+# Global request limiter (5 concurrent requests max prevents OS resource exhaustion)
+_request_limiter = StreamlitRequestLimiter(max_concurrent=5)
+
+
+def limit_concurrent_requests(func):
+    """Decorator que limita solicitudes concurrentes a la base de datos
+
+    Esto previene picos de conexiones que causen EAGAIN en Streamlit Cloud.
+    """
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        # Wait for a slot to become available (timeout prevents infinite hangs)
+        acquired = _request_limiter.acquire(timeout=3.0)
+
+        if not acquired:
+            print(f"⚠️ {func.__name__} - conexión saturada, esperando slot...")
+            # Retry once after a short wait
+            time.sleep(0.5)
+            acquired = _request_limiter.acquire(timeout=2.0)
+
+            if not acquired:
+                raise DatabaseConnectionError(
+                    "Base de datos saturada. Por favor intenta en unos segundos."
+                )
+
+        try:
+            return func(*args, **kwargs)
+        finally:
+            _request_limiter.release()
+
+    return wrapper
 
 
 def retry_on_timeout(max_retries=3, backoff_factor=1.0):
-    """Decorator para reintentar operaciones de DB en caso de timeout
+    """Decorator para reintentar operaciones de DB en caso de timeout/resource errors
 
     Implementa exponential backoff with jitter para prevenir retry storms.
+    Ahora captura EAGAIN (Errno 11) y otros errores de recursos del OS.
 
     Args:
         max_retries: Número máximo de reintentos (default 3)
@@ -28,22 +131,46 @@ def retry_on_timeout(max_retries=3, backoff_factor=1.0):
         @wraps(func)
         def wrapper(*args, **kwargs):
             last_exception = None
+            last_error_details = None
+
             for attempt in range(max_retries):
                 try:
                     return func(*args, **kwargs)
-                except (TimeoutError, httpx.TimeoutException, httpx.ConnectError) as e:
+                except (TimeoutError, httpx.TimeoutException, httpx.ConnectError, OSError) as e:
                     last_exception = e
+                    error_details = _get_error_details(e)
+                    last_error_details = error_details
+
+                    # Determine if we should retry
+                    should_retry = (
+                        error_details['is_timeout'] or
+                        error_details['is_connection'] or
+                        error_details['is_resource_exhaustion']
+                    )
+
+                    if not should_retry:
+                        # OSError that's not a resource issue - don't retry
+                        raise
+
                     if attempt < max_retries - 1:
                         # Exponential backoff with jitter to prevent retry storms
                         base_wait = backoff_factor * (2 ** attempt)
-                        jitter = random.uniform(0, 0.5)  # Random 0-0.5 seconds
+                        jitter = random.uniform(0, 0.5)
                         wait_time = base_wait + jitter
-                        print(f"⚠️ Reintentando {func.__name__} (intento {attempt + 2}/{max_retries}) tras {wait_time:.2f}s...")
+
+                        # Log detailed diagnostic info
+                        st.warning(
+                            f"⚠️ {func.__name__} - {error_details['error_message']}\n"
+                            f"Reintentando (intento {attempt + 2}/{max_retries}) en {wait_time:.2f}s..."
+                        )
+                        print(f"[DEBUG] {func.__name__} error details: {error_details}")
                         time.sleep(wait_time)
                     else:
-                        print(f"❌ {func.__name__} falló después de {max_retries} intentos")
+                        # All retries exhausted
+                        print(f"❌ {func.__name__} falló después de {max_retries} intentos - {error_details}")
+                        st.error(f"❌ Error de conexión: {error_details['error_message']}")
                 except Exception as e:
-                    # No reintentar otros tipos de errores
+                    # Non-retryable errors
                     raise
 
             # Si llegamos aquí, todos los reintentos fallaron
@@ -148,12 +275,14 @@ class SupabaseManager:
         self.set_session_context(None)
         self._current_session_token = None
 
+    @limit_concurrent_requests
     @retry_on_timeout(max_retries=2, backoff_factor=0.3)
     def is_vip_user(self, email: str) -> bool:
         """Verificar si un usuario es VIP (tiene horario extendido)
 
         FIX #3: Aplica retry para manejar timeouts bajo carga
         FIX #4: Implementa caching con TTL de 24 horas (VIP status rarely changes)
+        FIX #5: Limita solicitudes concurrentes para prevenir EAGAIN en Streamlit Cloud
         """
         from cache_manager import get_cache
 
@@ -219,12 +348,14 @@ class SupabaseManager:
                 return True, ""
             return False, "Error verificando horarios disponibles"
 
+    @limit_concurrent_requests
     @retry_on_timeout(max_retries=3, backoff_factor=0.5)
     def get_user_credits(self, user_email: str) -> int:
         """Obtener créditos actuales del usuario
 
         FIX #3: Aplica retry con backoff exponencial para manejar timeouts bajo carga
         FIX #4: Implementa caching con TTL de 5 minutos para reducir carga de DB
+        FIX #5: Limita solicitudes concurrentes para prevenir EAGAIN en Streamlit Cloud
         """
         from cache_manager import get_cache
 
@@ -376,11 +507,13 @@ class SupabaseManager:
         except Exception:
             return []
 
+    @limit_concurrent_requests
     @retry_on_timeout(max_retries=3, backoff_factor=0.5)
     def get_date_reservations_summary(self, dates: List[datetime.date], user_email: str) -> Dict:
         """Get all reservation data for multiple dates in one call
 
         FIX #3: Aplica retry para manejar timeouts bajo carga
+        FIX #5: Limita solicitudes concurrentes para prevenir EAGAIN en Streamlit Cloud
         """
         try:
             date_strings = [d.strftime('%Y-%m-%d') for d in dates]
@@ -427,8 +560,12 @@ class SupabaseManager:
                 summary['reservation_names'][date_str] = {}
             return summary
 
+    @limit_concurrent_requests
     def is_slot_still_available(self, date: datetime.date, hour: int) -> bool:
-        """Quick real-time check if slot is still available - single fast query"""
+        """Quick real-time check if slot is still available - single fast query
+
+        FIX #5: Limita solicitudes concurrentes para prevenir EAGAIN en Streamlit Cloud
+        """
         try:
             # Check for active reservations
             result = self.client.table('reservations').select('id').eq(
