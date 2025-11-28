@@ -9,37 +9,32 @@ import time
 
 
 def save_session_token(token: str):
-    """Guardar token de sesión usando parámetros de consulta URL"""
-    # Almacenar en estado de sesión para sesión actual
+    """Save session token to session state ONLY (not in URL for security)"""
+    # Store in session state for current session
     st.session_state.session_token = token
     st.session_state.token_saved_at = time.time()
 
-    # Guardar en URL para persistencia entre actualizaciones
-    try:
-        st.query_params["session_token"] = token
-    except Exception as e:
-        st.warning(f"No se pudo guardar la sesión: {e}")
+    # SECURITY: Do NOT store token in URL
+    # Tokens in URLs can be:
+    # - Recovered from browser history (shared computer risk)
+    # - Forwarded in Referer headers (analytics/proxy logging)
+    # - Leaked in bookmarks/email if user shares URL
+    # Session state is per-session and secure by default
 
 
 def get_saved_session_token():
-    """Obtener token de sesión guardado del estado de sesión o URL"""
-
-    # Primero intentar estado de sesión (sesión actual)
+    """Get session token from session state (never from URL for security)"""
+    # Only get token from session state (per-session, secure)
     if (hasattr(st.session_state, 'session_token') and
             st.session_state.session_token):
         return st.session_state.session_token
 
-    # Luego intentar parámetros de consulta URL (para actualizaciones/nuevas pestañas)
-    try:
-        if "session_token" in st.query_params:
-            token = st.query_params["session_token"]
-            if token:
-                # Restaurar al estado de sesión
-                st.session_state.session_token = token
-                st.session_state.token_saved_at = time.time()
-                return token
-    except Exception:
-        pass
+    # SECURITY: Do NOT retrieve token from URL
+    # URL tokens are exposed in:
+    # - Browser history
+    # - Referer headers
+    # - Proxy logs
+    # If token not in session state, user must log in again (secure behavior)
 
     return None
 
