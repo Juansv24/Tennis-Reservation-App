@@ -130,6 +130,63 @@ def get_current_user():
     return None
 
 
+def validate_session_expiration():
+    """Periodic session expiration validation
+
+    FIX #6: Validates that user session hasn't expired on the server
+    Runs automatically during app execution to detect stale sessions early
+
+    Benefits:
+    - Detects expired sessions before user tries to make a reservation
+    - Prevents "session expired" errors mid-operation
+    - Logs out user gracefully if session is invalid on server
+    - Reduces poor UX from stale session states
+    """
+    # Only validate if user is currently authenticated
+    if not st.session_state.get('authenticated', False):
+        return True  # Not authenticated, nothing to validate
+
+    # Get session token
+    session_token = get_saved_session_token()
+    if not session_token:
+        return True  # No token, assume valid (handled elsewhere)
+
+    # Check if we should validate (every 5 minutes)
+    # This prevents validating on every single page render
+    import time
+    current_time = time.time()
+    last_validation = st.session_state.get('last_session_validation_time', 0)
+    validation_interval = 300  # 5 minutes
+
+    if current_time - last_validation < validation_interval:
+        return True  # Too soon to validate again
+
+    # Update validation timestamp
+    st.session_state.last_session_validation_time = current_time
+
+    # Validate session with server
+    try:
+        user_info = auth_manager.validate_session(session_token)
+
+        if user_info:
+            # Session is still valid - update user info and return
+            st.session_state.user_info = user_info
+            return True
+        else:
+            # Session expired on server - log out user gracefully
+            print("⚠️ Session expired on server during validation")
+            st.warning("⚠️ Tu sesión ha expirado. Por favor inicia sesión de nuevo.")
+            logout_user()  # This calls st.rerun()
+            return False
+
+    except Exception as e:
+        # Error during validation - be conservative and keep user logged in
+        # but log the error for debugging
+        print(f"⚠️ Error validating session: {str(e)}")
+        # Don't log out user - just skip this validation attempt
+        return True
+
+
 def logout_user():
     """Cerrar sesión del usuario y limpiar todos los datos de sesión"""
 
@@ -196,6 +253,10 @@ def init_auth_session_state():
     # Estados para código de acceso
     if 'pending_first_login_user' not in st.session_state:
         st.session_state.pending_first_login_user = None
+
+    # Estado para validación periódica de sesión
+    if 'last_session_validation_time' not in st.session_state:
+        st.session_state.last_session_validation_time = 0
 
     # Intentar inicio de sesión automático en inicialización
     try_auto_login()
