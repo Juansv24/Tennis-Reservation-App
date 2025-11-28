@@ -121,10 +121,16 @@ class CacheManager:
             }
 
 
-# Global cache instance - shared across all users in this session
-_cache_manager = CacheManager()
-
-
 def get_cache() -> CacheManager:
-    """Get the global cache manager instance"""
-    return _cache_manager
+    """Get the session-scoped cache manager instance
+
+    Each Streamlit session gets its own cache instance, isolated from other users.
+    This prevents data leaks between concurrent users.
+    """
+    import streamlit as st
+
+    # Initialize cache in session state if not already present
+    if 'cache_manager' not in st.session_state:
+        st.session_state.cache_manager = CacheManager()
+
+    return st.session_state.cache_manager
