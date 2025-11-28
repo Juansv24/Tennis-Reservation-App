@@ -5,7 +5,7 @@ import streamlit as st
 from supabase import create_client, Client
 from supabase.client import ClientOptions  # FIX: Use official ClientOptions class
 from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Callable, Any
 import contextlib
 from timezone_utils import get_colombia_now
 from database_exceptions import DatabaseConnectionError, DatabaseOperationError, InvalidResponseError, AtomicOperationError
@@ -17,6 +17,7 @@ import errno
 import os
 import threading
 from queue import Queue, Empty
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
 def _get_error_details(e: Exception) -> Dict:
@@ -46,6 +47,53 @@ def _get_error_details(e: Exception) -> Dict:
             details['error_message'] = f"EMFILE/ENFILE: Too many open files - {str(e)}"
 
     return details
+
+
+def execute_parallel(tasks: List[Tuple[Callable, List[Any]]], max_workers: int = 3) -> List[Any]:
+    """Execute multiple tasks in parallel using ThreadPoolExecutor
+
+    FIX #5: Parallelize database calls to reduce total query time under concurrent load
+
+    Args:
+        tasks: List of (callable, args) tuples where callable(*args) is executed
+        max_workers: Maximum number of parallel threads (default 3 to avoid resource exhaustion)
+
+    Returns:
+        List of results in the same order as input tasks
+
+    Example:
+        results = execute_parallel([
+            (db.is_vip_user, ['user@example.com']),
+            (db.get_user_credits, ['user@example.com']),
+            (db.check_maintenance, [date])
+        ])
+    """
+    results = [None] * len(tasks)
+
+    try:
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            # Submit all tasks and keep track of their positions
+            future_to_index = {
+                executor.submit(callable_fn, *args): idx
+                for idx, (callable_fn, args) in enumerate(tasks)
+            }
+
+            # Collect results as they complete (or fail)
+            for future in as_completed(future_to_index):
+                idx = future_to_index[future]
+                try:
+                    results[idx] = future.result()
+                except Exception as e:
+                    # Log error but don't crash - return None for failed task
+                    print(f"Parallel task {idx} failed: {str(e)}")
+                    results[idx] = None
+
+    except Exception as e:
+        # If ThreadPoolExecutor fails, log error and return all None
+        print(f"Parallel execution failed: {str(e)}")
+        results = [None] * len(tasks)
+
+    return results
 
 
 class StreamlitRequestLimiter:
@@ -274,6 +322,33 @@ class SupabaseManager:
         """Clear session context"""
         self.set_session_context(None)
         self._current_session_token = None
+
+    def get_user_info_parallel(self, email: str) -> Dict[str, Any]:
+        """Get VIP status and credits in parallel to reduce query time
+
+        FIX #5: Parallelizes two independent database queries that are often made together
+
+        Args:
+            email: User email to get info for
+
+        Returns:
+            Dict with 'is_vip' and 'credits' keys
+
+        Example:
+            info = db_manager.get_user_info_parallel('user@example.com')
+            is_vip = info.get('is_vip', False)
+            credits = info.get('credits', 0)
+        """
+        # Execute both queries in parallel instead of sequentially
+        results = execute_parallel([
+            (self.is_vip_user, [email]),
+            (self.get_user_credits, [email])
+        ], max_workers=2)
+
+        return {
+            'is_vip': results[0] if results[0] is not None else False,
+            'credits': results[1] if results[1] is not None else 0
+        }
 
     @limit_concurrent_requests
     @retry_on_timeout(max_retries=2, backoff_factor=0.3)
