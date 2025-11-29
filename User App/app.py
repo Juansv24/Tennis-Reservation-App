@@ -98,8 +98,13 @@ def show_main_content():
         show_reservation_tab()
 
     except Exception as e:
-        st.error(f"❌ Error en la aplicación: {str(e)}")
-        st.info("🔄 Intenta actualizar la página o contacta al administrador.")
+        # Sanitize error message to handle unicode encoding issues
+        try:
+            error_msg = str(e)
+        except UnicodeEncodeError:
+            error_msg = str(e).encode('utf-8', errors='replace').decode('utf-8')
+        st.error(f"Error en la aplicación: {error_msg}")
+        st.info("Intenta actualizar la página o contacta al administrador.")
 
         # Mostrar detalles del error
         with st.expander("🔧 Detalles del Error"):
@@ -124,7 +129,7 @@ def main():
         show_footer()
 
     except Exception as e:
-        st.error("🚨 Error Crítico de la Aplicación")
+        st.error("Error Critico de la Aplicacion")
         st.exception(e)
 
         if st.button("🔄 Reiniciar Aplicación"):
@@ -165,8 +170,8 @@ if __name__ == "__main__":
     except Exception as e:
         # Si health check falló previamente, mostrar warning + error app
         if not is_healthy:
-            st.warning(f"⚠️ Verificación de Salud: {health_message}")
-        st.error("🚨 Error en la aplicacion")
+            st.warning(f"Health check warning: {health_message}")
+        st.error("Error en la aplicacion")
         st.exception(e)
         if st.button("🔄 Reintentar"):
             st.rerun()

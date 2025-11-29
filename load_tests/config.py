@@ -84,17 +84,19 @@ TEST_USERS = {
 RESERVATION_DATE = (datetime.now() + timedelta(days=1)).date()
 
 # Court hours for testing (based on your app's available hours)
-# Format: hour as integer (6 = 6am, 10 = 10am, 12 = 12pm, 14 = 2pm, etc.)
+# Format: hour as integer (6 = 6am, 10 = 10am, 12 = 12pm, 14 = 2pm, 17 = 5pm, etc.)
 # NOTE: Regular users can only reserve 8 AM - 4 PM (before 5 PM deadline)
 AVAILABLE_HOURS = {
-    "user1_profile_a": 12,     # User 1 reserves 12pm (noon)
-    "user2_profile_a": 12,     # User 2 reserves 12pm (noon)
-    "user3_profile_a": 12,     # User 3 reserves 12pm (noon)
-    "user4_profile_b": 12,     # User 4 reserves 12pm (noon)
-    "user5_profile_b": 12,     # User 5 reserves 12pm (noon)
-    "user6_profile_b": 12,     # User 6 reserves 12pm (noon)
-    "user7_competitive": 12,   # User 7 tries 12pm (noon)
-    "user8_competitive": 12,   # User 8 tries 12pm (noon)
+    "user1_profile_a": 14,     # User 1 reserves 2pm (14:00)
+    "user2_profile_a": 15,     # User 2 reserves 3pm (15:00)
+    "user3_profile_a": 16,     # User 3 reserves 4pm (16:00)
+    "user4_profile_b": 17,     # User 4 reserves 5pm (17:00)
+    "user5_profile_b": 18,     # User 5 reserves 6pm (18:00)
+    "user6_profile_b": 16,     # User 6 (not used)
+    "user7_competitive": 17,   # User 7 (not used)
+    "user8_competitive": 17,   # User 8 (not used)
+    "user9_profile_a": 14,     # User 9 (not used)
+    "user10_profile_a": 14,    # User 10 (not used)
 }
 
 # ============================================================================
@@ -114,11 +116,11 @@ IMPLICIT_WAIT = 5  # seconds (fallback, explicit waits preferred)
 # ============================================================================
 
 # Number of concurrent users
-NUM_CONCURRENT_USERS = 5
+NUM_CONCURRENT_USERS = 10
 
 # Number of parallel workers for ThreadPoolExecutor
 # (typically same as NUM_CONCURRENT_USERS)
-MAX_WORKERS = 5
+MAX_WORKERS = 10
 
 # Change to Profile B for reservation testing
 # TEST_USERS will use user1 which will be Profile B for testing

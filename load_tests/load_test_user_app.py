@@ -28,6 +28,7 @@ from config import (
 )
 from metrics_collector import MetricsCollector
 from user_scenarios import create_scenario
+from production_queue_manager import init_production_queue, get_production_queue
 
 try:
     from selenium import webdriver
@@ -43,44 +44,72 @@ except ImportError:
 
 
 class AuthQueueManager:
-    """Manages staggered authentication to avoid Supabase socket errors"""
+    """Manages adaptive staggered authentication to avoid Supabase socket errors"""
 
-    def __init__(self, auth_delay_seconds: float = 2.5):
-        """Initialize auth queue manager
+    def __init__(self, auth_delay_seconds: float = 2.5, min_delay: float = 1.0, max_delay: float = 5.0):
+        """Initialize auth queue manager with adaptive delays
 
         Args:
-            auth_delay_seconds: Delay between each user's auth attempt
+            auth_delay_seconds: Base delay between auth attempts
+            min_delay: Minimum delay to enforce (safety threshold)
+            max_delay: Maximum delay to allow (safety ceiling)
         """
         self.queue = Queue()
         self.auth_delay = auth_delay_seconds
+        self.min_delay = min_delay
+        self.max_delay = max_delay
         self.lock = threading.Lock()
         self.last_auth_time = 0
+        self.last_auth_duration = 0
+        self.auth_count = 0
 
     def acquire_auth_slot(self, user_id: str) -> None:
-        """Wait until it's this user's turn to authenticate"""
+        """Wait until it's this user's turn to authenticate with adaptive delay"""
         with self.lock:
+            self.auth_count += 1
             time_since_last_auth = time.time() - self.last_auth_time
-            if time_since_last_auth < self.auth_delay:
-                wait_time = self.auth_delay - time_since_last_auth
+
+            # Calculate adaptive delay based on previous auth duration
+            # If previous auth was fast, wait less. If it was slow, wait more.
+            if self.auth_count == 1:
+                # First user, no wait needed
+                adaptive_delay = 0
+            else:
+                # Adaptive: use previous auth duration + safety margin
+                # This ensures auth completes before next one starts
+                adaptive_delay = max(self.min_delay, min(self.last_auth_duration + 1.0, self.max_delay))
+
+            if time_since_last_auth < adaptive_delay:
+                wait_time = adaptive_delay - time_since_last_auth
                 if VERBOSE_MODE:
-                    print("[AUTH_QUEUE] {0} waiting {1:.2f}s for auth slot".format(user_id, wait_time))
+                    print("[AUTH_QUEUE] {0} waiting {1:.2f}s for auth slot (adaptive based on {2:.2f}s auth)".format(
+                        user_id, wait_time, self.last_auth_duration))
                 time.sleep(wait_time)
+
             self.last_auth_time = time.time()
             if VERBOSE_MODE:
-                print("[AUTH_QUEUE] {0} acquired auth slot".format(user_id))
+                print("[AUTH_QUEUE] {0} acquired auth slot (attempt #{1})".format(user_id, self.auth_count))
+
+    def record_auth_completion(self, duration: float) -> None:
+        """Record how long the authentication took for adaptive adjustment"""
+        with self.lock:
+            self.last_auth_duration = duration
+            if VERBOSE_MODE:
+                print("[AUTH_QUEUE] Auth completed in {0:.2f}s, next users will wait {1:.2f}s".format(
+                    duration, max(self.min_delay, min(duration + 1.0, self.max_delay))))
 
 
 class LoadTestOrchestrator:
     """Orchestrates concurrent load testing of User App"""
 
     def __init__(self):
-        """Initialize load test orchestrator with auth queue"""
+        """Initialize load test orchestrator with rate limiter"""
         self.metrics = MetricsCollector(RESULTS_DIR)
         self.test_users = TEST_USERS
         self.start_time = None
         self.end_time = None
-        # Auth queue to prevent concurrent Supabase auth requests
-        self.auth_queue = AuthQueueManager(auth_delay_seconds=2.5)
+        # Initialize rate limiter: 5 auth ops/sec, 10 reservation ops/sec
+        self.production_queue = init_production_queue(auth_rate=5, reservation_rate=10)
         # Pre-cache webdriver to avoid GitHub rate limiting
         self.geckodriver_path = None
         self._cache_webdriver()
@@ -188,19 +217,16 @@ class LoadTestOrchestrator:
 
             # Create scenario based on profile
             additional_kwargs = {}
-            if profile == "B":
-                # Profile B users get different hours
-                if user_key == "user1":
-                    additional_kwargs['hour'] = AVAILABLE_HOURS.get('user1_profile_a', 12)
-                elif user_key == "user4":
-                    additional_kwargs['hour'] = AVAILABLE_HOURS.get('user4_profile_b', 12)
-                elif user_key == "user5":
-                    additional_kwargs['hour'] = AVAILABLE_HOURS.get('user5_profile_b', 12)
-                elif user_key == "user6":
-                    additional_kwargs['hour'] = AVAILABLE_HOURS.get('user6_profile_b', 12)
+            # Get hour from config for this user
+            hour_key = f"{user_key}_profile_{'a' if profile == 'A' else profile.lower()}"
+            if hour_key in AVAILABLE_HOURS:
+                additional_kwargs['hour'] = AVAILABLE_HOURS[hour_key]
+            else:
+                # Fallback hour if not found in config
+                additional_kwargs['hour'] = 14  # Default to 2pm
 
-            # Add auth queue manager to scenario kwargs
-            additional_kwargs['auth_queue'] = self.auth_queue
+            # Add production queue manager to scenario kwargs
+            additional_kwargs['production_queue'] = self.production_queue
 
             scenario = create_scenario(
                 user_id=user_key,

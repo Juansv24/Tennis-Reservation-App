@@ -31,7 +31,7 @@ class UserScenario:
     """Base class for user scenarios"""
 
     def __init__(self, user_id: str, email: str, password: str, profile: str,
-                 driver: webdriver.Chrome, metrics: MetricsCollector, auth_queue=None):
+                 driver: webdriver.Chrome, metrics: MetricsCollector, production_queue=None):
         """Initialize user scenario
 
         Args:
@@ -41,7 +41,7 @@ class UserScenario:
             profile: User profile (A, B, C, or D)
             driver: Selenium WebDriver instance
             metrics: MetricsCollector for recording metrics
-            auth_queue: Optional AuthQueueManager for staggered authentication
+            production_queue: Optional ProductionQueue for managed authentication
         """
         self.user_id = user_id
         self.email = email
@@ -49,7 +49,7 @@ class UserScenario:
         self.profile = profile
         self.driver = driver
         self.metrics = metrics
-        self.auth_queue = auth_queue
+        self.production_queue = production_queue
         self.wait = WebDriverWait(driver, ELEMENT_WAIT_TIMEOUT)
 
     def navigate_to_app(self):
@@ -77,9 +77,10 @@ class UserScenario:
     def login(self):
         """Login to User App with email and password"""
         try:
-            # Request auth slot from queue to stagger Supabase requests
-            if self.auth_queue:
-                self.auth_queue.acquire_auth_slot(self.user_id)
+            # Request auth slot from production queue to manage Supabase requests
+            if self.production_queue:
+                # acquire_auth_slot blocks until it's safe to authenticate
+                self.production_queue.acquire_auth_slot(self.email, self.user_id)
 
             start = time.time()
 
@@ -114,6 +115,9 @@ class UserScenario:
                 self.user_id, self.profile, OperationType.LOGIN,
                 OperationStatus.SUCCESS, duration * 1000
             )
+            # Release slot and record auth duration for adaptive queue
+            if self.production_queue:
+                self.production_queue.release_auth_slot(self.email, duration)
             print("[{}] Login successful in {:.2f}s".format(self.user_id, duration))
 
         except TimeoutException as e:
@@ -204,7 +208,7 @@ class UserScenario:
             raise
 
     def select_hour(self, hour_to_select):
-        """Select a specific hour button by CSS selector
+        """Select a specific hour button with scroll-into-view and click
 
         Args:
             hour_to_select (int or str): Hour to select (e.g., 12 or "12")
@@ -213,27 +217,107 @@ class UserScenario:
         css_selector = "div[class*='st-key-hour'][class*='_{0}'] button".format(hour_to_select)
 
         try:
-            print("[{0}] Looking for hour: {1}...".format(self.user_id, hour_to_select))
+            print("[{0}] Looking for hour {1} button with selector: {2}".format(self.user_id, hour_to_select, css_selector))
 
-            # Wait for the element to be present in the DOM
-            button = WebDriverWait(self.driver, 10).until(
+            # Step 1: Wait for element to be present in the DOM (not necessarily visible)
+            button = WebDriverWait(self.driver, 15).until(
                 EC.presence_of_element_located((By.CSS_SELECTOR, css_selector))
             )
+            print("[{0}] Found button element in DOM".format(self.user_id))
 
-            # Scroll the button into view
-            self.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", button)
-
-            # Wait for it to be clickable after scrolling
-            WebDriverWait(self.driver, 5).until(
-                EC.element_to_be_clickable((By.CSS_SELECTOR, css_selector))
+            # Step 2: Scroll the button into view - use 'center' block to ensure visibility
+            # 'nearest' inline keeps it from shifting horizontally unnecessarily
+            self.driver.execute_script(
+                "arguments[0].scrollIntoView({block: 'center', inline: 'nearest'});",
+                button
             )
+            print("[{0}] Scrolled button into view".format(self.user_id))
 
-            # Click using JavaScript (safest for Streamlit buttons)
+            # Step 3: Wait for Streamlit re-render after scroll (critical for dynamic content)
+            time.sleep(1)
+
+            # Step 4: Check if button is visible before clicking
+            is_displayed = self.driver.execute_script("return arguments[0].offsetParent !== null;", button)
+            print("[{0}] Button is displayed: {1}".format(self.user_id, is_displayed))
+
+            # Step 5: Use JavaScript click (more reliable than Selenium click for Streamlit)
             self.driver.execute_script("arguments[0].click();", button)
-            print("[{0}] Clicked button for hour {1}".format(self.user_id, hour_to_select))
+            print("[{0}] Successfully clicked hour {1}".format(self.user_id, hour_to_select))
+
+            # Wait for the click to register and app to respond
+            print("[{0}] Waiting 5 seconds for click to register...".format(self.user_id))
+            time.sleep(5)
+
+            # Debug: Save screenshot to see what's on the page
+            screenshot_path = "load_tests/results/hour_clicked_{0}.png".format(self.user_id)
+            try:
+                self.driver.save_screenshot(screenshot_path)
+                print("[{0}] Screenshot saved to {1}".format(self.user_id, screenshot_path))
+            except:
+                pass
 
         except Exception as e:
-            print("[{0}] Could not find or click hour {1}. Error: {2}".format(self.user_id, hour_to_select, str(e)))
+            print("[{0}] FAILED to select hour {1}. Error: {2}".format(self.user_id, hour_to_select, str(e)))
+            raise
+
+    def confirm_reservation(self):
+        """Confirm the reservation by clicking the 'Confirmar Reserva' button
+
+        Uses the SAME scroll-and-click approach as select_hour
+        Also integrates with production queue to manage concurrent reservations
+        """
+        # Request reservation slot from production queue to manage concurrent submissions
+        if self.production_queue:
+            self.production_queue.acquire_reservation_slot(self.email, getattr(self, 'hour', 0))
+
+        # Use the CSS selector from inspecting the button: .st-emotion-cache-13oxz6o
+        # Also can use: button[data-testid='stBaseButton-primary']
+        css_selector = "button[data-testid='stBaseButton-primary']"
+
+        try:
+            start = time.time()
+            print("[{0}] Looking for confirmation button with selector: {1}".format(self.user_id, css_selector))
+
+            # Step 1: Wait for element to be present in the DOM (not necessarily visible)
+            confirm_button = WebDriverWait(self.driver, 15).until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, css_selector))
+            )
+            print("[{0}] Found confirmation button in DOM".format(self.user_id))
+
+            # Step 2: Scroll the button into view - use 'center' block to ensure visibility
+            # 'nearest' inline keeps it from shifting horizontally unnecessarily
+            self.driver.execute_script(
+                "arguments[0].scrollIntoView({block: 'center', inline: 'nearest'});",
+                confirm_button
+            )
+            print("[{0}] Scrolled confirmation button into view".format(self.user_id))
+
+            # Step 3: Wait for Streamlit re-render after scroll (critical for dynamic content)
+            time.sleep(1)
+
+            # Step 4: Check if button is visible before clicking
+            is_displayed = self.driver.execute_script("return arguments[0].offsetParent !== null;", confirm_button)
+            print("[{0}] Confirmation button is displayed: {1}".format(self.user_id, is_displayed))
+
+            # Step 5: Use JavaScript click (more reliable than Selenium click for Streamlit)
+            self.driver.execute_script("arguments[0].click();", confirm_button)
+            print("[{0}] Successfully clicked 'Confirmar Reserva'".format(self.user_id))
+
+            # Wait for the reservation to be processed
+            print("[{0}] Waiting 10 seconds for reservation to be confirmed...".format(self.user_id))
+            time.sleep(10)
+
+            duration = time.time() - start
+            # Release reservation slot and record submission duration for adaptive queue
+            if self.production_queue:
+                self.production_queue.release_reservation_slot(self.email, duration)
+
+        except Exception as e:
+            print("[{0}] FAILED to confirm reservation. Error: {1}".format(self.user_id, str(e)))
+            # Release slot even on error to avoid blocking other users
+            if self.production_queue:
+                duration = time.time() - start
+                self.production_queue.release_reservation_slot(self.email, duration)
             raise
 
     def browse_slots(self):
@@ -411,18 +495,30 @@ class UserScenario:
 # ============================================================================
 
 class ProfileA(UserScenario):
-    """Profile A: Browser - Login, view dashboard, view reservations, logout"""
+    """Profile A: Browser - Login, view dashboard, try to make reservation, logout"""
+
+    def __init__(self, *args, hour: int = 17, **kwargs):
+        """Initialize with reservation hour
+
+        Args:
+            hour: Hour to attempt reservation (default 17 for 5 PM)
+        """
+        super().__init__(*args, **kwargs)
+        self.hour = hour
 
     def run(self):
-        """Execute Profile A scenario"""
+        """Execute Profile A scenario - login, select hour, and confirm reservation"""
         try:
             self.navigate_to_app()
             self.login()
-            self.view_dashboard()
-            self.view_account_info()
-            self.view_reservations()
-            self.logout()
-            print("[{}] Profile A completed successfully".format(self.user_id))
+            # Wait for dashboard to load
+            print("[{}] Waiting for dashboard to load...".format(self.user_id))
+            time.sleep(2)
+            # Try to select the hour button
+            self.select_hour(self.hour)
+            # Confirm the reservation
+            self.confirm_reservation()
+            print("[{}] Profile A completed for hour {}".format(self.user_id, self.hour))
         except Exception as e:
             print("[{}] Profile A failed: {}".format(self.user_id, str(e)))
         finally:
@@ -432,22 +528,27 @@ class ProfileA(UserScenario):
 class ProfileB(UserScenario):
     """Profile B: Maker - Login, browse slots, make reservation, logout"""
 
-    def __init__(self, *args, hour: int = 8, **kwargs):
+    def __init__(self, *args, hour: int = 17, **kwargs):
         """Initialize with reservation hour
 
         Args:
-            hour: Hour to make reservation (8, 11, 14, etc.)
+            hour: Hour to make reservation (default 17 for 5 PM)
         """
         super().__init__(*args, **kwargs)
         self.hour = hour
 
     def run(self):
-        """Execute Profile B scenario - Login and make reservation"""
+        """Execute Profile B scenario - Login, select hour, and confirm reservation"""
         try:
             self.navigate_to_app()
             self.login()
+            # Wait for the dashboard to fully load after login
+            print("[{}] Waiting for dashboard to load...".format(self.user_id))
+            time.sleep(2)
             # Select the hour button
             self.select_hour(self.hour)
+            # Confirm the reservation
+            self.confirm_reservation()
             print("[{}] Profile B completed for hour {}".format(self.user_id, self.hour))
         except Exception as e:
             print("[{}] Profile B failed: {}".format(self.user_id, str(e)))
@@ -505,21 +606,21 @@ def create_scenario(user_id: str, email: str, password: str, profile: str,
         profile: Profile type (A, B, C, D)
         driver: Selenium WebDriver
         metrics: MetricsCollector
-        **kwargs: Additional arguments (e.g., hour for Profile B)
+        **kwargs: Additional arguments (e.g., hour for Profile B, production_queue)
 
     Returns:
         UserScenario instance
     """
-    auth_queue = kwargs.pop('auth_queue', None)
+    production_queue = kwargs.pop('production_queue', None)
 
     if profile == "A":
-        return ProfileA(user_id, email, password, profile, driver, metrics, auth_queue=auth_queue)
+        return ProfileA(user_id, email, password, profile, driver, metrics, production_queue=production_queue)
     elif profile == "B":
         hour = kwargs.get('hour', 8)
-        return ProfileB(user_id, email, password, profile, driver, metrics, hour=hour, auth_queue=auth_queue)
+        return ProfileB(user_id, email, password, profile, driver, metrics, hour=hour, production_queue=production_queue)
     elif profile == "C":
-        return ProfileC(user_id, email, password, profile, driver, metrics, auth_queue=auth_queue)
+        return ProfileC(user_id, email, password, profile, driver, metrics, production_queue=production_queue)
     elif profile == "D":
-        return ProfileD(user_id, email, password, profile, driver, metrics, auth_queue=auth_queue)
+        return ProfileD(user_id, email, password, profile, driver, metrics, production_queue=production_queue)
     else:
         raise ValueError("Unknown profile: {}".format(profile))

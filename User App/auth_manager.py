@@ -206,7 +206,7 @@ class SupabaseAuthManager:
             return None
         except Exception as e:
             # Actual authentication error - invalidate session
-            print(f"🔴 Session validation error: {str(e)}")
+            print(f"[ERROR] Session validation error: {str(e)}")
             try:
                 self.client.rpc('set_session_token', {'token': None}).execute()
             except Exception:
@@ -304,10 +304,10 @@ class SupabaseAuthManager:
             except Exception as e:
                 print(f"Advertencia: No se pudo configurar contexto RLS: {e}")
 
-            # Actualizar último login
+            # Actualizar último login - usar get_colombia_now() para consistencia de zona horaria
             try:
                 self.client.table('users').update({
-                    'last_login': datetime.now().isoformat()
+                    'last_login': get_colombia_now().isoformat()
                 }).eq('id', user_info['id']).execute()
             except Exception:
                 pass
@@ -326,30 +326,31 @@ class SupabaseAuthManager:
             return False, f"Error en primer acceso: {str(e)}", None
 
     def login_user(self, email: str, password: str, remember_me: bool = True) -> Tuple[bool, str, Optional[Dict]]:
-        """Iniciar sesión de usuario con validación mejorada y contexto RLS"""
+        """Iniciar sesión de usuario con validación mejorada y contexto RLS
+
+        SECURITY: Uses generic error message to prevent user enumeration attacks.
+        Attackers cannot determine if an email exists in the system.
+        """
         try:
             if not email or not password:
                 return False, "Por favor ingresa email y contraseña", None
 
             email = email.strip().lower()
 
-            # Verificar si el correo está registrado
-            result = self.client.table('users').select('id').eq('email', email).execute()
-            if not result.data:
-                return False, "No existe una cuenta con este email", None
-
-            # SEGUNDO: Obtener datos del usuario para validación
+            # SECURITY: Combine email check and user retrieval - don't reveal if email exists
             result = self.client.table('users').select('*').eq('email', email).eq('is_active', True).execute()
 
             if not result.data:
-                return False, "Error de acceso. Contacta al administrador", None
+                # Generic message - don't reveal whether email exists or account is inactive
+                return False, "Email o contraseña incorrectos", None
 
             user = result.data[0]
 
-            # TERCERO: Validar contraseña
+            # Validar contraseña
             password_hash, _ = self._hash_password(password, user['salt'])
             if password_hash != user['password_hash']:
-                return False, "Contraseña incorrecta", None
+                # Generic message - matches email-not-found error
+                return False, "Email o contraseña incorrectos", None
 
             # Verificar si es primer login
             first_login_completed = user.get('first_login_completed', False)
@@ -378,10 +379,10 @@ class SupabaseAuthManager:
                 # Si falla RLS, continuar (para compatibilidad)
                 print(f"Advertencia: No se pudo configurar contexto RLS en login: {e}")
 
-            # SEXTO: Actualizar último inicio de sesión
+            # SEXTO: Actualizar último inicio de sesión - usar get_colombia_now() para consistencia de zona horaria
             try:
                 self.client.table('users').update({
-                    'last_login': datetime.now().isoformat()
+                    'last_login': get_colombia_now().isoformat()
                 }).eq('id', user['id']).execute()
             except Exception:
                 pass  # No crítico si falla

@@ -147,7 +147,7 @@ def limit_concurrent_requests(func):
         acquired = _request_limiter.acquire(timeout=3.0)
 
         if not acquired:
-            print(f"⚠️ {func.__name__} - conexión saturada, esperando slot...")
+            print(f"[WARNING] {func.__name__} - conexión saturada, esperando slot...")
             # Retry once after a short wait
             time.sleep(0.5)
             acquired = _request_limiter.acquire(timeout=2.0)
@@ -215,7 +215,7 @@ def retry_on_timeout(max_retries=3, backoff_factor=1.0):
                         time.sleep(wait_time)
                     else:
                         # All retries exhausted
-                        print(f"❌ {func.__name__} falló después de {max_retries} intentos - {error_details}")
+                        print(f"[ERROR] {func.__name__} falló después de {max_retries} intentos - {error_details}")
                         st.error(f"❌ Error de conexión: {error_details['error_message']}")
                 except Exception as e:
                     # Non-retryable errors
@@ -461,39 +461,26 @@ class SupabaseManager:
         return self.get_user_credits(email) >= required_credits
 
     def use_credits_for_reservation(self, email: str, credits_needed: int, date: str, hour: int) -> bool:
-        """Usar créditos para una reserva"""
+        """Usar créditos para una reserva - ATOMIC operation prevents race conditions
+
+        Uses RPC call to ensure credits are only deducted if check passes in single transaction.
+        This prevents two simultaneous reservations from both succeeding with insufficient credits.
+        """
         try:
-            # Obtener usuario
-            user_result = self.client.table('users').select('id, credits').eq('email', email.strip().lower()).execute()
-            if not user_result.data:
-                return False
+            # Call atomic RPC function to check AND deduct credits in single transaction
+            result = self.client.rpc('use_credits_atomic', {
+                'p_email': email.strip().lower(),
+                'p_credits_needed': credits_needed,
+                'p_date': date,
+                'p_hour': hour
+            }).execute()
 
-            user = user_result.data[0]
-            current_credits = user['credits'] or 0
-
-            if current_credits < credits_needed:
-                return False
-
-            # Descontar créditos
-            new_credits = current_credits - credits_needed
-            update_result = self.client.table('users').update({
-                'credits': new_credits
-            }).eq('id', user['id']).execute()
-
-            if update_result.data:
-                # Registrar transacción
-                self.client.table('credit_transactions').insert({
-                    'user_id': user['id'],
-                    'amount': -credits_needed,
-                    'transaction_type': 'reservation_use',
-                    'description': f'Reserva {date} {hour}:00',
-                    'created_at': datetime.now().isoformat()
-                }).execute()
+            if result.data and result.data[0].get('success', False):
                 return True
 
             return False
         except Exception as e:
-            print(f"Error using credits: {e}")
+            print(f"[ERROR] Atomic credit deduction failed: {e}")
             return False
 
     def invalidate_user_cache(self, email: str):
@@ -684,7 +671,6 @@ class SupabaseManager:
                 'is_used': False
             }).execute()
 
-            print(f"DEBUG - Código guardado: {code} para {email}, expira: {expires_at.isoformat()}")
             return len(result.data) > 0
         except Exception as e:
             st.error(f"Error guardando código de verificación: {e}")
@@ -696,19 +682,12 @@ class SupabaseManager:
             import datetime
             current_time = datetime.datetime.utcnow().isoformat()
 
-            print(f"DEBUG - Verificando código: {code} para email: {email}")
-            print(f"DEBUG - Hora actual UTC: {current_time}")
-
             # Buscar código válido
             result = self.client.table('email_verifications').select('id, expires_at').eq(
                 'email', email.strip().lower()
             ).eq('code', code.strip().upper()).eq('is_used', False).gt(
                 'expires_at', current_time
             ).execute()
-
-            print(f"DEBUG - Resultados encontrados: {len(result.data)}")
-            if result.data:
-                print(f"DEBUG - Código expira: {result.data[0]['expires_at']}")
 
             if result.data:
                 # Marcar como usado
@@ -718,7 +697,6 @@ class SupabaseManager:
                 return True
             return False
         except Exception as e:
-            print(f"DEBUG - Error verificando código: {e}")
             st.error(f"Error verificando código: {e}")
             return False
 
@@ -741,27 +719,6 @@ class SupabaseManager:
 
         except Exception as e:
             st.warning(f"Error en limpieza automática: {e}")
-
-    def log_critical_operation(self, operation_type: str, details: dict, success: bool):
-        """Log critical database operations for audit trail"""
-        try:
-            log_entry = {
-                'operation_type': operation_type,
-                'details': str(details),
-                'success': success,
-                'timestamp': get_colombia_now().isoformat(),
-                'user_agent': 'streamlit_app'
-            }
-
-            # Try to log to a system_logs table (create if needed)
-            try:
-                self.client.table('system_logs').insert(log_entry).execute()
-            except Exception:
-                # If logging fails, at least print to console
-                print(f"🔍 AUDIT: {operation_type} - Success: {success} - Details: {details}")
-
-        except Exception as e:
-            print(f"⚠️ Failed to log operation: {e}")
 
     def create_atomic_reservation(self, date, hour, name, email):
         """Crear reserva usando stored procedure atómica"""
@@ -791,7 +748,10 @@ class SupabaseManager:
             return False, "La solicitud expiró. Por favor verifica tu conexión e intenta de nuevo."
         except Exception as e:
             # Log the actual error server-side, return generic to user
-            print(f"🔴 RPC Error in atomic_reservation_request: {str(e)}")
+            try:
+                print(f"[ERROR] RPC Error in atomic_reservation_request: {str(e)}")
+            except UnicodeEncodeError:
+                print(f"[ERROR] RPC Error in atomic_reservation_request: {str(e).encode('utf-8', errors='replace').decode('utf-8')}")
             return False, "Error del sistema. Por favor contacta con soporte."
 
     def create_atomic_double_reservation(self, date, hour1, hour2, name, email):
@@ -823,7 +783,10 @@ class SupabaseManager:
             return False, "La solicitud expiró. Por favor verifica tu conexión e intenta de nuevo."
         except Exception as e:
             # Log the actual error server-side, return generic to user
-            print(f"🔴 RPC Error in atomic_double_reservation_request: {str(e)}")
+            try:
+                print(f"[ERROR] RPC Error in atomic_double_reservation_request: {str(e)}")
+            except UnicodeEncodeError:
+                print(f"[ERROR] RPC Error in atomic_double_reservation_request: {str(e).encode('utf-8', errors='replace').decode('utf-8')}")
             return False, "Error del sistema. Por favor contacta con soporte."
 
     def get_maintenance_slots_for_date(self, date: datetime.date) -> List[int]:
@@ -835,7 +798,7 @@ class SupabaseManager:
             return [row['hour'] for row in result.data]
         except Exception as e:
             # Log error but return empty list as safe fallback (no maintenance slots)
-            print(f"⚠️ Error getting maintenance slots for date {date}: {str(e)}")
+            print(f"[WARNING] Error getting maintenance slots for date {date}: {str(e)}")
             return []
 
     def get_current_lock_code(self) -> Optional[str]:
@@ -847,11 +810,11 @@ class SupabaseManager:
                 if lock_code:
                     return lock_code
             # No lock code found
-            print("⚠️ No lock code found in database")
+            print("[WARNING] No lock code found in database")
             return None
         except Exception as e:
             # Log error but return None as safe fallback
-            print(f"⚠️ Error getting lock code: {str(e)}")
+            print(f"[WARNING] Error getting lock code: {str(e)}")
             return None
 
 # Instancia global

@@ -149,17 +149,6 @@ def apply_custom_css():
     """, unsafe_allow_html=True)
 
 
-def invalidate_reservation_cache():
-    """Force cache refresh by clearing cached data"""
-    today, tomorrow = get_today_tomorrow()
-    cache_key = f"reservations_cache_{today}_{tomorrow}"
-    cache_timestamp_key = f"cache_timestamp_{today}_{tomorrow}"
-
-    if cache_key in st.session_state:
-        del st.session_state[cache_key]
-    if cache_timestamp_key in st.session_state:
-        del st.session_state[cache_timestamp_key]
-
 def show_credit_info_expander():
     """Mostrar expander con información de créditos (componente reutilizable)"""
     with st.expander("💰 ¿Cómo Adquirir Créditos?"):
@@ -904,26 +893,6 @@ def send_reservation_confirmation_email(current_user, date, selected_hours):
         st.info("💡 Tu reserva está confirmada aún sin el email")
 
 
-def show_success_message_with_credits(name, date_obj, selected_hours, credits_used):
-    """Mostrar mensaje de éxito con información de créditos"""
-    sorted_hours = sorted(selected_hours)
-    start_time = format_hour(min(sorted_hours))
-    end_time = format_hour(max(sorted_hours) + 1)
-
-    remaining_credits = db_manager.get_user_credits(st.session_state.user_info['email'])
-
-    st.markdown(f"""
-    <div class="success-message">
-        <h3>✅ ¡Reserva Confirmada!</h3>
-        <p><strong>Nombre:</strong> {name}</p>
-        <p><strong>Fecha:</strong> {format_date_full(date_obj)}</p>
-        <p><strong>Hora:</strong> {start_time} - {end_time}</p>
-        <p><strong>Duración:</strong> {len(sorted_hours)} hora(s)</p>
-        <p><strong>💰 Créditos usados:</strong> {credits_used}</p>
-        <p><strong>💳 Créditos restantes:</strong> {remaining_credits}</p>
-    </div>
-    """, unsafe_allow_html=True)
-
 def show_calendar_view(today, tomorrow, today_reservations, tomorrow_reservations, current_hour, current_user):
     """Mostrar vista de calendario"""
     st.subheader("Disponibilidad de la Cancha")
@@ -1115,7 +1084,6 @@ def handle_time_slot_click(hour, date, current_user):
         st.session_state.selected_hours = selected_hours
         st.session_state.selected_date = selected_date
         st.rerun()  # Needed for CSS styling update
-        return
 
     # ===== STEP 4: HANDLE NEW SELECTION =====
     # If different date selected, clear previous selection

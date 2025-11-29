@@ -174,7 +174,7 @@ def validate_session_expiration():
             return True
         else:
             # Session expired on server - log out user gracefully
-            print("⚠️ Session expired on server during validation")
+            print("[WARNING] Session expired on server during validation")
             st.warning("⚠️ Tu sesión ha expirado. Por favor inicia sesión de nuevo.")
             logout_user()  # This calls st.rerun()
             return False
@@ -182,7 +182,7 @@ def validate_session_expiration():
     except Exception as e:
         # Error during validation - be conservative and keep user logged in
         # but log the error for debugging
-        print(f"⚠️ Error validating session: {str(e)}")
+        print(f"[WARNING] Error validating session: {str(e)}")
         # Don't log out user - just skip this validation attempt
         return True
 
