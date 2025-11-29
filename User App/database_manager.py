@@ -406,8 +406,8 @@ class SupabaseManager:
                     else:
                         return False, "Las reservas están disponibles hasta las 8:00 PM"
             else:
-                # Usuarios regulares: pueden reservar de 8 AM - 5 PM (17:00)
-                if 8 <= current_hour <= 17:
+                # Usuarios regulares: pueden reservar 8 AM - 5 PM (17:00)
+                if 8 <= current_hour <= 16:
                     return True, ""
                 else:
                     if current_hour < 8:
@@ -418,10 +418,7 @@ class SupabaseManager:
         except Exception as e:
             print(f"Error verificando horario de reserva: {e}")
             # En caso de error, permitir como fallback para usuarios regulares
-            current_hour = get_colombia_now().hour
-            if 8 <= current_hour <= 17:
-                return True, ""
-            return False, "Error verificando horarios disponibles"
+            return False, "Error verificando horario de reserva"
 
     @limit_concurrent_requests
     @retry_on_timeout(max_retries=3, backoff_factor=0.5)

@@ -13,9 +13,9 @@ USER_APP_URL = "http://localhost:8501"
 
 # Timeouts (seconds)
 PAGE_LOAD_TIMEOUT = 15
-ELEMENT_WAIT_TIMEOUT = 10
-LOGIN_TIMEOUT = 20
-RESERVATION_TIMEOUT = 15
+ELEMENT_WAIT_TIMEOUT = 15
+LOGIN_TIMEOUT = 40
+RESERVATION_TIMEOUT = 20
 
 # ============================================================================
 # TEST USER CREDENTIALS
@@ -26,7 +26,7 @@ TEST_USERS = {
     "user1": {
         "email": "testuser01@example.com",
         "password": "Juansebastian24",
-        "profile": "A"  # Browser profile
+        "profile": "B"  # Maker (reservation) profile
     },
     "user2": {
         "email": "testuser02@example.com",
@@ -84,13 +84,17 @@ TEST_USERS = {
 RESERVATION_DATE = (datetime.now() + timedelta(days=1)).date()
 
 # Court hours for testing (based on your app's available hours)
-# Format: hour as integer (6 = 6am, 10 = 10am, 14 = 2pm, etc.)
+# Format: hour as integer (6 = 6am, 10 = 10am, 12 = 12pm, 14 = 2pm, etc.)
+# NOTE: Regular users can only reserve 8 AM - 4 PM (before 5 PM deadline)
 AVAILABLE_HOURS = {
-    "user4_profile_b": 8,      # User 4 reserves 8am
-    "user5_profile_b": 11,     # User 5 reserves 11am
-    "user6_profile_b": 14,     # User 6 reserves 2pm
-    "user7_competitive": 10,   # User 7 tries 10-11am (competitive)
-    "user8_competitive": 10,   # User 8 tries 10-11am (competitive)
+    "user1_profile_a": 12,     # User 1 reserves 12pm (noon)
+    "user2_profile_a": 12,     # User 2 reserves 12pm (noon)
+    "user3_profile_a": 12,     # User 3 reserves 12pm (noon)
+    "user4_profile_b": 12,     # User 4 reserves 12pm (noon)
+    "user5_profile_b": 12,     # User 5 reserves 12pm (noon)
+    "user6_profile_b": 12,     # User 6 reserves 12pm (noon)
+    "user7_competitive": 12,   # User 7 tries 12pm (noon)
+    "user8_competitive": 12,   # User 8 tries 12pm (noon)
 }
 
 # ============================================================================
@@ -98,7 +102,7 @@ AVAILABLE_HOURS = {
 # ============================================================================
 
 # Browser settings
-BROWSER_TYPE = "chrome"  # or "firefox"
+BROWSER_TYPE = "firefox"  # or "chrome"
 HEADLESS_MODE = False    # Set to True to run without opening browser windows
 WINDOW_SIZE = "1920,1080"
 
@@ -110,14 +114,17 @@ IMPLICIT_WAIT = 5  # seconds (fallback, explicit waits preferred)
 # ============================================================================
 
 # Number of concurrent users
-NUM_CONCURRENT_USERS = 10
+NUM_CONCURRENT_USERS = 5
 
 # Number of parallel workers for ThreadPoolExecutor
 # (typically same as NUM_CONCURRENT_USERS)
-MAX_WORKERS = 10
+MAX_WORKERS = 5
+
+# Change to Profile B for reservation testing
+# TEST_USERS will use user1 which will be Profile B for testing
 
 # Start delay between users (seconds)
-# 0 = all start simultaneously, 0.1 = slight stagger
+# 0 = all start simultaneously, 5 = 5 second stagger between users
 USER_START_DELAY = 0
 
 # Max duration for entire load test (seconds)
@@ -150,9 +157,9 @@ APP_READY_TIMEOUT = 30  # seconds
 
 # Expected elements to look for after login (to verify successful login)
 LOGIN_SUCCESS_INDICATORS = [
-    "text:📋 Información de tu Cuenta",  # Dashboard heading
+    "text:Informacion de tu Cuenta",  # Dashboard heading
     "text:Tus Reservas",                  # Your Reservations section
-    "text:Créditos disponibles",          # Credits display
+    "text:Creditos disponibles",          # Credits display
 ]
 
 # Streamlit-specific waits (Streamlit reruns dynamically)

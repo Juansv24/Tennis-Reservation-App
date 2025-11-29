@@ -1,3 +1,13 @@
+import sys
+import os
+
+if sys.platform == 'win32':
+    os.environ['PYTHONIOENCODING'] = 'utf-8'
+    try:
+        sys.stdout.reconfigure(encoding='utf-8')
+    except:
+        pass
+
 """
 Metrics collector for load testing
 Tracks performance metrics, errors, and timing for all test operations
@@ -223,7 +233,7 @@ class MetricsCollector:
                     row['additional_data'] = json.dumps(row['additional_data']) if row['additional_data'] else ""
                     writer.writerow(row)
 
-        print(f"✅ Metrics saved to {filepath}")
+        print("Metrics saved to {0}".format(filepath))
         return str(filepath)
 
     def save_summary(self, filename: Optional[str] = None) -> str:
@@ -244,7 +254,7 @@ class MetricsCollector:
         with open(filepath, 'w') as f:
             json.dump(summary, f, indent=2)
 
-        print(f"✅ Summary saved to {filepath}")
+        print("Summary saved to {0}".format(filepath))
         return str(filepath)
 
     def print_summary(self):
@@ -254,26 +264,26 @@ class MetricsCollector:
         print("\n" + "=" * 80)
         print("LOAD TEST SUMMARY")
         print("=" * 80)
-        print(f"Total Operations: {summary.get('total_operations', 0)}")
-        print(f"Successful: {summary.get('successful_operations', 0)}")
-        print(f"Failed: {summary.get('failed_operations', 0)}")
-        print(f"Success Rate: {summary.get('success_rate_percent', 0):.2f}%")
-        print(f"\nTiming (successful operations):")
-        print(f"  Average: {summary.get('avg_duration_ms', 0):.2f}ms")
-        print(f"  Min: {summary.get('min_duration_ms', 0):.2f}ms")
-        print(f"  Max: {summary.get('max_duration_ms', 0):.2f}ms")
-        print(f"\nTest Duration: {summary.get('total_duration_seconds', 0):.2f}s")
-        print(f"Operations/Second: {summary.get('operations_per_second', 0):.2f}")
+        print("Total Operations: {0}".format(summary.get('total_operations', 0)))
+        print("Successful: {0}".format(summary.get('successful_operations', 0)))
+        print("Failed: {0}".format(summary.get('failed_operations', 0)))
+        print("Success Rate: {0:.2f}%".format(summary.get('success_rate_percent', 0)))
+        print("\nTiming (successful operations):")
+        print("  Average: {0:.2f}ms".format(summary.get('avg_duration_ms', 0)))
+        print("  Min: {0:.2f}ms".format(summary.get('min_duration_ms', 0)))
+        print("  Max: {0:.2f}ms".format(summary.get('max_duration_ms', 0)))
+        print("\nTest Duration: {0:.2f}s".format(summary.get('total_duration_seconds', 0)))
+        print("Operations/Second: {0:.2f}".format(summary.get('operations_per_second', 0)))
 
         if summary.get('error_counts'):
-            print(f"\nErrors:")
+            print("\nErrors:")
             for error_type, count in summary['error_counts'].items():
-                print(f"  {error_type}: {count}")
+                print("  {0}: {1}".format(error_type, count))
 
         if summary.get('operation_counts'):
-            print(f"\nOperations by Type:")
+            print("\nOperations by Type:")
             for op_type, count in summary['operation_counts'].items():
-                print(f"  {op_type}: {count}")
+                print("  {0}: {1}".format(op_type, count))
 
         print("=" * 80 + "\n")
 

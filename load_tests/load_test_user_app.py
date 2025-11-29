@@ -1,42 +1,89 @@
+import sys
+import os
+
+if sys.platform == 'win32':
+    os.environ['PYTHONIOENCODING'] = 'utf-8'
+    try:
+        sys.stdout.reconfigure(encoding='utf-8')
+    except:
+        pass
+
 """
 Main load test orchestrator for Tennis Reservation App User App
 Runs 10 concurrent users with different profiles and collects metrics
 """
 import time
-import sys
 import subprocess
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, List, Any
+from queue import Queue
+import threading
 import requests
 
 from config import (
     USER_APP_URL, NUM_CONCURRENT_USERS, MAX_WORKERS, USER_START_DELAY,
     MAX_TEST_DURATION, TEST_USERS, VERBOSE_MODE, WAIT_FOR_APP,
-    APP_READY_TIMEOUT, AVAILABLE_HOURS, RESULTS_DIR
+    APP_READY_TIMEOUT, AVAILABLE_HOURS, RESULTS_DIR, BROWSER_TYPE, HEADLESS_MODE
 )
 from metrics_collector import MetricsCollector
 from user_scenarios import create_scenario
 
 try:
     from selenium import webdriver
-    from selenium.webdriver.chrome.service import Service
-    from selenium.webdriver.chrome.options import Options
+    from selenium.webdriver.chrome.service import Service as ChromeService
+    from selenium.webdriver.chrome.options import Options as ChromeOptions
+    from selenium.webdriver.firefox.service import Service as FirefoxService
+    from selenium.webdriver.firefox.options import Options as FirefoxOptions
     from webdriver_manager.chrome import ChromeDriverManager
+    from webdriver_manager.firefox import GeckoDriverManager
 except ImportError:
-    print("❌ Selenium not installed. Install with: pip install selenium webdriver-manager")
+    print("ERROR: Selenium not installed. Install with: pip install selenium webdriver-manager")
     sys.exit(1)
+
+
+class AuthQueueManager:
+    """Manages staggered authentication to avoid Supabase socket errors"""
+
+    def __init__(self, auth_delay_seconds: float = 2.5):
+        """Initialize auth queue manager
+
+        Args:
+            auth_delay_seconds: Delay between each user's auth attempt
+        """
+        self.queue = Queue()
+        self.auth_delay = auth_delay_seconds
+        self.lock = threading.Lock()
+        self.last_auth_time = 0
+
+    def acquire_auth_slot(self, user_id: str) -> None:
+        """Wait until it's this user's turn to authenticate"""
+        with self.lock:
+            time_since_last_auth = time.time() - self.last_auth_time
+            if time_since_last_auth < self.auth_delay:
+                wait_time = self.auth_delay - time_since_last_auth
+                if VERBOSE_MODE:
+                    print("[AUTH_QUEUE] {0} waiting {1:.2f}s for auth slot".format(user_id, wait_time))
+                time.sleep(wait_time)
+            self.last_auth_time = time.time()
+            if VERBOSE_MODE:
+                print("[AUTH_QUEUE] {0} acquired auth slot".format(user_id))
 
 
 class LoadTestOrchestrator:
     """Orchestrates concurrent load testing of User App"""
 
     def __init__(self):
-        """Initialize load test orchestrator"""
+        """Initialize load test orchestrator with auth queue"""
         self.metrics = MetricsCollector(RESULTS_DIR)
         self.test_users = TEST_USERS
         self.start_time = None
         self.end_time = None
+        # Auth queue to prevent concurrent Supabase auth requests
+        self.auth_queue = AuthQueueManager(auth_delay_seconds=2.5)
+        # Pre-cache webdriver to avoid GitHub rate limiting
+        self.geckodriver_path = None
+        self._cache_webdriver()
 
     def wait_for_app(self) -> bool:
         """Wait for Streamlit app to be ready
@@ -47,38 +94,73 @@ class LoadTestOrchestrator:
         if not WAIT_FOR_APP:
             return True
 
-        print(f"⏳ Waiting for app at {USER_APP_URL}...")
+        print("Waiting for app at {0}...".format(USER_APP_URL))
         start = time.time()
 
         while time.time() - start < APP_READY_TIMEOUT:
             try:
                 response = requests.get(USER_APP_URL, timeout=5)
                 if response.status_code == 200:
-                    print(f"✅ App is ready!")
+                    print("App is ready!")
                     return True
             except:
                 pass
 
             time.sleep(1)
 
-        print(f"❌ App not ready after {APP_READY_TIMEOUT} seconds")
+        print("App not ready after {0} seconds".format(APP_READY_TIMEOUT))
         return False
 
-    def create_webdriver(self) -> webdriver.Chrome:
-        """Create and configure Selenium WebDriver for Chrome
+    def _cache_webdriver(self):
+        """Use cached geckodriver to avoid GitHub rate limiting"""
+        import os
+        if VERBOSE_MODE:
+            print("Looking for cached geckodriver...")
+        try:
+            if BROWSER_TYPE.lower() == "firefox":
+                home = os.path.expanduser("~")
+                cached_driver = os.path.join(home, ".wdm/drivers/geckodriver/win64/v0.36.0/geckodriver.exe")
+                if os.path.exists(cached_driver):
+                    self.geckodriver_path = cached_driver
+                    print("Using cached geckodriver: {0}".format(self.geckodriver_path))
+                else:
+                    print("Cached geckodriver not found, will try to download...")
+                    self.geckodriver_path = GeckoDriverManager().install()
+                    print("Geckodriver cached at: {0}".format(self.geckodriver_path))
+        except Exception as e:
+            print("Could not setup geckodriver: {0}".format(str(e)))
+            print("Will attempt to use system geckodriver or download later")
+
+    def create_webdriver(self):
+        """Create and configure Selenium WebDriver for Firefox or Chrome
 
         Returns:
-            Configured Chrome WebDriver
+            Configured WebDriver instance
         """
-        options = Options()
-        # options.add_argument("--headless")  # Uncomment for headless mode
-        options.add_argument("--no-sandbox")
-        options.add_argument("--disable-dev-shm-usage")
-        options.add_argument("--start-maximized")
-        options.add_argument("--disable-blink-features=AutomationControlled")
+        if BROWSER_TYPE.lower() == "firefox":
+            options = FirefoxOptions()
+            if HEADLESS_MODE:
+                options.add_argument("--headless")
+            options.add_argument("--width=1920")
+            options.add_argument("--height=1080")
 
-        service = Service(ChromeDriverManager().install())
-        driver = webdriver.Chrome(service=service, options=options)
+            if self.geckodriver_path:
+                service = FirefoxService(self.geckodriver_path)
+            else:
+                service = FirefoxService(GeckoDriverManager().install())
+            driver = webdriver.Firefox(service=service, options=options)
+        else:  # Chrome
+            options = ChromeOptions()
+            if HEADLESS_MODE:
+                options.add_argument("--headless")
+            options.add_argument("--no-sandbox")
+            options.add_argument("--disable-dev-shm-usage")
+            options.add_argument("--start-maximized")
+            options.add_argument("--disable-blink-features=AutomationControlled")
+
+            service = ChromeService(ChromeDriverManager().install())
+            driver = webdriver.Chrome(service=service, options=options)
+
         return driver
 
     def run_user_scenario(self, user_key: str, user_num: int):
@@ -98,7 +180,7 @@ class LoadTestOrchestrator:
         profile = user_data['profile']
 
         if VERBOSE_MODE:
-            print(f"👤 Starting {user_key} (Profile {profile})...")
+            print("Starting {0} (Profile {1})...".format(user_key, profile))
 
         try:
             # Create WebDriver
@@ -108,12 +190,17 @@ class LoadTestOrchestrator:
             additional_kwargs = {}
             if profile == "B":
                 # Profile B users get different hours
-                if user_key == "user4":
-                    additional_kwargs['hour'] = AVAILABLE_HOURS.get('user4_profile_b', 8)
+                if user_key == "user1":
+                    additional_kwargs['hour'] = AVAILABLE_HOURS.get('user1_profile_a', 12)
+                elif user_key == "user4":
+                    additional_kwargs['hour'] = AVAILABLE_HOURS.get('user4_profile_b', 12)
                 elif user_key == "user5":
-                    additional_kwargs['hour'] = AVAILABLE_HOURS.get('user5_profile_b', 11)
+                    additional_kwargs['hour'] = AVAILABLE_HOURS.get('user5_profile_b', 12)
                 elif user_key == "user6":
-                    additional_kwargs['hour'] = AVAILABLE_HOURS.get('user6_profile_b', 14)
+                    additional_kwargs['hour'] = AVAILABLE_HOURS.get('user6_profile_b', 12)
+
+            # Add auth queue manager to scenario kwargs
+            additional_kwargs['auth_queue'] = self.auth_queue
 
             scenario = create_scenario(
                 user_id=user_key,
@@ -129,24 +216,24 @@ class LoadTestOrchestrator:
             scenario.run()
 
             if VERBOSE_MODE:
-                print(f"✅ {user_key} (Profile {profile}) completed")
+                print("{0} (Profile {1}) completed".format(user_key, profile))
 
         except Exception as e:
-            print(f"❌ {user_key} (Profile {profile}) failed: {str(e)}")
+            print("{0} (Profile {1}) failed: {2}".format(user_key, profile, str(e)))
 
     def run_load_test(self):
         """Run the load test with all concurrent users"""
         print("\n" + "=" * 80)
         print("LOAD TEST: Tennis Reservation App User App")
         print("=" * 80)
-        print(f"Number of Users: {NUM_CONCURRENT_USERS}")
-        print(f"Max Workers: {MAX_WORKERS}")
-        print(f"App URL: {USER_APP_URL}")
+        print("Number of Users: {0}".format(NUM_CONCURRENT_USERS))
+        print("Max Workers: {0}".format(MAX_WORKERS))
+        print("App URL: {0}".format(USER_APP_URL))
         print("=" * 80 + "\n")
 
         # Wait for app to be ready
         if not self.wait_for_app():
-            print("❌ Cannot start load test - app not ready")
+            print("Cannot start load test - app not ready")
             return False
 
         self.start_time = time.time()
@@ -169,10 +256,10 @@ class LoadTestOrchestrator:
                     future.result()
                     completed += 1
                 except Exception as e:
-                    print(f"❌ Exception for {user_key}: {str(e)}")
+                    print("Exception for {0}: {1}".format(user_key, str(e)))
 
                 if VERBOSE_MODE:
-                    print(f"Progress: {completed}/{NUM_CONCURRENT_USERS} users completed")
+                    print("Progress: {0}/{1} users completed".format(completed, NUM_CONCURRENT_USERS))
 
         self.end_time = time.time()
         self.metrics.finalize()
@@ -188,9 +275,9 @@ class LoadTestOrchestrator:
         self.metrics.save_to_csv()
         self.metrics.save_summary()
 
-        print("\n📊 Test Results:")
-        print(f"  Test Duration: {self.end_time - self.start_time:.2f} seconds")
-        print(f"  Results saved to: {RESULTS_DIR}/")
+        print("\nTest Results:")
+        print("  Test Duration: {0:.2f} seconds".format(self.end_time - self.start_time))
+        print("  Results saved to: {0}/".format(RESULTS_DIR))
 
     def run(self):
         """Run complete load test"""

@@ -153,7 +153,7 @@ def check_system_health():
 
     except Exception as e:
         # FIX #2b: Log pero no bloquear - la app debería cargar incluso si health check falla
-        print(f"⚠️ Health check warning: {str(e)}")
+        print(f"[WARNING] Health check warning: {str(e)}")
         return False, f"Health check: {str(e)}"
 
 if __name__ == "__main__":
