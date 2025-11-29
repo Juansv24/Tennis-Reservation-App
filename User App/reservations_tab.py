@@ -790,7 +790,6 @@ def confirm_reservation_callback(current_user, selected_date, selected_hours):
     success = handle_reservation_submission(current_user, selected_date, selected_hours)
     if success:
         st.session_state.reservation_confirmed = True
-        invalidate_reservation_cache()
 
 
 def handle_reservation_submission(current_user, date, selected_hours):
