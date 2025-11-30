@@ -4,12 +4,10 @@ Gestor de Autenticación Supabase para Sistema de Reservas de Cancha de Tenis
 import streamlit as st
 import hashlib
 import secrets
-import time
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Tuple
 from database_manager import db_manager
 from timezone_utils import get_colombia_now
-from production_queue_manager import get_production_queue
 
 class SupabaseAuthManager:
     """Administrador de autenticación usando Supabase"""
@@ -332,17 +330,11 @@ class SupabaseAuthManager:
 
         SECURITY: Uses generic error message to prevent user enumeration attacks.
         Attackers cannot determine if an email exists in the system.
-        QUEUE: Uses universal Supabase queue to prevent socket exhaustion.
+        QUEUE: Queue protection is handled by HybridQueuedDatabaseManagerAdapter
+               (write operations are automatically serialized).
         """
-        # Acquire exclusive Supabase access slot
-        queue = get_production_queue()
-        start_time = time.time()
-        queue.acquire(email, "[AUTH:LOGIN]")
-
         try:
             if not email or not password:
-                duration = time.time() - start_time
-                queue.release(email, "[AUTH:LOGIN]", duration)
                 return False, "Por favor ingresa email y contraseña", None
 
             email = email.strip().lower()
@@ -352,8 +344,6 @@ class SupabaseAuthManager:
 
             if not result.data:
                 # Generic message - don't reveal whether email exists or account is inactive
-                duration = time.time() - start_time
-                queue.release(email, "[AUTH:LOGIN]", duration)
                 return False, "Email o contraseña incorrectos", None
 
             user = result.data[0]
@@ -362,8 +352,6 @@ class SupabaseAuthManager:
             password_hash, _ = self._hash_password(password, user['salt'])
             if password_hash != user['password_hash']:
                 # Generic message - matches email-not-found error
-                duration = time.time() - start_time
-                queue.release(email, "[AUTH:LOGIN]", duration)
                 return False, "Email o contraseña incorrectos", None
 
             # Verificar si es primer login
@@ -377,27 +365,22 @@ class SupabaseAuthManager:
                     'full_name': user['full_name'],
                     'requires_access_code': True  # Flag especial
                 }
-                duration = time.time() - start_time
-                queue.release(email, "[AUTH:LOGIN]", duration)
                 return True, "first_login_requires_access_code", user_info
 
-
-            # CUARTO: Crear sesión si todo está ok
+            # Crear sesión si todo está ok
             session_token = self.create_session(user['id'], remember_me)
 
             if not session_token:
-                duration = time.time() - start_time
-                queue.release(email, "[AUTH:LOGIN]", duration)
                 return False, "Error al crear sesión - por favor intenta de nuevo", None
 
-            # QUINTO: Configurar contexto RLS para futuras operaciones
+            # Configurar contexto RLS para futuras operaciones
             try:
                 self.client.rpc('set_session_token', {'token': session_token}).execute()
             except Exception as e:
                 # Si falla RLS, continuar (para compatibilidad)
                 print(f"Advertencia: No se pudo configurar contexto RLS en login: {e}")
 
-            # SEXTO: Actualizar último inicio de sesión - usar get_colombia_now() para consistencia de zona horaria
+            # Actualizar último inicio de sesión - usar get_colombia_now() para consistencia de zona horaria
             try:
                 self.client.table('users').update({
                     'last_login': get_colombia_now().isoformat()
@@ -405,7 +388,7 @@ class SupabaseAuthManager:
             except Exception:
                 pass  # No crítico si falla
 
-            # SÉPTIMO: Preparar información del usuario
+            # Preparar información del usuario
             user_info = {
                 'id': user['id'],
                 'email': user['email'],
@@ -413,8 +396,6 @@ class SupabaseAuthManager:
                 'session_token': session_token
             }
 
-            duration = time.time() - start_time
-            queue.release(email, "[AUTH:LOGIN]", duration)
             return True, "Inicio de sesión exitoso", user_info
 
         except Exception as e:
@@ -424,9 +405,6 @@ class SupabaseAuthManager:
             except Exception:
                 pass
 
-            # Release queue slot on error
-            duration = time.time() - start_time
-            queue.release(email, "[AUTH:LOGIN]", duration)
             return False, f"Error de inicio de sesión: {str(e)}", None
 
     def get_user_by_id(self, user_id: int) -> Optional[Dict]:

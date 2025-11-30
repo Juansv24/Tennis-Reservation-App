@@ -494,6 +494,9 @@ class UserScenario:
     def close_driver(self):
         """Close Selenium WebDriver"""
         try:
+            # Wait 5 seconds to verify user actually logged in and page displayed
+            print("[{}] Waiting 5 seconds to verify login... (check browser window)".format(self.user_id))
+            time.sleep(5)
             self.driver.quit()
         except:
             pass

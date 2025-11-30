@@ -144,8 +144,20 @@ def check_system_health():
 
     FIX #2: Reemplazado verificación pesada por simple query con limit
     Esto reduce de ~10 DB calls a 2 lightweight queries bajo concurrencia
+
+    FIX #2d: Added timeout to prevent app freeze on Supabase cold-start
+    Timeout de 5 segundos para health check - si DB tarda más, continuar sin bloquear
     """
+    import signal
+
+    def timeout_handler(signum, frame):
+        raise TimeoutError("Health check timeout - DB might be cold starting")
+
     try:
+        # Set 5-second timeout for health check
+        signal.signal(signal.SIGALRM, timeout_handler)
+        signal.alarm(5)
+
         # FIX #2a: Reemplazar get_all_reservations() (full table scan) con simple limit query
         # Esto evita traer TODOS los registros de la tabla
         db_manager.client.table('reservations').select('id').limit(1).execute()
@@ -154,10 +166,18 @@ def check_system_health():
         # Verificación ligera - solo verificar que la tabla existe
         auth_manager.client.table('users').select('id').limit(1).execute()
 
+        signal.alarm(0)  # Cancel alarm
         return True, "Sistema operacional"
+
+    except TimeoutError as e:
+        # FIX #2d: Timeout - DB likely cold starting, continue anyway
+        signal.alarm(0)
+        print(f"[WARNING] Health check timeout: {str(e)}")
+        return False, f"DB startup (timeout): {str(e)}"
 
     except Exception as e:
         # FIX #2b: Log pero no bloquear - la app debería cargar incluso si health check falla
+        signal.alarm(0)
         print(f"[WARNING] Health check warning: {str(e)}")
         return False, f"Health check: {str(e)}"
 

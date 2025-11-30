@@ -817,5 +817,24 @@ class SupabaseManager:
             print(f"[WARNING] Error getting lock code: {str(e)}")
             return None
 
-# Instancia global
-db_manager = SupabaseManager()
+# Initialize database manager with proper Streamlit caching for connection pooling
+@st.cache_resource
+def _init_db_manager():
+    """
+    Initialize database manager with Streamlit's connection pooling.
+
+    Using @st.cache_resource ensures:
+    - Single SupabaseManager instance shared across ALL user sessions
+    - Connection pooling across all concurrent users
+    - Prevents connection exhaustion
+    """
+    db = SupabaseManager()
+
+    # Wrap with HYBRID queue for write operations (reads parallel, writes serial)
+    from hybrid_queue_manager import get_hybrid_queue
+    from hybrid_queue_wrapper import HybridQueuedDatabaseManagerAdapter
+
+    return HybridQueuedDatabaseManagerAdapter(db, get_hybrid_queue())
+
+# Get the cached, pooled database manager
+db_manager = _init_db_manager()
