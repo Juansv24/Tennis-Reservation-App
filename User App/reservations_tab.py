@@ -4,11 +4,13 @@ VERSIÓN ACTUALIZADA con Integración de Autenticación
 """
 import streamlit as st
 import datetime
+import time
 from datetime import timedelta
 from database_manager import db_manager
 from auth_utils import get_current_user
 from timezone_utils import get_colombia_today, get_colombia_now, format_date_short, format_date_full
 from email_config import email_manager
+from production_queue_manager import get_production_queue
 
 # Configuración
 COURT_HOURS = list(range(6, 22))  # 6 AM a 9 PM
@@ -793,27 +795,47 @@ def confirm_reservation_callback(current_user, selected_date, selected_hours):
 
 
 def handle_reservation_submission(current_user, date, selected_hours):
-    """Lógica simplificada con stored procedure con errores debajo de los slots"""
+    """Lógica simplificada con stored procedure con errores debajo de los slots
 
-    if len(selected_hours) == 1:
-        # Reserva de 1 hora - usar stored procedure atómica
-        hour = selected_hours[0]
-        success, message = db_manager.create_atomic_reservation(
-            date, hour, current_user['full_name'], current_user['email']
-        )
+    QUEUE: Uses universal Supabase queue to prevent socket exhaustion.
+    """
+    # Acquire exclusive Supabase access slot for reservation
+    queue = get_production_queue()
+    start_time = time.time()
+    queue.acquire(current_user['email'], f"[RESERVATION:{selected_hours[0]:02d}:00]")
 
-        if success:
-            show_success_and_cleanup(current_user, date, [hour])
-            return True
+    try:
+        if len(selected_hours) == 1:
+            # Reserva de 1 hora - usar stored procedure atómica
+            hour = selected_hours[0]
+            success, message = db_manager.create_atomic_reservation(
+                date, hour, current_user['full_name'], current_user['email']
+            )
+
+            if success:
+                show_success_and_cleanup(current_user, date, [hour])
+                duration = time.time() - start_time
+                queue.release(current_user['email'], "[RESERVATION]", duration)
+                return True
+            else:
+                # Configurar estado de error en lugar de mostrar error directamente
+                st.session_state.reservation_error = True
+                st.session_state.error_message = message
+                duration = time.time() - start_time
+                queue.release(current_user['email'], "[RESERVATION]", duration)
+                return False
+
         else:
-            # Configurar estado de error en lugar de mostrar error directamente
-            st.session_state.reservation_error = True
-            st.session_state.error_message = message
-            return False
-
-    else:
-        # Reserva de 2 horas - lógica todo-o-nada
-        return handle_two_hour_reservation(current_user, date, selected_hours)
+            # Reserva de 2 horas - lógica todo-o-nada
+            result = handle_two_hour_reservation(current_user, date, selected_hours)
+            duration = time.time() - start_time
+            queue.release(current_user['email'], "[RESERVATION]", duration)
+            return result
+    except Exception as e:
+        # Release queue slot on error
+        duration = time.time() - start_time
+        queue.release(current_user['email'], "[RESERVATION]", duration)
+        raise
 
 
 

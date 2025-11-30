@@ -13,6 +13,7 @@ User scenario implementations for load testing
 Profiles A, B, C, D - different user behaviors in the User App
 """
 import time
+import threading
 from typing import Dict, Any
 from selenium import webdriver
 from selenium.webdriver.common.by import By
@@ -22,9 +23,17 @@ from selenium.common.exceptions import TimeoutException, NoSuchElementException
 
 from config import (
     USER_APP_URL, LOGIN_TIMEOUT, PAGE_LOAD_TIMEOUT, ELEMENT_WAIT_TIMEOUT,
-    AVAILABLE_HOURS, RESERVATION_DATE
+    AVAILABLE_HOURS, RESERVATION_DATE, NUM_CONCURRENT_USERS
 )
 from metrics_collector import MetricsCollector, OperationType, OperationStatus
+
+# Global synchronization barrier for simultaneous reservation attempts
+_reservation_barrier = None
+
+def set_reservation_barrier(num_users: int):
+    """Set the reservation barrier size"""
+    global _reservation_barrier
+    _reservation_barrier = threading.Barrier(num_users)
 
 
 class UserScenario:
@@ -234,7 +243,7 @@ class UserScenario:
             print("[{0}] Scrolled button into view".format(self.user_id))
 
             # Step 3: Wait for Streamlit re-render after scroll (critical for dynamic content)
-            time.sleep(1)
+            time.sleep(0.5)
 
             # Step 4: Check if button is visible before clicking
             is_displayed = self.driver.execute_script("return arguments[0].offsetParent !== null;", button)
@@ -245,8 +254,8 @@ class UserScenario:
             print("[{0}] Successfully clicked hour {1}".format(self.user_id, hour_to_select))
 
             # Wait for the click to register and app to respond
-            print("[{0}] Waiting 5 seconds for click to register...".format(self.user_id))
-            time.sleep(5)
+            print("[{0}] Waiting 2 seconds for click to register...".format(self.user_id))
+            time.sleep(2)
 
             # Debug: Save screenshot to see what's on the page
             screenshot_path = "load_tests/results/hour_clicked_{0}.png".format(self.user_id)
@@ -293,7 +302,7 @@ class UserScenario:
             print("[{0}] Scrolled confirmation button into view".format(self.user_id))
 
             # Step 3: Wait for Streamlit re-render after scroll (critical for dynamic content)
-            time.sleep(1)
+            time.sleep(0.5)
 
             # Step 4: Check if button is visible before clicking
             is_displayed = self.driver.execute_script("return arguments[0].offsetParent !== null;", confirm_button)
@@ -304,8 +313,8 @@ class UserScenario:
             print("[{0}] Successfully clicked 'Confirmar Reserva'".format(self.user_id))
 
             # Wait for the reservation to be processed
-            print("[{0}] Waiting 10 seconds for reservation to be confirmed...".format(self.user_id))
-            time.sleep(10)
+            print("[{0}] Waiting 3 seconds for reservation to be confirmed...".format(self.user_id))
+            time.sleep(3)
 
             duration = time.time() - start
             # Release reservation slot and record submission duration for adaptive queue
@@ -544,10 +553,11 @@ class ProfileB(UserScenario):
             self.login()
             # Wait for the dashboard to fully load after login
             print("[{}] Waiting for dashboard to load...".format(self.user_id))
-            time.sleep(2)
-            # Select the hour button
+            time.sleep(1)
+
+            # Select the hour button immediately (no delay)
             self.select_hour(self.hour)
-            # Confirm the reservation
+            # Confirm the reservation immediately (no delay)
             self.confirm_reservation()
             print("[{}] Profile B completed for hour {}".format(self.user_id, self.hour))
         except Exception as e:

@@ -87,7 +87,7 @@ RESERVATION_DATE = (datetime.now() + timedelta(days=1)).date()
 # Format: hour as integer (6 = 6am, 10 = 10am, 12 = 12pm, 14 = 2pm, 17 = 5pm, etc.)
 # NOTE: Regular users can only reserve 8 AM - 4 PM (before 5 PM deadline)
 AVAILABLE_HOURS = {
-    "user1_profile_a": 14,     # User 1 reserves 2pm (14:00)
+    "user1_profile_b": 14,     # User 1 reserves 2pm (14:00)
     "user2_profile_a": 15,     # User 2 reserves 3pm (15:00)
     "user3_profile_a": 16,     # User 3 reserves 4pm (16:00)
     "user4_profile_b": 17,     # User 4 reserves 5pm (17:00)

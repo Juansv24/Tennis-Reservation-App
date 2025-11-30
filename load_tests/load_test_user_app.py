@@ -27,7 +27,7 @@ from config import (
     APP_READY_TIMEOUT, AVAILABLE_HOURS, RESULTS_DIR, BROWSER_TYPE, HEADLESS_MODE
 )
 from metrics_collector import MetricsCollector
-from user_scenarios import create_scenario
+from user_scenarios import create_scenario, set_reservation_barrier
 from production_queue_manager import init_production_queue, get_production_queue
 
 try:
@@ -256,6 +256,9 @@ class LoadTestOrchestrator:
         print("Max Workers: {0}".format(MAX_WORKERS))
         print("App URL: {0}".format(USER_APP_URL))
         print("=" * 80 + "\n")
+
+        # Initialize synchronization barrier for simultaneous reservation attempts
+        set_reservation_barrier(NUM_CONCURRENT_USERS)
 
         # Wait for app to be ready
         if not self.wait_for_app():
