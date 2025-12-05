@@ -46,3 +46,4 @@ export type SlotStatus =
   | 'taken'
   | 'past'
   | 'maintenance'
+  | 'selected'

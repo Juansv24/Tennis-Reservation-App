@@ -19,37 +19,22 @@ export default function Header({ user }: HeaderProps) {
   }
 
   return (
-    <header className="bg-white border-b border-gray-200 sticky top-0 z-50">
-      <div className="max-w-7xl mx-auto px-4 py-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-xl font-bold text-us-open-blue">
-              {user.full_name}
-            </h1>
-            <p className="text-sm text-gray-600">{user.email}</p>
-          </div>
-
-          <div className="flex items-center gap-4">
-            <div className="text-right">
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-medium text-gray-700">
-                  {user.credits} créditos
-                </span>
-                {user.is_vip && (
-                  <span className="bg-gradient-to-r from-us-open-yellow to-yellow-500 text-us-open-blue px-2 py-1 rounded text-xs font-bold">
-                    VIP
-                  </span>
-                )}
-              </div>
+    <header className="bg-gradient-to-r from-us-open-blue to-us-open-light-blue text-white shadow-lg">
+      <div className="max-w-7xl mx-auto px-4 py-6">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-3">
+            <span className="text-4xl">🎾</span>
+            <div>
+              <h1 className="text-3xl font-bold">Reservas de Cancha de Tenis</h1>
+              <p className="text-lg opacity-90">{process.env.NEXT_PUBLIC_COURT_NAME}</p>
             </div>
-
-            <button
-              onClick={handleLogout}
-              className="px-4 py-2 text-gray-700 hover:text-us-open-blue hover:bg-gray-100 rounded-lg transition-colors"
-            >
-              Salir
-            </button>
           </div>
+          <button
+            onClick={handleLogout}
+            className="px-4 py-2 bg-white bg-opacity-20 hover:bg-opacity-30 rounded-lg transition-colors font-semibold"
+          >
+            Salir
+          </button>
         </div>
       </div>
     </header>

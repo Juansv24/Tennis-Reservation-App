@@ -11,20 +11,22 @@ interface TimeSlotProps {
 }
 
 export default function TimeSlot({ hour, status, onClick, ownerName }: TimeSlotProps) {
-  const isClickable = status === 'available'
+  const isClickable = status === 'available' || status === 'selected'
 
   const statusStyles = {
-    available: 'bg-white border-2 border-available-green border-l-4 text-available-green hover:bg-green-50 hover:border-us-open-yellow cursor-pointer slot-hover',
-    'my-reservation': 'bg-gradient-to-br from-blue-50 to-blue-100 border-2 border-us-open-light-blue border-l-4 border-l-us-open-blue text-us-open-blue shadow-md',
-    taken: 'bg-gray-50 border-2 border-gray-200 text-taken-gray cursor-not-allowed opacity-70',
-    past: 'bg-white border border-dashed border-gray-200 text-gray-400 cursor-not-allowed opacity-50',
-    maintenance: 'bg-orange-50 border-2 border-maintenance-orange border-l-4 border-l-orange-600 text-orange-700',
+    available: 'bg-white border-2 border-us-open-light-blue text-us-open-blue hover:bg-blue-50 cursor-pointer',
+    selected: 'bg-us-open-yellow border-4 border-us-open-blue text-us-open-blue cursor-pointer shadow-lg scale-105',
+    'my-reservation': 'bg-us-open-blue text-white border-2 border-us-open-blue',
+    taken: 'bg-blue-50 border-2 border-blue-200 text-gray-600',
+    past: 'bg-gray-100 border border-gray-200 text-gray-400 cursor-not-allowed opacity-60',
+    maintenance: 'bg-orange-100 border-2 border-orange-400 text-orange-700',
   }
 
   const statusLabels = {
     available: 'Disponible',
+    selected: 'Seleccionado',
     'my-reservation': 'Tu Reserva',
-    taken: 'Reservado',
+    taken: ownerName ? ownerName : 'Escuela de Tenis',
     past: 'Pasado',
     maintenance: 'Mantenimiento',
   }
@@ -34,15 +36,19 @@ export default function TimeSlot({ hour, status, onClick, ownerName }: TimeSlotP
       onClick={isClickable ? onClick : undefined}
       disabled={!isClickable}
       className={`
-        p-4 rounded-lg slot-transition font-semibold text-center
+        w-full p-4 rounded-lg transition-all duration-200 font-semibold text-left
         ${statusStyles[status]}
       `}
     >
-      <div className="text-lg mb-1">{formatHour(hour)}</div>
-      <div className="text-sm font-medium">{statusLabels[status]}</div>
-      {status === 'taken' && ownerName && (
-        <div className="text-xs mt-1 opacity-75">{ownerName}</div>
-      )}
+      <div className="flex items-center justify-between">
+        <div className="flex-1">
+          <div className="text-xl font-bold">{formatHour(hour)}</div>
+          <div className="text-sm mt-1">{statusLabels[status]}</div>
+        </div>
+        {status === 'selected' && (
+          <div className="text-2xl">✓</div>
+        )}
+      </div>
     </button>
   )
 }

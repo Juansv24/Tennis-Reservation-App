@@ -1,6 +1,9 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import Header from '@/components/Header'
+import WelcomeBanner from '@/components/WelcomeBanner'
+import UserDetailsBox from '@/components/UserDetailsBox'
+import InstructionsSection from '@/components/InstructionsSection'
 
 export default async function DashboardLayout({
   children,
@@ -36,7 +39,19 @@ export default async function DashboardLayout({
     <div className="min-h-screen bg-gray-50">
       <Header user={profile} />
       <main className="max-w-7xl mx-auto px-4 py-8">
-        {children}
+        <div className="space-y-6">
+          <WelcomeBanner user={profile} />
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-2 space-y-6">
+              {children}
+            </div>
+            <div className="space-y-6">
+              <UserDetailsBox user={profile} />
+              <InstructionsSection />
+            </div>
+          </div>
+        </div>
       </main>
     </div>
   )

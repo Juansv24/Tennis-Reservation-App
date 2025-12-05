@@ -38,3 +38,12 @@ export function formatDateFull(dateString: string): string {
     day: 'numeric',
   })
 }
+
+// Format date short (e.g., "VIE 5 DIC")
+export function formatDateShort(dateString: string): string {
+  const date = new Date(dateString + 'T00:00:00')
+  const dayAbbrev = date.toLocaleDateString('es-ES', { weekday: 'short' }).toUpperCase()
+  const dayNum = date.getDate()
+  const monthAbbrev = date.toLocaleDateString('es-ES', { month: 'short' }).toUpperCase()
+  return `${dayAbbrev} ${dayNum} ${monthAbbrev}`
+}

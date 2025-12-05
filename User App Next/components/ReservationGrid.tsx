@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { COURT_HOURS, getTodayDate, getTomorrowDate, formatDateFull } from '@/lib/constants'
+import { COURT_HOURS, getTodayDate, getTomorrowDate, formatDateFull, formatDateShort } from '@/lib/constants'
 import TimeSlot from './TimeSlot'
 import ConfirmationModal from './ConfirmationModal'
 import type { Reservation, SlotStatus, User, MaintenanceSlot } from '@/types/database.types'
@@ -20,13 +20,16 @@ export default function ReservationGrid({
   user,
   initialDate,
 }: ReservationGridProps) {
-  const [selectedDate, setSelectedDate] = useState(initialDate)
   const [reservations, setReservations] = useState(initialReservations)
   const [maintenance, setMaintenance] = useState(initialMaintenance)
   const [loading, setLoading] = useState(false)
   const [isModalOpen, setIsModalOpen] = useState(false)
-  const [selectedHour, setSelectedHour] = useState<number | null>(null)
+  const [selectedHours, setSelectedHours] = useState<number[]>([])
   const [lockCode, setLockCode] = useState<string>('')
+  const [todayReservations, setTodayReservations] = useState<Reservation[]>([])
+  const [tomorrowReservations, setTomorrowReservations] = useState<Reservation[]>([])
+  const [todayMaintenance, setTodayMaintenance] = useState<MaintenanceSlot[]>([])
+  const [tomorrowMaintenance, setTomorrowMaintenance] = useState<MaintenanceSlot[]>([])
 
   const supabase = createClient()
   const today = getTodayDate()
@@ -44,88 +47,125 @@ export default function ReservationGrid({
     fetchLockCode()
   }, [])
 
-  // Real-time subscription
+  // Fetch both days' data on mount
   useEffect(() => {
-    const channel = supabase
-      .channel('reservations-realtime')
+    async function fetchAllData() {
+      setLoading(true)
+
+      const [todayResData, tomorrowResData, todayMainData, tomorrowMainData] = await Promise.all([
+        supabase.from('reservations').select('*, users(full_name)').eq('date', today).order('hour'),
+        supabase.from('reservations').select('*, users(full_name)').eq('date', tomorrow).order('hour'),
+        supabase.from('maintenance_slots').select('*').eq('date', today),
+        supabase.from('maintenance_slots').select('*').eq('date', tomorrow),
+      ])
+
+      if (todayResData.data) setTodayReservations(todayResData.data)
+      if (tomorrowResData.data) setTomorrowReservations(tomorrowResData.data)
+      if (todayMainData.data) setTodayMaintenance(todayMainData.data)
+      if (tomorrowMainData.data) setTomorrowMaintenance(tomorrowMainData.data)
+
+      setLoading(false)
+    }
+
+    fetchAllData()
+  }, [supabase, today, tomorrow])
+
+  // Real-time subscription for today
+  useEffect(() => {
+    const channelToday = supabase
+      .channel('reservations-today')
       .on(
         'postgres_changes',
         {
           event: '*',
           schema: 'public',
           table: 'reservations',
-          filter: `date=eq.${selectedDate}`,
+          filter: `date=eq.${today}`,
         },
         async (payload) => {
           if (payload.eventType === 'INSERT') {
-            // Fetch full reservation with user data
             const { data } = await supabase
               .from('reservations')
               .select('*, users(full_name)')
               .eq('id', payload.new.id)
               .single()
-
             if (data) {
-              setReservations((prev) => [...prev, data])
+              setTodayReservations((prev) => [...prev, data])
             }
           } else if (payload.eventType === 'DELETE') {
-            setReservations((prev) =>
-              prev.filter((r) => r.id !== payload.old.id)
-            )
+            setTodayReservations((prev) => prev.filter((r) => r.id !== payload.old.id))
           }
         }
       )
       .subscribe()
 
     return () => {
-      supabase.removeChannel(channel)
+      supabase.removeChannel(channelToday)
     }
-  }, [selectedDate, supabase])
+  }, [today, supabase])
 
-  // Fetch reservations when date changes
+  // Real-time subscription for tomorrow
   useEffect(() => {
-    async function fetchReservations() {
-      setLoading(true)
-      const { data: newReservations } = await supabase
-        .from('reservations')
-        .select('*, users(full_name)')
-        .eq('date', selectedDate)
-        .order('hour')
+    const channelTomorrow = supabase
+      .channel('reservations-tomorrow')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'reservations',
+          filter: `date=eq.${tomorrow}`,
+        },
+        async (payload) => {
+          if (payload.eventType === 'INSERT') {
+            const { data } = await supabase
+              .from('reservations')
+              .select('*, users(full_name)')
+              .eq('id', payload.new.id)
+              .single()
+            if (data) {
+              setTomorrowReservations((prev) => [...prev, data])
+            }
+          } else if (payload.eventType === 'DELETE') {
+            setTomorrowReservations((prev) => prev.filter((r) => r.id !== payload.old.id))
+          }
+        }
+      )
+      .subscribe()
 
-      const { data: newMaintenance } = await supabase
-        .from('maintenance_slots')
-        .select('*')
-        .eq('date', selectedDate)
+    return () => {
+      supabase.removeChannel(channelTomorrow)
+    }
+  }, [tomorrow, supabase])
 
-      if (newReservations) setReservations(newReservations)
-      if (newMaintenance) setMaintenance(newMaintenance)
-      setLoading(false)
+  function getSlotStatus(
+    hour: number,
+    date: string,
+    reservationsList: Reservation[],
+    maintenanceList: MaintenanceSlot[]
+  ): { status: SlotStatus; ownerName?: string } {
+    // Check if selected
+    if (selectedHours.includes(hour)) {
+      return { status: 'selected' }
     }
 
-    fetchReservations()
-  }, [selectedDate, supabase])
-
-  function getSlotStatus(hour: number): { status: SlotStatus; ownerName?: string } {
     // Check if in maintenance
-    const inMaintenance = maintenance.some((m) => m.hour === hour)
+    const inMaintenance = maintenanceList.some((m) => m.hour === hour)
     if (inMaintenance) {
       return { status: 'maintenance' }
     }
 
     // Check if past
     const now = new Date()
-    const slotDate = new Date(selectedDate + 'T00:00:00')
+    const slotDate = new Date(date + 'T00:00:00')
     const currentHour = now.getHours()
 
-    if (
-      slotDate.toDateString() === now.toDateString() &&
-      hour < currentHour
-    ) {
+    if (slotDate.toDateString() === now.toDateString() && hour < currentHour) {
       return { status: 'past' }
     }
 
     // Check if reserved
-    const reservation = reservations.find((r) => r.hour === hour)
+    const reservation = reservationsList.find((r) => r.hour === hour)
     if (reservation) {
       if (reservation.user_id === user.id) {
         return { status: 'my-reservation' }
@@ -139,113 +179,171 @@ export default function ReservationGrid({
     return { status: 'available' }
   }
 
-  function handleSlotClick(hour: number) {
-    setSelectedHour(hour)
-    setIsModalOpen(true)
+  function handleSlotClick(hour: number, date: string) {
+    const reservationsList = date === today ? todayReservations : tomorrowReservations
+    const maintenanceList = date === today ? todayMaintenance : tomorrowMaintenance
+    const { status } = getSlotStatus(hour, date, reservationsList, maintenanceList)
+
+    // Only allow clicking on available slots
+    if (status !== 'available' && status !== 'selected') return
+
+    if (selectedHours.includes(hour)) {
+      // Deselect
+      setSelectedHours(selectedHours.filter((h) => h !== hour))
+    } else if (selectedHours.length === 0) {
+      // First selection
+      setSelectedHours([hour])
+    } else if (selectedHours.length === 1) {
+      // Second selection - must be consecutive
+      const existing = selectedHours[0]
+      if (Math.abs(hour - existing) === 1) {
+        setSelectedHours([Math.min(hour, existing), Math.max(hour, existing)].sort((a, b) => a - b))
+      } else {
+        // Not consecutive, start fresh
+        setSelectedHours([hour])
+      }
+    } else {
+      // Already have 2, start fresh
+      setSelectedHours([hour])
+    }
+  }
+
+  function handleOpenModal() {
+    if (selectedHours.length > 0) {
+      setIsModalOpen(true)
+    }
   }
 
   async function handleConfirmReservation() {
-    if (selectedHour === null) return
+    if (selectedHours.length === 0) return
 
-    const response = await fetch('/api/reservations', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ date: selectedDate, hour: selectedHour }),
-    })
+    try {
+      // Create reservations for all selected hours
+      const promises = selectedHours.map((hour) =>
+        fetch('/api/reservations', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ date: today, hour }),
+        })
+      )
 
-    const data = await response.json()
+      const responses = await Promise.all(promises)
+      const results = await Promise.all(responses.map((r) => r.json()))
 
-    if (!response.ok) {
-      alert(data.error || 'Error al crear reserva')
+      // Check if any failed
+      const errors = results.filter((r) => r.error)
+      if (errors.length > 0) {
+        alert(errors[0].error || 'Error al crear reserva')
+        setIsModalOpen(false)
+        setSelectedHours([])
+        return
+      }
+
+      // Close modal and show success
       setIsModalOpen(false)
-      return
+      setSelectedHours([])
+      alert('¡Reserva confirmada!')
+    } catch (error) {
+      alert('Error al crear reserva')
+      setIsModalOpen(false)
+      setSelectedHours([])
     }
-
-    // Close modal and show success
-    setIsModalOpen(false)
-    setSelectedHour(null)
-    alert('¡Reserva confirmada!')
   }
 
   function handleCloseModal() {
     setIsModalOpen(false)
-    setSelectedHour(null)
   }
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="bg-gradient-to-r from-us-open-blue to-us-open-light-blue text-white p-6 rounded-lg shadow-lg text-center">
-        <h1 className="text-3xl font-bold mb-2">
-          Reservas de Cancha de Tenis
-        </h1>
-        <p className="text-lg">{process.env.NEXT_PUBLIC_COURT_NAME}</p>
-      </div>
-
-      {/* Date selector */}
-      <div className="flex gap-4 justify-center">
+      {/* Big Blue Date Buttons */}
+      <div className="grid grid-cols-2 gap-4">
         <button
-          onClick={() => setSelectedDate(today)}
-          className={`px-6 py-3 rounded-lg font-semibold transition-colors ${
-            selectedDate === today
-              ? 'bg-us-open-light-blue text-white'
-              : 'bg-white text-gray-700 hover:bg-gray-100'
-          }`}
+          className="bg-us-open-light-blue text-white py-6 px-4 rounded-xl font-bold text-lg hover:bg-us-open-blue transition-colors shadow-lg"
         >
-          Hoy
+          <div className="text-xl">{formatDateShort(today)}</div>
+          <div className="text-sm font-normal mt-1">HOY</div>
         </button>
         <button
-          onClick={() => setSelectedDate(tomorrow)}
-          className={`px-6 py-3 rounded-lg font-semibold transition-colors ${
-            selectedDate === tomorrow
-              ? 'bg-us-open-light-blue text-white'
-              : 'bg-white text-gray-700 hover:bg-gray-100'
-          }`}
+          className="bg-us-open-light-blue text-white py-6 px-4 rounded-xl font-bold text-lg hover:bg-us-open-blue transition-colors shadow-lg"
         >
-          Mañana
+          <div className="text-xl">{formatDateShort(tomorrow)}</div>
+          <div className="text-sm font-normal mt-1">MAÑANA</div>
         </button>
       </div>
 
-      {/* Selected date display */}
-      <div className="text-center text-lg text-gray-700 font-medium">
-        {formatDateFull(selectedDate)}
-      </div>
-
-      {/* Time slots grid */}
+      {/* Two Column Layout - Today and Tomorrow */}
       {loading ? (
-        <div className="text-center py-12 text-gray-500">
-          Cargando...
-        </div>
+        <div className="text-center py-12 text-gray-500">Cargando...</div>
       ) : (
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-          {COURT_HOURS.map((hour) => {
-            const { status, ownerName } = getSlotStatus(hour)
-            return (
-              <TimeSlot
-                key={hour}
-                hour={hour}
-                status={status}
-                ownerName={ownerName}
-                onClick={() => status === 'available' && handleSlotClick(hour)}
-              />
-            )
-          })}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          {/* Today Column */}
+          <div>
+            <h3 className="text-lg font-bold text-us-open-blue mb-4 text-center">
+              HOY - {formatDateFull(today)}
+            </h3>
+            <div className="space-y-3">
+              {COURT_HOURS.map((hour) => {
+                const { status, ownerName } = getSlotStatus(hour, today, todayReservations, todayMaintenance)
+                return (
+                  <TimeSlot
+                    key={`today-${hour}`}
+                    hour={hour}
+                    status={status}
+                    ownerName={ownerName}
+                    onClick={() => handleSlotClick(hour, today)}
+                  />
+                )
+              })}
+            </div>
+          </div>
+
+          {/* Tomorrow Column */}
+          <div>
+            <h3 className="text-lg font-bold text-us-open-blue mb-4 text-center">
+              MAÑANA - {formatDateFull(tomorrow)}
+            </h3>
+            <div className="space-y-3">
+              {COURT_HOURS.map((hour) => {
+                const { status, ownerName } = getSlotStatus(hour, tomorrow, tomorrowReservations, tomorrowMaintenance)
+                return (
+                  <TimeSlot
+                    key={`tomorrow-${hour}`}
+                    hour={hour}
+                    status={status}
+                    ownerName={ownerName}
+                    onClick={() => handleSlotClick(hour, tomorrow)}
+                  />
+                )
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Continue Button - Only show when hours are selected */}
+      {selectedHours.length > 0 && (
+        <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 z-40">
+          <button
+            onClick={handleOpenModal}
+            className="bg-us-open-yellow text-us-open-blue px-8 py-4 rounded-full font-bold text-lg shadow-2xl hover:scale-105 transition-transform"
+          >
+            Continuar ({selectedHours.length} hora{selectedHours.length > 1 ? 's' : ''})
+          </button>
         </div>
       )}
 
       {/* Confirmation Modal */}
-      {selectedHour !== null && (
-        <ConfirmationModal
-          isOpen={isModalOpen}
-          onClose={handleCloseModal}
-          onConfirm={handleConfirmReservation}
-          date={selectedDate}
-          hour={selectedHour}
-          credits={user.credits}
-          isVip={user.is_vip}
-          lockCode={lockCode}
-        />
-      )}
+      <ConfirmationModal
+        isOpen={isModalOpen}
+        onClose={handleCloseModal}
+        onConfirm={handleConfirmReservation}
+        date={today}
+        hours={selectedHours}
+        credits={user.credits}
+        isVip={user.is_vip}
+        lockCode={lockCode}
+      />
     </div>
   )
 }

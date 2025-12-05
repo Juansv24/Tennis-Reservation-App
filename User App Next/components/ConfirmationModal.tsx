@@ -7,7 +7,7 @@ interface ConfirmationModalProps {
   onClose: () => void
   onConfirm: () => void
   date: string
-  hour: number
+  hours: number[]
   credits: number
   isVip: boolean
   lockCode: string
@@ -18,15 +18,21 @@ export default function ConfirmationModal({
   onClose,
   onConfirm,
   date,
-  hour,
+  hours,
   credits,
   isVip,
   lockCode,
 }: ConfirmationModalProps) {
   if (!isOpen) return null
 
-  const cost = isVip ? 0 : 1
+  const totalHours = hours.length
+  const cost = isVip ? 0 : totalHours
   const remainingCredits = credits - cost
+
+  // Format time range
+  const timeRange = hours.length === 1
+    ? `${hours[0]}:00 - ${hours[0] + 1}:00`
+    : `${Math.min(...hours)}:00 - ${Math.max(...hours) + 1}:00`
 
   return (
     <div
@@ -60,8 +66,13 @@ export default function ConfirmationModal({
               Horario
             </p>
             <p className="text-lg font-semibold text-gray-900">
-              {hour}:00 - {hour + 1}:00
+              {timeRange}
             </p>
+            {totalHours > 1 && (
+              <p className="text-sm text-gray-600 mt-1">
+                ({totalHours} horas)
+              </p>
+            )}
           </div>
 
           {/* Cost */}
@@ -73,7 +84,7 @@ export default function ConfirmationModal({
               {isVip ? (
                 <span className="text-us-open-yellow">Gratis (VIP)</span>
               ) : (
-                '1 crédito'
+                `${cost} crédito${cost > 1 ? 's' : ''}`
               )}
             </p>
           </div>
@@ -84,7 +95,7 @@ export default function ConfirmationModal({
               Saldo Restante
             </p>
             <p className="text-lg font-semibold text-gray-900">
-              {remainingCredits} créditos
+              {remainingCredits} crédito{remainingCredits !== 1 ? 's' : ''}
             </p>
           </div>
 
