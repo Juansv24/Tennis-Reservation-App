@@ -11,7 +11,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(`${origin}/login?error=no_code`)
   }
 
-  const supabase = createClient()
+  const supabase = await createClient()
 
   // Exchange the code for a session
   const { error } = await supabase.auth.exchangeCodeForSession(code)

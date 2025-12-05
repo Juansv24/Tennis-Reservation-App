@@ -12,7 +12,7 @@ export async function DELETE(
   request: NextRequest,
   context: RouteContext
 ) {
-  const supabase = createClient()
+  const supabase = await createClient()
 
   // Check authentication
   const { data: { user }, error: authError } = await supabase.auth.getUser()

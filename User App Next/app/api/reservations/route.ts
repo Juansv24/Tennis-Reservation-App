@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 
 // GET /api/reservations?date=YYYY-MM-DD
 export async function GET(request: NextRequest) {
-  const supabase = createClient()
+  const supabase = await createClient()
   const { searchParams } = new URL(request.url)
   const date = searchParams.get('date')
 
@@ -39,7 +39,7 @@ export async function GET(request: NextRequest) {
 
 // POST /api/reservations
 export async function POST(request: NextRequest) {
-  const supabase = createClient()
+  const supabase = await createClient()
 
   // Check authentication
   const { data: { user }, error: authError } = await supabase.auth.getUser()

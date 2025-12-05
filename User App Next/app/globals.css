@@ -11,18 +11,20 @@
   --maintenance-orange: #FF9800;
 }
 
-@layer base {
-  body {
-    @apply bg-gray-50 text-gray-900;
-  }
+body {
+  background-color: rgb(249 250 251); /* gray-50 */
+  color: rgb(17 24 39); /* gray-900 */
 }
 
 @layer utilities {
   .slot-transition {
-    @apply transition-all duration-200 ease-in-out;
+    transition-property: all;
+    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+    transition-duration: 200ms;
   }
 
-  .slot-hover {
-    @apply hover:scale-[1.02] hover:shadow-md;
+  .slot-hover:hover {
+    transform: scale(1.02);
+    box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
   }
 }
