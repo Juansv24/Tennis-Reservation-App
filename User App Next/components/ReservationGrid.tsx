@@ -24,7 +24,7 @@ export default function ReservationGrid({
   const [maintenance, setMaintenance] = useState(initialMaintenance)
   const [loading, setLoading] = useState(false)
   const [isModalOpen, setIsModalOpen] = useState(false)
-  const [selectedHours, setSelectedHours] = useState<number[]>([])
+  const [selectedHours, setSelectedHours] = useState<Array<{hour: number, date: string}>>([])
   const [lockCode, setLockCode] = useState<string>('')
   const [todayReservations, setTodayReservations] = useState<Reservation[]>([])
   const [tomorrowReservations, setTomorrowReservations] = useState<Reservation[]>([])
@@ -145,7 +145,7 @@ export default function ReservationGrid({
     maintenanceList: MaintenanceSlot[]
   ): { status: SlotStatus; ownerName?: string } {
     // Check if selected
-    if (selectedHours.includes(hour)) {
+    if (selectedHours.some(s => s.hour === hour && s.date === date)) {
       return { status: 'selected' }
     }
 
@@ -187,24 +187,28 @@ export default function ReservationGrid({
     // Only allow clicking on available slots
     if (status !== 'available' && status !== 'selected') return
 
-    if (selectedHours.includes(hour)) {
+    const isAlreadySelected = selectedHours.some(s => s.hour === hour && s.date === date)
+
+    if (isAlreadySelected) {
       // Deselect
-      setSelectedHours(selectedHours.filter((h) => h !== hour))
+      setSelectedHours(selectedHours.filter((s) => !(s.hour === hour && s.date === date)))
     } else if (selectedHours.length === 0) {
       // First selection
-      setSelectedHours([hour])
+      setSelectedHours([{hour, date}])
     } else if (selectedHours.length === 1) {
-      // Second selection - must be consecutive
       const existing = selectedHours[0]
-      if (Math.abs(hour - existing) === 1) {
-        setSelectedHours([Math.min(hour, existing), Math.max(hour, existing)].sort((a, b) => a - b))
+      // Check if same date and consecutive hours
+      if (existing.date === date && Math.abs(hour - existing.hour) === 1) {
+        // Add consecutive hour on same date
+        const sorted = [existing, {hour, date}].sort((a, b) => a.hour - b.hour)
+        setSelectedHours(sorted)
       } else {
-        // Not consecutive, start fresh
-        setSelectedHours([hour])
+        // Not consecutive or different date, start fresh
+        setSelectedHours([{hour, date}])
       }
     } else {
       // Already have 2, start fresh
-      setSelectedHours([hour])
+      setSelectedHours([{hour, date}])
     }
   }
 
@@ -218,12 +222,12 @@ export default function ReservationGrid({
     if (selectedHours.length === 0) return
 
     try {
-      // Create reservations for all selected hours
-      const promises = selectedHours.map((hour) =>
+      // Create reservations for all selected hours with their dates
+      const promises = selectedHours.map((slot) =>
         fetch('/api/reservations', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ date: today, hour }),
+          body: JSON.stringify({ date: slot.date, hour: slot.hour }),
         })
       )
 
@@ -326,7 +330,7 @@ export default function ReservationGrid({
         <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 z-40">
           <button
             onClick={handleOpenModal}
-            className="bg-us-open-yellow text-us-open-blue px-8 py-4 rounded-full font-bold text-lg shadow-2xl hover:scale-105 transition-transform"
+            className="bg-white border-2 border-us-open-light-blue text-us-open-blue px-8 py-4 rounded-full font-bold text-lg shadow-2xl hover:bg-blue-50 transition-all"
           >
             Continuar ({selectedHours.length} hora{selectedHours.length > 1 ? 's' : ''})
           </button>
@@ -338,8 +342,8 @@ export default function ReservationGrid({
         isOpen={isModalOpen}
         onClose={handleCloseModal}
         onConfirm={handleConfirmReservation}
-        date={today}
-        hours={selectedHours}
+        date={selectedHours.length > 0 ? selectedHours[0].date : today}
+        hours={selectedHours.map(s => s.hour)}
         credits={user.credits}
         isVip={user.is_vip}
         lockCode={lockCode}
