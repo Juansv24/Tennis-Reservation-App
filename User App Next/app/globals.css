@@ -1,26 +1,28 @@
-@import "tailwindcss";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --us-open-blue: #001854;
+  --us-open-light-blue: #2478CC;
+  --us-open-yellow: #FFD400;
+  --available-green: #4CAF50;
+  --taken-gray: #9E9E9E;
+  --maintenance-orange: #FF9800;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+@layer base {
+  body {
+    @apply bg-gray-50 text-gray-900;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+@layer utilities {
+  .slot-transition {
+    @apply transition-all duration-200 ease-in-out;
+  }
+
+  .slot-hover {
+    @apply hover:scale-[1.02] hover:shadow-md;
+  }
 }
