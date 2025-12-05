@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { COURT_HOURS, getTodayDate, getTomorrowDate, formatDateFull } from '@/lib/constants'
 import TimeSlot from './TimeSlot'
+import ConfirmationModal from './ConfirmationModal'
 import type { Reservation, SlotStatus, User, MaintenanceSlot } from '@/types/database.types'
 
 interface ReservationGridProps {
@@ -23,10 +24,25 @@ export default function ReservationGrid({
   const [reservations, setReservations] = useState(initialReservations)
   const [maintenance, setMaintenance] = useState(initialMaintenance)
   const [loading, setLoading] = useState(false)
+  const [isModalOpen, setIsModalOpen] = useState(false)
+  const [selectedHour, setSelectedHour] = useState<number | null>(null)
+  const [lockCode, setLockCode] = useState<string>('')
 
   const supabase = createClient()
   const today = getTodayDate()
   const tomorrow = getTomorrowDate()
+
+  // Fetch lock code on component mount
+  useEffect(() => {
+    async function fetchLockCode() {
+      const response = await fetch('/api/lock-code')
+      if (response.ok) {
+        const data = await response.json()
+        setLockCode(data.lock_code)
+      }
+    }
+    fetchLockCode()
+  }, [])
 
   // Real-time subscription
   useEffect(() => {
@@ -123,24 +139,37 @@ export default function ReservationGrid({
     return { status: 'available' }
   }
 
-  async function handleSlotClick(hour: number) {
-    // TODO: Show confirmation modal
-    // For now, directly create reservation
+  function handleSlotClick(hour: number) {
+    setSelectedHour(hour)
+    setIsModalOpen(true)
+  }
+
+  async function handleConfirmReservation() {
+    if (selectedHour === null) return
+
     const response = await fetch('/api/reservations', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ date: selectedDate, hour }),
+      body: JSON.stringify({ date: selectedDate, hour: selectedHour }),
     })
 
     const data = await response.json()
 
     if (!response.ok) {
       alert(data.error || 'Error al crear reserva')
+      setIsModalOpen(false)
       return
     }
 
-    // Optimistically update UI
+    // Close modal and show success
+    setIsModalOpen(false)
+    setSelectedHour(null)
     alert('¡Reserva confirmada!')
+  }
+
+  function handleCloseModal() {
+    setIsModalOpen(false)
+    setSelectedHour(null)
   }
 
   return (
@@ -202,6 +231,20 @@ export default function ReservationGrid({
             )
           })}
         </div>
+      )}
+
+      {/* Confirmation Modal */}
+      {selectedHour !== null && (
+        <ConfirmationModal
+          isOpen={isModalOpen}
+          onClose={handleCloseModal}
+          onConfirm={handleConfirmReservation}
+          date={selectedDate}
+          hour={selectedHour}
+          credits={user.credits}
+          isVip={user.is_vip}
+          lockCode={lockCode}
+        />
       )}
     </div>
   )
