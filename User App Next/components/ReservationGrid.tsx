@@ -253,22 +253,23 @@ export default function ReservationGrid({
     if (selectedHours.length === 0) return
 
     try {
-      // Create reservations for all selected hours with their dates
-      const promises = selectedHours.map((slot) =>
-        fetch('/api/reservations', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ date: slot.date, hour: slot.hour }),
-        })
-      )
+      // Create all reservations in a single batch request
+      const response = await fetch('/api/reservations/batch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          reservations: selectedHours.map(slot => ({
+            date: slot.date,
+            hour: slot.hour
+          }))
+        }),
+      })
 
-      const responses = await Promise.all(promises)
-      const results = await Promise.all(responses.map((r) => r.json()))
+      const result = await response.json()
 
-      // Check if any failed
-      const errors = results.filter((r) => r.error)
-      if (errors.length > 0) {
-        alert(errors[0].error || 'Error al crear reserva')
+      // Check if failed
+      if (result.error) {
+        alert(result.error || 'Error al crear reserva')
         setIsModalOpen(false)
         setSelectedHours([])
         return
@@ -299,8 +300,8 @@ export default function ReservationGrid({
 
       await Promise.all(emailPromises)
 
-      // Calculate credits used
-      const creditsUsed = user.is_vip ? 0 : selectedHours.length
+      // Use credits used from API response
+      const creditsUsed = result.credits_used || 0
 
       // Close confirmation modal and show success modal
       setIsModalOpen(false)
@@ -312,6 +313,7 @@ export default function ReservationGrid({
       setShowSuccessModal(true)
       setSelectedHours([])
     } catch (error) {
+      console.error('Reservation error:', error)
       alert('Error al crear reserva')
       setIsModalOpen(false)
       setSelectedHours([])

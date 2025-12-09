@@ -119,8 +119,9 @@ export async function POST(request: NextRequest) {
     .single() as { data: { new_credits: number; success: boolean } | null; error: any }
 
   if (creditError || !creditResult) {
+    console.error('Credit deduction error:', creditError)
     return NextResponse.json(
-      { error: 'Error al procesar créditos' },
+      { error: `Error al procesar créditos: ${creditError?.message || 'Función no encontrada'}` },
       { status: 500 }
     )
   }
