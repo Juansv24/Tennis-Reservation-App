@@ -243,10 +243,36 @@ export default function ReservationGrid({
         return
       }
 
+      // Group hours by date for sending emails
+      const hoursByDate = selectedHours.reduce((acc, slot) => {
+        if (!acc[slot.date]) {
+          acc[slot.date] = []
+        }
+        acc[slot.date].push(slot.hour)
+        return acc
+      }, {} as Record<string, number[]>)
+
+      // Send confirmation email for each date
+      const emailPromises = Object.entries(hoursByDate).map(([date, hours]) =>
+        fetch('/api/send-confirmation', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            date,
+            hours,
+            userName: user.full_name,
+            userEmail: user.email,
+            lockCode: lockCode,
+          }),
+        })
+      )
+
+      await Promise.all(emailPromises)
+
       // Close modal and show success
       setIsModalOpen(false)
       setSelectedHours([])
-      alert('¡Reserva confirmada!')
+      alert('¡Reserva confirmada! Revisa tu correo para más detalles.')
     } catch (error) {
       alert('Error al crear reserva')
       setIsModalOpen(false)
