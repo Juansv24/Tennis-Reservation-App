@@ -325,6 +325,27 @@ export default function ReservationGrid({
     setIsModalOpen(false)
   }
 
+  // Calculate available slots for each day
+  function getAvailableSlotsCount(date: string, reservationsList: Reservation[], maintenanceList: MaintenanceSlot[]) {
+    const now = new Date()
+    const currentHour = now.getHours()
+    const slotDate = new Date(date + 'T00:00:00')
+    const isToday = slotDate.toDateString() === now.toDateString()
+
+    return COURT_HOURS.filter(hour => {
+      // Check if past
+      if (isToday && hour < currentHour) return false
+
+      // Check if in maintenance
+      if (maintenanceList.some(m => m.hour === hour)) return false
+
+      // Check if reserved
+      if (reservationsList.some(r => r.hour === hour)) return false
+
+      return true
+    }).length
+  }
+
   return (
     <div className="space-y-6">
       {/* Desktop: Two Column Layout - Side by Side */}
@@ -400,21 +421,24 @@ export default function ReservationGrid({
             <div>
               <button
                 onClick={() => setExpandedDay(expandedDay === 'today' ? null : 'today')}
-                className="w-full bg-us-open-light-blue text-white py-6 px-4 rounded-xl font-bold text-lg hover:bg-us-open-blue transition-colors shadow-lg"
+                className="w-full bg-us-open-light-blue text-white py-6 px-6 rounded-xl font-bold hover:bg-us-open-blue transition-all duration-300 shadow-lg"
               >
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="text-xl">{formatDateShort(today)}</div>
-                    <div className="text-sm font-normal mt-1">HOY</div>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex-1 text-center">
+                    <div className="text-2xl font-bold capitalize">{formatDateFull(today)}</div>
+                    <div className="text-sm font-normal mt-1 opacity-90">HOY</div>
                   </div>
-                  <span className="text-2xl font-light">
+                  <span className="text-2xl font-light ml-4">
                     {expandedDay === 'today' ? '−' : '+'}
                   </span>
+                </div>
+                <div className="text-center text-sm font-normal opacity-80">
+                  {getAvailableSlotsCount(today, todayReservations, todayMaintenance)} slots disponibles
                 </div>
               </button>
 
               {expandedDay === 'today' && (
-                <div className="mt-4 space-y-3">
+                <div className="mt-4 space-y-3 animate-in slide-in-from-top-2 duration-300">
                   {COURT_HOURS.map((hour) => {
                     const { status, ownerName } = getSlotStatus(hour, today, todayReservations, todayMaintenance)
                     return (
@@ -435,21 +459,24 @@ export default function ReservationGrid({
             <div>
               <button
                 onClick={() => setExpandedDay(expandedDay === 'tomorrow' ? null : 'tomorrow')}
-                className="w-full bg-us-open-light-blue text-white py-6 px-4 rounded-xl font-bold text-lg hover:bg-us-open-blue transition-colors shadow-lg"
+                className="w-full bg-us-open-light-blue text-white py-6 px-6 rounded-xl font-bold hover:bg-us-open-blue transition-all duration-300 shadow-lg"
               >
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="text-xl">{formatDateShort(tomorrow)}</div>
-                    <div className="text-sm font-normal mt-1">MAÑANA</div>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex-1 text-center">
+                    <div className="text-2xl font-bold capitalize">{formatDateFull(tomorrow)}</div>
+                    <div className="text-sm font-normal mt-1 opacity-90">MAÑANA</div>
                   </div>
-                  <span className="text-2xl font-light">
+                  <span className="text-2xl font-light ml-4">
                     {expandedDay === 'tomorrow' ? '−' : '+'}
                   </span>
+                </div>
+                <div className="text-center text-sm font-normal opacity-80">
+                  {getAvailableSlotsCount(tomorrow, tomorrowReservations, tomorrowMaintenance)} slots disponibles
                 </div>
               </button>
 
               {expandedDay === 'tomorrow' && (
-                <div className="mt-4 space-y-3">
+                <div className="mt-4 space-y-3 animate-in slide-in-from-top-2 duration-300">
                   {COURT_HOURS.map((hour) => {
                     const { status, ownerName } = getSlotStatus(hour, tomorrow, tomorrowReservations, tomorrowMaintenance)
                     return (
