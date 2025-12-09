@@ -352,11 +352,11 @@ export default function ReservationGrid({
       <div className="hidden lg:block">
         {/* Big Blue Date Buttons - Desktop (non-clickable, just visual) */}
         <div className="grid grid-cols-2 gap-4 mb-6">
-          <div className="bg-us-open-light-blue text-white py-6 px-4 rounded-xl font-bold text-lg shadow-lg">
+          <div className="bg-us-open-light-blue text-white py-6 px-4 rounded-xl font-bold text-lg shadow-lg text-center">
             <div className="text-xl">{formatDateShort(today)}</div>
             <div className="text-sm font-normal mt-1">HOY</div>
           </div>
-          <div className="bg-us-open-light-blue text-white py-6 px-4 rounded-xl font-bold text-lg shadow-lg">
+          <div className="bg-us-open-light-blue text-white py-6 px-4 rounded-xl font-bold text-lg shadow-lg text-center">
             <div className="text-xl">{formatDateShort(tomorrow)}</div>
             <div className="text-sm font-normal mt-1">MAÑANA</div>
           </div>
@@ -368,9 +368,6 @@ export default function ReservationGrid({
           <div className="grid grid-cols-2 gap-8">
             {/* Today Column */}
             <div>
-              <h3 className="text-lg font-bold text-us-open-blue mb-4 text-center">
-                HOY - {formatDateFull(today)}
-              </h3>
               <div className="space-y-3">
                 {COURT_HOURS.map((hour) => {
                   const { status, ownerName } = getSlotStatus(hour, today, todayReservations, todayMaintenance)
@@ -389,9 +386,6 @@ export default function ReservationGrid({
 
             {/* Tomorrow Column */}
             <div>
-              <h3 className="text-lg font-bold text-us-open-blue mb-4 text-center">
-                MAÑANA - {formatDateFull(tomorrow)}
-              </h3>
               <div className="space-y-3">
                 {COURT_HOURS.map((hour) => {
                   const { status, ownerName } = getSlotStatus(hour, tomorrow, tomorrowReservations, tomorrowMaintenance)
@@ -421,36 +415,67 @@ export default function ReservationGrid({
             <div>
               <button
                 onClick={() => setExpandedDay(expandedDay === 'today' ? null : 'today')}
-                className="w-full bg-us-open-light-blue text-white py-6 px-6 rounded-xl font-bold hover:bg-us-open-blue transition-all duration-300 shadow-lg"
+                className="w-full bg-us-open-light-blue text-white py-6 px-6 rounded-xl font-bold hover:bg-us-open-blue transition-all duration-300 shadow-lg text-center"
               >
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex-1 text-center">
-                    <div className="text-2xl font-bold capitalize">{formatDateFull(today)}</div>
-                    <div className="text-sm font-normal mt-1 opacity-90">HOY</div>
-                  </div>
-                  <span className="text-2xl font-light ml-4">
-                    {expandedDay === 'today' ? '−' : '+'}
-                  </span>
-                </div>
-                <div className="text-center text-sm font-normal opacity-80">
-                  {getAvailableSlotsCount(today, todayReservations, todayMaintenance)} slots disponibles
+                <div className="text-xl">{formatDateShort(today)}</div>
+                <div className="text-sm font-normal mt-1 opacity-90">HOY</div>
+                <div className="text-sm font-normal mt-2 opacity-80">
+                  {getAvailableSlotsCount(today, todayReservations, todayMaintenance)} turnos disponibles
                 </div>
               </button>
 
               {expandedDay === 'today' && (
-                <div className="mt-4 space-y-3 animate-in slide-in-from-top-2 duration-300">
-                  {COURT_HOURS.map((hour) => {
-                    const { status, ownerName } = getSlotStatus(hour, today, todayReservations, todayMaintenance)
-                    return (
-                      <TimeSlot
-                        key={`today-${hour}`}
-                        hour={hour}
-                        status={status}
-                        ownerName={ownerName}
-                        onClick={() => handleSlotClick(hour, today)}
-                      />
-                    )
-                  })}
+                <div className="mt-4 animate-in slide-in-from-top-2 duration-300">
+                  <div className="grid grid-cols-2 gap-3">
+                    {(() => {
+                      const now = new Date()
+                      const currentHour = now.getHours()
+                      const slotDate = new Date(today + 'T00:00:00')
+                      const isToday = slotDate.toDateString() === now.toDateString()
+
+                      const availableHours = COURT_HOURS.filter(hour => {
+                        if (isToday && hour < currentHour) return false
+                        return true
+                      })
+
+                      const midpoint = Math.ceil(availableHours.length / 2)
+                      const firstColumn = availableHours.slice(0, midpoint)
+                      const secondColumn = availableHours.slice(midpoint)
+
+                      return (
+                        <>
+                          <div className="space-y-3">
+                            {firstColumn.map((hour) => {
+                              const { status, ownerName } = getSlotStatus(hour, today, todayReservations, todayMaintenance)
+                              return (
+                                <TimeSlot
+                                  key={`today-${hour}`}
+                                  hour={hour}
+                                  status={status}
+                                  ownerName={ownerName}
+                                  onClick={() => handleSlotClick(hour, today)}
+                                />
+                              )
+                            })}
+                          </div>
+                          <div className="space-y-3">
+                            {secondColumn.map((hour) => {
+                              const { status, ownerName } = getSlotStatus(hour, today, todayReservations, todayMaintenance)
+                              return (
+                                <TimeSlot
+                                  key={`today-${hour}`}
+                                  hour={hour}
+                                  status={status}
+                                  ownerName={ownerName}
+                                  onClick={() => handleSlotClick(hour, today)}
+                                />
+                              )
+                            })}
+                          </div>
+                        </>
+                      )
+                    })()}
+                  </div>
                 </div>
               )}
             </div>
@@ -459,36 +484,57 @@ export default function ReservationGrid({
             <div>
               <button
                 onClick={() => setExpandedDay(expandedDay === 'tomorrow' ? null : 'tomorrow')}
-                className="w-full bg-us-open-light-blue text-white py-6 px-6 rounded-xl font-bold hover:bg-us-open-blue transition-all duration-300 shadow-lg"
+                className="w-full bg-us-open-light-blue text-white py-6 px-6 rounded-xl font-bold hover:bg-us-open-blue transition-all duration-300 shadow-lg text-center"
               >
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex-1 text-center">
-                    <div className="text-2xl font-bold capitalize">{formatDateFull(tomorrow)}</div>
-                    <div className="text-sm font-normal mt-1 opacity-90">MAÑANA</div>
-                  </div>
-                  <span className="text-2xl font-light ml-4">
-                    {expandedDay === 'tomorrow' ? '−' : '+'}
-                  </span>
-                </div>
-                <div className="text-center text-sm font-normal opacity-80">
-                  {getAvailableSlotsCount(tomorrow, tomorrowReservations, tomorrowMaintenance)} slots disponibles
+                <div className="text-xl">{formatDateShort(tomorrow)}</div>
+                <div className="text-sm font-normal mt-1 opacity-90">MAÑANA</div>
+                <div className="text-sm font-normal mt-2 opacity-80">
+                  {getAvailableSlotsCount(tomorrow, tomorrowReservations, tomorrowMaintenance)} turnos disponibles
                 </div>
               </button>
 
               {expandedDay === 'tomorrow' && (
-                <div className="mt-4 space-y-3 animate-in slide-in-from-top-2 duration-300">
-                  {COURT_HOURS.map((hour) => {
-                    const { status, ownerName } = getSlotStatus(hour, tomorrow, tomorrowReservations, tomorrowMaintenance)
-                    return (
-                      <TimeSlot
-                        key={`tomorrow-${hour}`}
-                        hour={hour}
-                        status={status}
-                        ownerName={ownerName}
-                        onClick={() => handleSlotClick(hour, tomorrow)}
-                      />
-                    )
-                  })}
+                <div className="mt-4 animate-in slide-in-from-top-2 duration-300">
+                  <div className="grid grid-cols-2 gap-3">
+                    {(() => {
+                      const midpoint = Math.ceil(COURT_HOURS.length / 2)
+                      const firstColumn = COURT_HOURS.slice(0, midpoint)
+                      const secondColumn = COURT_HOURS.slice(midpoint)
+
+                      return (
+                        <>
+                          <div className="space-y-3">
+                            {firstColumn.map((hour) => {
+                              const { status, ownerName } = getSlotStatus(hour, tomorrow, tomorrowReservations, tomorrowMaintenance)
+                              return (
+                                <TimeSlot
+                                  key={`tomorrow-${hour}`}
+                                  hour={hour}
+                                  status={status}
+                                  ownerName={ownerName}
+                                  onClick={() => handleSlotClick(hour, tomorrow)}
+                                />
+                              )
+                            })}
+                          </div>
+                          <div className="space-y-3">
+                            {secondColumn.map((hour) => {
+                              const { status, ownerName } = getSlotStatus(hour, tomorrow, tomorrowReservations, tomorrowMaintenance)
+                              return (
+                                <TimeSlot
+                                  key={`tomorrow-${hour}`}
+                                  hour={hour}
+                                  status={status}
+                                  ownerName={ownerName}
+                                  onClick={() => handleSlotClick(hour, tomorrow)}
+                                />
+                              )
+                            })}
+                          </div>
+                        </>
+                      )
+                    })()}
+                  </div>
                 </div>
               )}
             </div>
