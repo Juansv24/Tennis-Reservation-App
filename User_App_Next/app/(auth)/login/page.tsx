@@ -62,12 +62,6 @@ export default function LoginPage() {
 
         {/* Login Form */}
         <div className="bg-white py-12 px-8 rounded-b-lg shadow-lg flex-1 flex flex-col justify-center">
-          <div className="text-center mb-8">
-            <h2 className="text-2xl font-bold text-gray-800 inline-block border-b-4 border-us-open-yellow pb-1">
-              ¡Bienvenido de Vuelta!
-            </h2>
-          </div>
-
           <form onSubmit={handleLogin} className="space-y-6">
             <div>
               <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">

@@ -2,7 +2,6 @@ import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import Header from '@/components/Header'
 import WelcomeBanner from '@/components/WelcomeBanner'
-import UserDetailsBox from '@/components/UserDetailsBox'
 import CollapsibleSections from '@/components/CollapsibleSections'
 import { getTodayDate, getTomorrowDate } from '@/lib/constants'
 
@@ -62,7 +61,6 @@ export default async function DashboardLayout({
       <main className="max-w-7xl mx-auto px-4 py-8">
         <div className="space-y-6">
           <WelcomeBanner user={profile} />
-          <UserDetailsBox user={profile} />
           <CollapsibleSections user={profile} />
           {children}
         </div>

@@ -23,14 +23,19 @@ export default function Header({ user, lockCode, hasReservations }: HeaderProps)
   return (
     <header className="bg-gradient-to-r from-us-open-blue to-us-open-light-blue text-white shadow-lg">
       <div className="max-w-7xl mx-auto px-4 py-6">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-3">
-            <span className="text-4xl">🎾</span>
-            <div>
-              <h1 className="text-3xl font-bold">Sistema de Reservas Cancha de Tenis</h1>
-              <p className="text-lg opacity-90">{process.env.NEXT_PUBLIC_COURT_NAME}</p>
+        <div className="flex items-start justify-between">
+          {/* Left section: Name and Credits */}
+          <div>
+            <h1 className="text-3xl font-bold">
+              {user.full_name} {user.is_vip && '⭐'}
+            </h1>
+            <div className="flex items-center gap-2 mt-1">
+              <span className="text-xl">🪙</span>
+              <p className="text-lg opacity-90">Créditos disponibles: {user.credits}</p>
             </div>
           </div>
+
+          {/* Right section: Salir button and Lock code */}
           <div className="flex flex-col items-end gap-2">
             <button
               onClick={handleLogout}
@@ -39,8 +44,8 @@ export default function Header({ user, lockCode, hasReservations }: HeaderProps)
               Salir
             </button>
             {hasReservations && lockCode && (
-              <div className="text-white text-right">
-                <p className="text-xs opacity-75 tracking-wide">Código de Candado</p>
+              <div className="flex items-center gap-2 text-white">
+                <p className="text-base opacity-90">Código de candado:</p>
                 <p className="text-2xl font-light tracking-widest">{lockCode}</p>
               </div>
             )}
