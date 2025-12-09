@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
+import { getColombiaHour } from '@/lib/timezone'
 
 // POST /api/reservations/batch
 export async function POST(request: NextRequest) {
@@ -49,8 +50,8 @@ export async function POST(request: NextRequest) {
     )
   }
 
-  // Check time-based reservation restrictions
-  const currentHour = new Date().getHours()
+  // Check time-based reservation restrictions (Colombian timezone)
+  const currentHour = getColombiaHour()
   const maxHour = profile.is_vip ? 20 : 16 // VIP: 8 PM, Regular: 4 PM (last hour to make reservation)
 
   if (currentHour < 8) {

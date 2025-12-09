@@ -30,6 +30,10 @@ export default function ConfirmationModal({
     ? `${hours[0]}:00 - ${hours[0] + 1}:00`
     : `${Math.min(...hours)}:00 - ${Math.max(...hours) + 1}:00`
 
+  // Capitalize only first letter of date
+  const formattedDate = formatDateFull(date)
+  const dateWithFirstCapital = formattedDate.charAt(0).toUpperCase() + formattedDate.slice(1).toLowerCase()
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 transition-opacity duration-300 ease-in-out"
@@ -51,8 +55,8 @@ export default function ConfirmationModal({
             <p className="text-sm text-gray-600 uppercase tracking-wide mb-1">
               Fecha
             </p>
-            <p className="text-lg font-semibold text-gray-900 capitalize">
-              {formatDateFull(date)}
+            <p className="text-lg font-semibold text-gray-900">
+              {dateWithFirstCapital}
             </p>
           </div>
 

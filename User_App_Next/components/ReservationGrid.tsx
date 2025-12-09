@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { COURT_HOURS, getTodayDate, getTomorrowDate, formatDateFull, formatDateShort } from '@/lib/constants'
+import { canMakeReservationNow, getColombiaTime, getColombiaHour } from '@/lib/timezone'
 import TimeSlot from './TimeSlot'
 import ConfirmationModal from './ConfirmationModal'
 import SuccessModal from './SuccessModal'
@@ -33,10 +34,19 @@ export default function ReservationGrid({
   const [showSuccessModal, setShowSuccessModal] = useState(false)
   const [successData, setSuccessData] = useState<{date: string, hours: number[], creditsUsed: number} | null>(null)
   const [expandedDay, setExpandedDay] = useState<'today' | 'tomorrow' | null>(null) // For mobile accordion
+  const [canReserve, setCanReserve] = useState(true)
+  const [reservationError, setReservationError] = useState<string>('')
 
   const supabase = createClient()
   const today = getTodayDate()
   const tomorrow = getTomorrowDate()
+
+  // Check if user can make reservations based on current time
+  useEffect(() => {
+    const [allowed, errorMsg] = canMakeReservationNow(user.is_vip)
+    setCanReserve(allowed)
+    setReservationError(errorMsg)
+  }, [user.is_vip])
 
   // Fetch both days' data on mount
   useEffect(() => {
@@ -146,12 +156,12 @@ export default function ReservationGrid({
       return { status: 'maintenance' }
     }
 
-    // Check if past
-    const now = new Date()
+    // Check if past (using Colombian timezone)
+    const colombiaTime = getColombiaTime()
     const slotDate = new Date(date + 'T00:00:00')
-    const currentHour = now.getHours()
+    const currentHour = getColombiaHour()
 
-    if (slotDate.toDateString() === now.toDateString() && hour < currentHour) {
+    if (slotDate.toDateString() === colombiaTime.toDateString() && hour < currentHour) {
       return { status: 'past' }
     }
 
@@ -171,6 +181,12 @@ export default function ReservationGrid({
   }
 
   function handleSlotClick(hour: number, date: string) {
+    // Check if user is allowed to make reservations at this time
+    if (!canReserve) {
+      alert(reservationError)
+      return
+    }
+
     const reservationsList = date === today ? todayReservations : tomorrowReservations
     const maintenanceList = date === today ? todayMaintenance : tomorrowMaintenance
     const { status } = getSlotStatus(hour, date, reservationsList, maintenanceList)
@@ -325,12 +341,12 @@ export default function ReservationGrid({
     setIsModalOpen(false)
   }
 
-  // Calculate available slots for each day
+  // Calculate available slots for each day (using Colombian timezone)
   function getAvailableSlotsCount(date: string, reservationsList: Reservation[], maintenanceList: MaintenanceSlot[]) {
-    const now = new Date()
-    const currentHour = now.getHours()
+    const colombiaTime = getColombiaTime()
+    const currentHour = getColombiaHour()
     const slotDate = new Date(date + 'T00:00:00')
-    const isToday = slotDate.toDateString() === now.toDateString()
+    const isToday = slotDate.toDateString() === colombiaTime.toDateString()
 
     return COURT_HOURS.filter(hour => {
       // Check if past
@@ -348,6 +364,22 @@ export default function ReservationGrid({
 
   return (
     <div className="space-y-6">
+      {/* View-Only Mode Warning Banner */}
+      {!canReserve && (
+        <div className="bg-red-50 border-2 border-red-200 rounded-lg p-4 mb-6">
+          <div className="flex items-center gap-3">
+            <span className="text-3xl">⏰</span>
+            <div>
+              <h3 className="font-bold text-red-800 text-lg">Modo Solo Lectura</h3>
+              <p className="text-red-700">{reservationError}</p>
+              <p className="text-red-600 text-sm mt-1">
+                Puedes ver las reservas existentes pero no puedes hacer nuevas reservas en este momento.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Desktop: Two Column Layout - Side by Side */}
       <div className="hidden lg:block">
         {/* Big Blue Date Buttons - Desktop (non-clickable, just visual) */}
@@ -428,10 +460,10 @@ export default function ReservationGrid({
                 <div className="mt-4 animate-in slide-in-from-top-2 duration-300">
                   <div className="grid grid-cols-2 gap-3">
                     {(() => {
-                      const now = new Date()
-                      const currentHour = now.getHours()
+                      const colombiaTime = getColombiaTime()
+                      const currentHour = getColombiaHour()
                       const slotDate = new Date(today + 'T00:00:00')
-                      const isToday = slotDate.toDateString() === now.toDateString()
+                      const isToday = slotDate.toDateString() === colombiaTime.toDateString()
 
                       const availableHours = COURT_HOURS.filter(hour => {
                         if (isToday && hour < currentHour) return false
@@ -542,8 +574,8 @@ export default function ReservationGrid({
         )}
       </div>
 
-      {/* Continue Button - Only show when hours are selected */}
-      {selectedHours.length > 0 && (
+      {/* Continue Button - Only show when hours are selected and user can make reservations */}
+      {canReserve && selectedHours.length > 0 && (
         <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 z-40">
           <button
             onClick={handleOpenModal}

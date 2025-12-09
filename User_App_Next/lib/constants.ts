@@ -1,3 +1,5 @@
+import { getColombiaToday, getColombiaTomorrow } from './timezone'
+
 // US Open Color Theme
 export const COLORS = {
   usOpenBlue: '#001854',
@@ -16,16 +18,14 @@ export function formatHour(hour: number): string {
   return `${hour.toString().padStart(2, '0')}:00`
 }
 
-// Get today's date in YYYY-MM-DD format
+// Get today's date in YYYY-MM-DD format (Colombian timezone)
 export function getTodayDate(): string {
-  return new Date().toISOString().split('T')[0]
+  return getColombiaToday()
 }
 
-// Get tomorrow's date in YYYY-MM-DD format
+// Get tomorrow's date in YYYY-MM-DD format (Colombian timezone)
 export function getTomorrowDate(): string {
-  const tomorrow = new Date()
-  tomorrow.setDate(tomorrow.getDate() + 1)
-  return tomorrow.toISOString().split('T')[0]
+  return getColombiaTomorrow()
 }
 
 // Format date for display (e.g., "Viernes, 7 de Diciembre")

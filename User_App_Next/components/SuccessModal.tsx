@@ -28,7 +28,9 @@ export default function SuccessModal({
                     'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
   const dayName = daysEs[dateObj.getDay()]
   const monthName = monthsEs[dateObj.getMonth()]
-  const formattedDate = `${dayName}, ${dateObj.getDate()} de ${monthName} de ${dateObj.getFullYear()}`
+  const dateStr = `${dayName}, ${dateObj.getDate()} de ${monthName} de ${dateObj.getFullYear()}`
+  // Capitalize only first letter
+  const formattedDate = dateStr.charAt(0).toUpperCase() + dateStr.slice(1).toLowerCase()
 
   // Format times
   const sortedHours = [...hours].sort((a, b) => a - b)
@@ -39,7 +41,7 @@ export default function SuccessModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
       <div className="bg-white rounded-lg shadow-2xl w-full max-w-md transform transition-all">
         {/* Success Header */}
-        <div className="bg-gradient-to-br from-green-50 to-green-100 border-2 border-green-500 rounded-t-lg p-6">
+        <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-t-lg p-6">
           <div className="flex items-center gap-3 mb-2">
             <span className="text-4xl">✅</span>
             <h2 className="text-2xl font-bold text-green-800">¡Reserva Confirmada!</h2>
@@ -58,7 +60,7 @@ export default function SuccessModal({
 
           <div className="flex justify-between items-center border-b border-gray-200 pb-2">
             <span className="text-gray-600 font-medium">Fecha:</span>
-            <span className="text-gray-900 font-semibold capitalize text-right">{formattedDate}</span>
+            <span className="text-gray-900 font-semibold text-right">{formattedDate}</span>
           </div>
 
           <div className="flex justify-between items-center border-b border-gray-200 pb-2">

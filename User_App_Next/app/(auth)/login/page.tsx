@@ -49,26 +49,26 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
-      <div className="w-full max-w-md">
+    <div className="min-h-screen bg-gradient-to-br from-us-open-blue to-us-open-light-blue flex items-center justify-center p-4">
+      <div className="w-full max-w-lg min-h-[85vh] flex flex-col">
         {/* Header with Gradient */}
-        <div className="bg-gradient-to-r from-us-open-blue to-us-open-light-blue text-white p-8 rounded-t-lg shadow-lg text-center">
-          <div className="flex items-center justify-center gap-3 mb-2">
+        <div className="bg-gradient-to-r from-us-open-blue to-us-open-light-blue text-white py-12 px-8 rounded-t-lg shadow-lg text-center">
+          <div className="flex items-center justify-center gap-3 mb-3">
             <span className="text-5xl">🎾</span>
-            <h1 className="text-3xl font-bold">Reservas de Cancha</h1>
+            <h1 className="text-3xl font-bold">Sistema de Reservas Cancha de Tenis</h1>
           </div>
           <p className="text-lg opacity-90">{process.env.NEXT_PUBLIC_COURT_NAME}</p>
         </div>
 
         {/* Login Form */}
-        <div className="bg-white p-8 rounded-b-lg shadow-lg">
-          <div className="text-center mb-6">
+        <div className="bg-white py-12 px-8 rounded-b-lg shadow-lg flex-1 flex flex-col justify-center">
+          <div className="text-center mb-8">
             <h2 className="text-2xl font-bold text-gray-800 inline-block border-b-4 border-us-open-yellow pb-1">
               ¡Bienvenido de Vuelta!
             </h2>
           </div>
 
-          <form onSubmit={handleLogin} className="space-y-4">
+          <form onSubmit={handleLogin} className="space-y-6">
             <div>
               <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
                 Email
@@ -114,7 +114,7 @@ export default function LoginPage() {
             </button>
           </form>
 
-          <div className="mt-6 text-center space-y-2">
+          <div className="mt-8 text-center space-y-3">
             <Link
               href="/register"
               className="block text-us-open-light-blue hover:underline font-medium"

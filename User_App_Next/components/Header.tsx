@@ -27,7 +27,7 @@ export default function Header({ user, lockCode, hasReservations }: HeaderProps)
           <div className="flex items-center gap-3">
             <span className="text-4xl">🎾</span>
             <div>
-              <h1 className="text-3xl font-bold">Reservas de Cancha de Tenis</h1>
+              <h1 className="text-3xl font-bold">Sistema de Reservas Cancha de Tenis</h1>
               <p className="text-lg opacity-90">{process.env.NEXT_PUBLIC_COURT_NAME}</p>
             </div>
           </div>
