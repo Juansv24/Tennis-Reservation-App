@@ -74,14 +74,6 @@ export async function POST(request: NextRequest) {
     )
   }
 
-  // Check credits (unless VIP)
-  if (!profile.is_vip && profile.credits < 1) {
-    return NextResponse.json(
-      { error: 'Sin créditos suficientes' },
-      { status: 400 }
-    )
-  }
-
   // Get today and tomorrow dates for validation
   const today = new Date().toISOString().split('T')[0]
   const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0]
@@ -121,6 +113,25 @@ export async function POST(request: NextRequest) {
     )
   }
 
+  // Atomically deduct credit BEFORE creating reservation (prevents race condition)
+  const { data: creditResult, error: creditError } = await supabase
+    .rpc('deduct_user_credit', { user_id_param: user.id })
+    .single() as { data: { new_credits: number; success: boolean } | null; error: any }
+
+  if (creditError || !creditResult) {
+    return NextResponse.json(
+      { error: 'Error al procesar créditos' },
+      { status: 500 }
+    )
+  }
+
+  if (!creditResult.success) {
+    return NextResponse.json(
+      { error: 'Sin créditos suficientes' },
+      { status: 400 }
+    )
+  }
+
   // Create reservation
   const { data: reservation, error: reservationError } = await supabase
     .from('reservations')
@@ -134,6 +145,13 @@ export async function POST(request: NextRequest) {
 
   // Handle unique constraint violation (slot already taken)
   if (reservationError?.code === '23505') {
+    // Rollback: refund the credit we just deducted
+    if (!profile.is_vip) {
+      await supabase
+        .from('users')
+        .update({ credits: creditResult.new_credits + 1 })
+        .eq('id', user.id)
+    }
     return NextResponse.json(
       { error: 'Slot ya reservado' },
       { status: 409 }
@@ -141,23 +159,22 @@ export async function POST(request: NextRequest) {
   }
 
   if (reservationError) {
+    // Rollback: refund the credit we just deducted
+    if (!profile.is_vip) {
+      await supabase
+        .from('users')
+        .update({ credits: creditResult.new_credits + 1 })
+        .eq('id', user.id)
+    }
     return NextResponse.json(
       { error: reservationError.message },
       { status: 500 }
     )
   }
 
-  // Deduct credit (unless VIP)
-  if (!profile.is_vip) {
-    await supabase
-      .from('users')
-      .update({ credits: profile.credits - 1 })
-      .eq('id', user.id)
-  }
-
   return NextResponse.json({
     success: true,
     reservation,
-    new_credits: profile.is_vip ? profile.credits : profile.credits - 1,
+    new_credits: creditResult.new_credits,
   })
 }
