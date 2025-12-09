@@ -32,11 +32,12 @@ export default function CollapsibleSections() {
         {rulesOpen && (
           <div className="p-4 pt-0 text-gray-700">
             <ul className="space-y-2">
-              <li>• Horario: 6:00 AM - 9:00 PM</li>
-              <li>• Máximo 2 horas consecutivas por reserva</li>
-              <li>• Cada reserva cuesta 1 crédito por hora</li>
-              <li>• Usuarios VIP tienen créditos ilimitados</li>
-              <li>• Código del candado se muestra al confirmar</li>
+              <li>• <strong>Solo se puede hacer reservar para hoy y para mañana</strong></li>
+              <li>• <strong>Máximo 2 horas</strong> por persona por día</li>
+              <li>• <strong>Horas consecutivas</strong> requeridas si se reservan 2 horas</li>
+              <li>• No se permite reservar la cancha en <strong>los mismos horarios dos días consecutivos</strong></li>
+              <li>• <strong>Horario de cancha:</strong> 6:00 AM - 9:00 PM</li>
+              <li>• ⏰ <strong>Importante:</strong> Solo puedes hacer reservas dentro del horario permitido</li>
             </ul>
           </div>
         )}
@@ -48,13 +49,52 @@ export default function CollapsibleSections() {
           onClick={() => setCreditsOpen(!creditsOpen)}
           className="w-full p-4 text-left flex items-center gap-2 hover:bg-gray-50"
         >
-          <span>🔥</span>
+          <span>💰</span>
           <span className="font-semibold text-gray-800">¿Cómo Adquirir Créditos?</span>
           <span className="ml-auto">{creditsOpen ? '▼' : '▶'}</span>
         </button>
         {creditsOpen && (
-          <div className="p-4 pt-0 text-gray-700">
-            <p>Contacta al administrador para adquirir más créditos.</p>
+          <div className="p-4 pt-0 text-gray-700 space-y-3">
+            <div>
+              <p className="font-semibold text-gray-900 mb-1">💳 Costo de Créditos:</p>
+              <ul className="space-y-1 ml-4">
+                <li>• Cada crédito = 1 hora de cancha</li>
+                <li>• Precio por crédito: <strong>$15.000 COP</strong></li>
+              </ul>
+            </div>
+
+            <div>
+              <p className="font-semibold text-gray-900 mb-1">📞 Contacto para Recargar:</p>
+              <p className="ml-4"><strong>Orlando</strong></p>
+              <p className="ml-4">
+                <strong>WhatsApp:</strong>{' '}
+                <a
+                  href="https://wa.me/573193368749"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-us-open-light-blue hover:underline"
+                >
+                  3193368749
+                </a>
+              </p>
+            </div>
+
+            <div>
+              <p className="font-semibold text-gray-900 mb-1">⏰ Horarios de Atención:</p>
+              <ul className="space-y-1 ml-4">
+                <li>• <strong>Lunes a Sábado:</strong> 9:00 AM - 11:00 AM</li>
+                <li>• <strong>Domingos y Festivos:</strong> 5:00 PM - 7:00 PM</li>
+              </ul>
+            </div>
+
+            <div>
+              <p className="font-semibold text-gray-900 mb-1">💡 Recomendaciones:</p>
+              <ul className="space-y-1 ml-4">
+                <li>• Planifica tu recarga con anticipación para evitar quedarte sin créditos</li>
+                <li>• Contacta únicamente en los horarios establecidos para una respuesta rápida</li>
+                <li>• Puedes recargar múltiples créditos en una sola transacción</li>
+              </ul>
+            </div>
           </div>
         )}
       </div>
