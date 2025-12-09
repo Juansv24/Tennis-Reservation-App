@@ -31,11 +31,13 @@ export default function CollapsibleSections({ user }: CollapsibleSectionsProps) 
       <div className="bg-white rounded-lg border border-gray-300">
         <button
           onClick={() => setRulesOpen(!rulesOpen)}
-          className="w-full p-4 text-left flex items-center gap-2 hover:bg-gray-50"
+          className="w-full p-4 text-left flex items-center gap-2 hover:bg-gray-50 transition-colors"
         >
           <span>📋</span>
           <span className="font-semibold text-gray-800">Reglas de Reserva</span>
-          <span className="ml-auto">{rulesOpen ? '▼' : '▶'}</span>
+          <span className="ml-auto text-gray-400 text-xl font-light">
+            {rulesOpen ? '−' : '+'}
+          </span>
         </button>
         {rulesOpen && (
           <div className="p-4 pt-0 text-gray-700">
@@ -56,11 +58,13 @@ export default function CollapsibleSections({ user }: CollapsibleSectionsProps) 
       <div className="bg-white rounded-lg border border-gray-300">
         <button
           onClick={() => setCreditsOpen(!creditsOpen)}
-          className="w-full p-4 text-left flex items-center gap-2 hover:bg-gray-50"
+          className="w-full p-4 text-left flex items-center gap-2 hover:bg-gray-50 transition-colors"
         >
           <span>💰</span>
           <span className="font-semibold text-gray-800">¿Cómo Adquirir Créditos?</span>
-          <span className="ml-auto">{creditsOpen ? '▼' : '▶'}</span>
+          <span className="ml-auto text-gray-400 text-xl font-light">
+            {creditsOpen ? '−' : '+'}
+          </span>
         </button>
         {creditsOpen && (
           <div className="p-4 pt-0 text-gray-700 space-y-3">
