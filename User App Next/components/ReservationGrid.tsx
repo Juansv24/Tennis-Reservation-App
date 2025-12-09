@@ -25,7 +25,6 @@ export default function ReservationGrid({
   const [loading, setLoading] = useState(false)
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [selectedHours, setSelectedHours] = useState<Array<{hour: number, date: string}>>([])
-  const [lockCode, setLockCode] = useState<string>('')
   const [todayReservations, setTodayReservations] = useState<Reservation[]>([])
   const [tomorrowReservations, setTomorrowReservations] = useState<Reservation[]>([])
   const [todayMaintenance, setTodayMaintenance] = useState<MaintenanceSlot[]>([])
@@ -34,18 +33,6 @@ export default function ReservationGrid({
   const supabase = createClient()
   const today = getTodayDate()
   const tomorrow = getTomorrowDate()
-
-  // Fetch lock code on component mount
-  useEffect(() => {
-    async function fetchLockCode() {
-      const response = await fetch('/api/lock-code')
-      if (response.ok) {
-        const data = await response.json()
-        setLockCode(data.lock_code)
-      }
-    }
-    fetchLockCode()
-  }, [])
 
   // Fetch both days' data on mount
   useEffect(() => {
@@ -262,7 +249,6 @@ export default function ReservationGrid({
             hours,
             userName: user.full_name,
             userEmail: user.email,
-            lockCode: lockCode,
           }),
         })
       )
@@ -372,7 +358,6 @@ export default function ReservationGrid({
         hours={selectedHours.map(s => s.hour)}
         credits={user.credits}
         isVip={user.is_vip}
-        lockCode={lockCode}
       />
     </div>
   )

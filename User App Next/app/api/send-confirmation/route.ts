@@ -12,12 +12,22 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'No autenticado' }, { status: 401 })
     }
 
-    const { date, hours, userName, userEmail, lockCode } = await request.json()
+    const { date, hours, userName, userEmail } = await request.json()
 
     // Validate inputs
     if (!date || !hours || !userName || !userEmail) {
       return NextResponse.json({ error: 'Faltan datos requeridos' }, { status: 400 })
     }
+
+    // Fetch lock code from database
+    const { data: lockCodeData } = await supabase
+      .from('lock_code')
+      .select('code')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single()
+
+    const lockCode = lockCodeData?.code || ''
 
     // Configure SMTP transporter
     const transporter = nodemailer.createTransport({

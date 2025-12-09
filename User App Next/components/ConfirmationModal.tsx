@@ -10,7 +10,6 @@ interface ConfirmationModalProps {
   hours: number[]
   credits: number
   isVip: boolean
-  lockCode: string
 }
 
 export default function ConfirmationModal({
@@ -21,7 +20,6 @@ export default function ConfirmationModal({
   hours,
   credits,
   isVip,
-  lockCode,
 }: ConfirmationModalProps) {
   if (!isOpen) return null
 
@@ -90,21 +88,13 @@ export default function ConfirmationModal({
           </div>
 
           {/* Remaining Balance */}
-          <div className="border-b border-gray-200 pb-3">
+          <div>
             <p className="text-sm text-gray-600 uppercase tracking-wide mb-1">
               Saldo Restante
             </p>
             <p className="text-lg font-semibold text-gray-900">
               {remainingCredits} crédito{remainingCredits !== 1 ? 's' : ''}
             </p>
-          </div>
-
-          {/* Lock Code */}
-          <div className="bg-gradient-to-r from-us-open-light-blue to-us-open-blue text-white rounded-lg p-4">
-            <p className="text-sm uppercase tracking-wide mb-2 opacity-90">
-              Código del Candado
-            </p>
-            <p className="text-3xl font-bold tracking-wider">{lockCode}</p>
           </div>
         </div>
 
