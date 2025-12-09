@@ -32,6 +32,7 @@ export default function ReservationGrid({
   const [tomorrowMaintenance, setTomorrowMaintenance] = useState<MaintenanceSlot[]>([])
   const [showSuccessModal, setShowSuccessModal] = useState(false)
   const [successData, setSuccessData] = useState<{date: string, hours: number[], creditsUsed: number} | null>(null)
+  const [expandedDay, setExpandedDay] = useState<'today' | 'tomorrow' | null>(null) // For mobile accordion
 
   const supabase = createClient()
   const today = getTodayDate()
@@ -326,70 +327,147 @@ export default function ReservationGrid({
 
   return (
     <div className="space-y-6">
-      {/* Big Blue Date Buttons */}
-      <div className="grid grid-cols-2 gap-4">
-        <button
-          className="bg-us-open-light-blue text-white py-6 px-4 rounded-xl font-bold text-lg hover:bg-us-open-blue transition-colors shadow-lg"
-        >
-          <div className="text-xl">{formatDateShort(today)}</div>
-          <div className="text-sm font-normal mt-1">HOY</div>
-        </button>
-        <button
-          className="bg-us-open-light-blue text-white py-6 px-4 rounded-xl font-bold text-lg hover:bg-us-open-blue transition-colors shadow-lg"
-        >
-          <div className="text-xl">{formatDateShort(tomorrow)}</div>
-          <div className="text-sm font-normal mt-1">MAÑANA</div>
-        </button>
-      </div>
-
-      {/* Two Column Layout - Today and Tomorrow */}
-      {loading ? (
-        <div className="text-center py-12 text-gray-500">Cargando...</div>
-      ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {/* Today Column */}
-          <div>
-            <h3 className="text-lg font-bold text-us-open-blue mb-4 text-center">
-              HOY - {formatDateFull(today)}
-            </h3>
-            <div className="space-y-3">
-              {COURT_HOURS.map((hour) => {
-                const { status, ownerName } = getSlotStatus(hour, today, todayReservations, todayMaintenance)
-                return (
-                  <TimeSlot
-                    key={`today-${hour}`}
-                    hour={hour}
-                    status={status}
-                    ownerName={ownerName}
-                    onClick={() => handleSlotClick(hour, today)}
-                  />
-                )
-              })}
-            </div>
+      {/* Desktop: Two Column Layout - Side by Side */}
+      <div className="hidden lg:block">
+        {/* Big Blue Date Buttons - Desktop (non-clickable, just visual) */}
+        <div className="grid grid-cols-2 gap-4 mb-6">
+          <div className="bg-us-open-light-blue text-white py-6 px-4 rounded-xl font-bold text-lg shadow-lg">
+            <div className="text-xl">{formatDateShort(today)}</div>
+            <div className="text-sm font-normal mt-1">HOY</div>
           </div>
-
-          {/* Tomorrow Column */}
-          <div>
-            <h3 className="text-lg font-bold text-us-open-blue mb-4 text-center">
-              MAÑANA - {formatDateFull(tomorrow)}
-            </h3>
-            <div className="space-y-3">
-              {COURT_HOURS.map((hour) => {
-                const { status, ownerName } = getSlotStatus(hour, tomorrow, tomorrowReservations, tomorrowMaintenance)
-                return (
-                  <TimeSlot
-                    key={`tomorrow-${hour}`}
-                    hour={hour}
-                    status={status}
-                    ownerName={ownerName}
-                    onClick={() => handleSlotClick(hour, tomorrow)}
-                  />
-                )
-              })}
-            </div>
+          <div className="bg-us-open-light-blue text-white py-6 px-4 rounded-xl font-bold text-lg shadow-lg">
+            <div className="text-xl">{formatDateShort(tomorrow)}</div>
+            <div className="text-sm font-normal mt-1">MAÑANA</div>
           </div>
         </div>
-      )}
+
+        {loading ? (
+          <div className="text-center py-12 text-gray-500">Cargando...</div>
+        ) : (
+          <div className="grid grid-cols-2 gap-8">
+            {/* Today Column */}
+            <div>
+              <h3 className="text-lg font-bold text-us-open-blue mb-4 text-center">
+                HOY - {formatDateFull(today)}
+              </h3>
+              <div className="space-y-3">
+                {COURT_HOURS.map((hour) => {
+                  const { status, ownerName } = getSlotStatus(hour, today, todayReservations, todayMaintenance)
+                  return (
+                    <TimeSlot
+                      key={`today-${hour}`}
+                      hour={hour}
+                      status={status}
+                      ownerName={ownerName}
+                      onClick={() => handleSlotClick(hour, today)}
+                    />
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* Tomorrow Column */}
+            <div>
+              <h3 className="text-lg font-bold text-us-open-blue mb-4 text-center">
+                MAÑANA - {formatDateFull(tomorrow)}
+              </h3>
+              <div className="space-y-3">
+                {COURT_HOURS.map((hour) => {
+                  const { status, ownerName } = getSlotStatus(hour, tomorrow, tomorrowReservations, tomorrowMaintenance)
+                  return (
+                    <TimeSlot
+                      key={`tomorrow-${hour}`}
+                      hour={hour}
+                      status={status}
+                      ownerName={ownerName}
+                      onClick={() => handleSlotClick(hour, tomorrow)}
+                    />
+                  )
+                })}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Mobile: Accordion Layout - Toggle Between Days */}
+      <div className="lg:hidden space-y-4">
+        {loading ? (
+          <div className="text-center py-12 text-gray-500">Cargando...</div>
+        ) : (
+          <>
+            {/* Today Accordion */}
+            <div>
+              <button
+                onClick={() => setExpandedDay(expandedDay === 'today' ? null : 'today')}
+                className="w-full bg-us-open-light-blue text-white py-6 px-4 rounded-xl font-bold text-lg hover:bg-us-open-blue transition-colors shadow-lg"
+              >
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-xl">{formatDateShort(today)}</div>
+                    <div className="text-sm font-normal mt-1">HOY</div>
+                  </div>
+                  <span className="text-2xl font-light">
+                    {expandedDay === 'today' ? '−' : '+'}
+                  </span>
+                </div>
+              </button>
+
+              {expandedDay === 'today' && (
+                <div className="mt-4 space-y-3">
+                  {COURT_HOURS.map((hour) => {
+                    const { status, ownerName } = getSlotStatus(hour, today, todayReservations, todayMaintenance)
+                    return (
+                      <TimeSlot
+                        key={`today-${hour}`}
+                        hour={hour}
+                        status={status}
+                        ownerName={ownerName}
+                        onClick={() => handleSlotClick(hour, today)}
+                      />
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Tomorrow Accordion */}
+            <div>
+              <button
+                onClick={() => setExpandedDay(expandedDay === 'tomorrow' ? null : 'tomorrow')}
+                className="w-full bg-us-open-light-blue text-white py-6 px-4 rounded-xl font-bold text-lg hover:bg-us-open-blue transition-colors shadow-lg"
+              >
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-xl">{formatDateShort(tomorrow)}</div>
+                    <div className="text-sm font-normal mt-1">MAÑANA</div>
+                  </div>
+                  <span className="text-2xl font-light">
+                    {expandedDay === 'tomorrow' ? '−' : '+'}
+                  </span>
+                </div>
+              </button>
+
+              {expandedDay === 'tomorrow' && (
+                <div className="mt-4 space-y-3">
+                  {COURT_HOURS.map((hour) => {
+                    const { status, ownerName } = getSlotStatus(hour, tomorrow, tomorrowReservations, tomorrowMaintenance)
+                    return (
+                      <TimeSlot
+                        key={`tomorrow-${hour}`}
+                        hour={hour}
+                        status={status}
+                        ownerName={ownerName}
+                        onClick={() => handleSlotClick(hour, tomorrow)}
+                      />
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          </>
+        )}
+      </div>
 
       {/* Continue Button - Only show when hours are selected */}
       {selectedHours.length > 0 && (
