@@ -60,7 +60,7 @@ export default function CollapsibleSections({ user }: CollapsibleSectionsProps) 
           onClick={() => setCreditsOpen(!creditsOpen)}
           className="w-full p-4 text-left flex items-center gap-2 hover:bg-gray-50 transition-colors"
         >
-          <span>💰</span>
+          <span>🪙</span>
           <span className="font-semibold text-gray-800">¿Cómo Adquirir Créditos?</span>
           <span className="ml-auto text-gray-400 text-xl font-light">
             {creditsOpen ? '−' : '+'}
