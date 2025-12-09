@@ -9,7 +9,6 @@ interface ConfirmationModalProps {
   date: string
   hours: number[]
   credits: number
-  isVip: boolean
 }
 
 export default function ConfirmationModal({
@@ -19,12 +18,11 @@ export default function ConfirmationModal({
   date,
   hours,
   credits,
-  isVip,
 }: ConfirmationModalProps) {
   if (!isOpen) return null
 
   const totalHours = hours.length
-  const cost = isVip ? 0 : totalHours
+  const cost = totalHours // All users pay 1 credit per hour
   const remainingCredits = credits - cost
 
   // Format time range
@@ -79,11 +77,7 @@ export default function ConfirmationModal({
               Costo
             </p>
             <p className="text-lg font-semibold text-gray-900">
-              {isVip ? (
-                <span className="text-us-open-yellow">Gratis (VIP)</span>
-              ) : (
-                `${cost} crédito${cost > 1 ? 's' : ''}`
-              )}
+              {cost} crédito{cost > 1 ? 's' : ''}
             </p>
           </div>
 

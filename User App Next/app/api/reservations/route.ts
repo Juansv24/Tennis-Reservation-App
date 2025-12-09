@@ -74,6 +74,33 @@ export async function POST(request: NextRequest) {
     )
   }
 
+  // Check credits
+  if (profile.credits < 1) {
+    return NextResponse.json(
+      { error: 'Sin créditos suficientes' },
+      { status: 400 }
+    )
+  }
+
+  // Check time-based reservation restrictions
+  const currentHour = new Date().getHours()
+  const maxHour = profile.is_vip ? 20 : 16 // VIP: 8 PM, Regular: 4 PM
+
+  if (currentHour < 8) {
+    return NextResponse.json(
+      { error: 'Las reservas están disponibles a partir de las 8:00 AM' },
+      { status: 400 }
+    )
+  }
+
+  if (currentHour > maxHour) {
+    const maxTime = profile.is_vip ? '8:00 PM' : '5:00 PM'
+    return NextResponse.json(
+      { error: `Las reservas están disponibles hasta las ${maxTime}` },
+      { status: 400 }
+    )
+  }
+
   // Get today and tomorrow dates for validation
   const today = new Date().toISOString().split('T')[0]
   const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0]
@@ -147,12 +174,10 @@ export async function POST(request: NextRequest) {
   // Handle unique constraint violation (slot already taken)
   if (reservationError?.code === '23505') {
     // Rollback: refund the credit we just deducted
-    if (!profile.is_vip) {
-      await supabase
-        .from('users')
-        .update({ credits: creditResult.new_credits + 1 })
-        .eq('id', user.id)
-    }
+    await supabase
+      .from('users')
+      .update({ credits: creditResult.new_credits + 1 })
+      .eq('id', user.id)
     return NextResponse.json(
       { error: 'Slot ya reservado' },
       { status: 409 }
@@ -161,12 +186,10 @@ export async function POST(request: NextRequest) {
 
   if (reservationError) {
     // Rollback: refund the credit we just deducted
-    if (!profile.is_vip) {
-      await supabase
-        .from('users')
-        .update({ credits: creditResult.new_credits + 1 })
-        .eq('id', user.id)
-    }
+    await supabase
+      .from('users')
+      .update({ credits: creditResult.new_credits + 1 })
+      .eq('id', user.id)
     return NextResponse.json(
       { error: reservationError.message },
       { status: 500 }

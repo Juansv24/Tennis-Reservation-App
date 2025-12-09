@@ -38,13 +38,32 @@ export async function POST(request: NextRequest) {
     )
   }
 
-  // Calculate credits needed
-  const creditsNeeded = profile.is_vip ? 0 : reservations.length
+  // Calculate credits needed (1 credit per hour for all users)
+  const creditsNeeded = reservations.length
 
-  // Check credits (unless VIP)
-  if (!profile.is_vip && profile.credits < creditsNeeded) {
+  // Check credits
+  if (profile.credits < creditsNeeded) {
     return NextResponse.json(
       { error: `Sin créditos suficientes. Necesitas ${creditsNeeded}, tienes ${profile.credits}` },
+      { status: 400 }
+    )
+  }
+
+  // Check time-based reservation restrictions
+  const currentHour = new Date().getHours()
+  const maxHour = profile.is_vip ? 20 : 16 // VIP: 8 PM, Regular: 4 PM (last hour to make reservation)
+
+  if (currentHour < 8) {
+    return NextResponse.json(
+      { error: 'Las reservas están disponibles a partir de las 8:00 AM' },
+      { status: 400 }
+    )
+  }
+
+  if (currentHour > maxHour) {
+    const maxTime = profile.is_vip ? '8:00 PM' : '5:00 PM'
+    return NextResponse.json(
+      { error: `Las reservas están disponibles hasta las ${maxTime}` },
       { status: 400 }
     )
   }
@@ -123,31 +142,28 @@ export async function POST(request: NextRequest) {
     )
   }
 
-  // Deduct credits (unless VIP) - AFTER successful reservation creation
-  let newCredits = profile.credits
-  if (!profile.is_vip) {
-    const { error: updateError } = await supabase
-      .from('users')
-      .update({ credits: profile.credits - creditsNeeded })
-      .eq('id', user.id)
+  // Deduct credits - AFTER successful reservation creation
+  const { error: updateError } = await supabase
+    .from('users')
+    .update({ credits: profile.credits - creditsNeeded })
+    .eq('id', user.id)
 
-    if (updateError) {
-      // Rollback: delete the reservations we just created
-      const ids = createdReservations?.map(r => r.id) || []
-      if (ids.length > 0) {
-        await supabase
-          .from('reservations')
-          .delete()
-          .in('id', ids)
-      }
-      return NextResponse.json(
-        { error: 'Error al actualizar créditos' },
-        { status: 500 }
-      )
+  if (updateError) {
+    // Rollback: delete the reservations we just created
+    const ids = createdReservations?.map(r => r.id) || []
+    if (ids.length > 0) {
+      await supabase
+        .from('reservations')
+        .delete()
+        .in('id', ids)
     }
-
-    newCredits = profile.credits - creditsNeeded
+    return NextResponse.json(
+      { error: 'Error al actualizar créditos' },
+      { status: 500 }
+    )
   }
+
+  const newCredits = profile.credits - creditsNeeded
 
   return NextResponse.json({
     success: true,

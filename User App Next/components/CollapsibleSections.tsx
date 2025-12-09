@@ -1,10 +1,18 @@
 'use client'
 
 import { useState } from 'react'
+import type { User } from '@/types/database.types'
 
-export default function CollapsibleSections() {
+interface CollapsibleSectionsProps {
+  user: User
+}
+
+export default function CollapsibleSections({ user }: CollapsibleSectionsProps) {
   const [rulesOpen, setRulesOpen] = useState(false)
   const [creditsOpen, setCreditsOpen] = useState(false)
+
+  // Determine reservation hours based on user type
+  const reservationHours = user.is_vip ? '8:00 AM - 8:00 PM' : '8:00 AM - 5:00 PM'
 
   return (
     <div className="space-y-4">
@@ -36,6 +44,7 @@ export default function CollapsibleSections() {
               <li>• <strong>Máximo 2 horas</strong> por persona por día</li>
               <li>• <strong>Horas consecutivas</strong> requeridas si se reservan 2 horas</li>
               <li>• No se permite reservar la cancha en <strong>los mismos horarios dos días consecutivos</strong></li>
+              <li>• <strong>Horario para hacer reservas:</strong> {reservationHours}</li>
               <li>• <strong>Horario de cancha:</strong> 6:00 AM - 9:00 PM</li>
               <li>• ⏰ <strong>Importante:</strong> Solo puedes hacer reservas dentro del horario permitido</li>
             </ul>

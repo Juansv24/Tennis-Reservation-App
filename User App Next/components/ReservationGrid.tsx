@@ -411,7 +411,6 @@ export default function ReservationGrid({
         date={selectedHours.length > 0 ? selectedHours[0].date : today}
         hours={selectedHours.map(s => s.hour)}
         credits={user.credits}
-        isVip={user.is_vip}
       />
 
       {/* Success Modal */}
@@ -422,7 +421,7 @@ export default function ReservationGrid({
           date={successData.date}
           hours={successData.hours}
           creditsUsed={successData.creditsUsed}
-          creditsRemaining={user.is_vip ? user.credits : user.credits - successData.creditsUsed}
+          creditsRemaining={user.credits - successData.creditsUsed}
           onMakeAnotherReservation={() => {
             setShowSuccessModal(false)
             setSuccessData(null)

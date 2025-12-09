@@ -63,7 +63,7 @@ export default async function DashboardLayout({
         <div className="space-y-6">
           <WelcomeBanner user={profile} />
           <UserDetailsBox user={profile} />
-          <CollapsibleSections />
+          <CollapsibleSections user={profile} />
           {children}
         </div>
       </main>
