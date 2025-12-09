@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import { COURT_HOURS, getTodayDate, getTomorrowDate, formatDateFull, formatDateShort } from '@/lib/constants'
 import TimeSlot from './TimeSlot'
 import ConfirmationModal from './ConfirmationModal'
+import SuccessModal from './SuccessModal'
 import type { Reservation, SlotStatus, User, MaintenanceSlot } from '@/types/database.types'
 
 interface ReservationGridProps {
@@ -29,6 +30,8 @@ export default function ReservationGrid({
   const [tomorrowReservations, setTomorrowReservations] = useState<Reservation[]>([])
   const [todayMaintenance, setTodayMaintenance] = useState<MaintenanceSlot[]>([])
   const [tomorrowMaintenance, setTomorrowMaintenance] = useState<MaintenanceSlot[]>([])
+  const [showSuccessModal, setShowSuccessModal] = useState(false)
+  const [successData, setSuccessData] = useState<{date: string, hours: number[], creditsUsed: number} | null>(null)
 
   const supabase = createClient()
   const today = getTodayDate()
@@ -179,23 +182,64 @@ export default function ReservationGrid({
     if (isAlreadySelected) {
       // Deselect
       setSelectedHours(selectedHours.filter((s) => !(s.hour === hour && s.date === date)))
-    } else if (selectedHours.length === 0) {
+      return
+    }
+
+    // Get user's existing reservations for both days
+    const userTodayReservations = todayReservations.filter(r => r.user_id === user.id).map(r => r.hour)
+    const userTomorrowReservations = tomorrowReservations.filter(r => r.user_id === user.id).map(r => r.hour)
+
+    // RULE 1: Check if trying to book same hour on consecutive days
+    if (date === today && userTomorrowReservations.includes(hour)) {
+      const formattedHour = `${hour.toString().padStart(2, '0')}:00`
+      alert(`No puedes reservar a las ${formattedHour} hoy porque ya lo tienes reservado mañana. No se permite reservar el mismo horario dos días seguidos.`)
+      return
+    }
+    if (date === tomorrow && userTodayReservations.includes(hour)) {
+      const formattedHour = `${hour.toString().padStart(2, '0')}:00`
+      alert(`No puedes reservar a las ${formattedHour} mañana porque ya lo tienes reservado hoy. No se permite reservar el mismo horario dos días seguidos.`)
+      return
+    }
+
+    // RULE 2: Check daily limit (max 2 hours per day)
+    const userExistingHoursForDate = date === today ? userTodayReservations : userTomorrowReservations
+    const selectedHoursForDate = selectedHours.filter(s => s.date === date).length
+    const totalHoursAfterSelection = userExistingHoursForDate.length + selectedHoursForDate + 1
+
+    if (totalHoursAfterSelection > 2) {
+      alert(`Máximo 2 horas por día. Ya tienes ${userExistingHoursForDate.length} hora(s) reservada(s) para este día.`)
+      return
+    }
+
+    // RULE 3: Check if already have 2 selections
+    if (selectedHours.length >= 2) {
+      alert('Máximo 2 horas por selección')
+      return
+    }
+
+    if (selectedHours.length === 0) {
       // First selection
       setSelectedHours([{hour, date}])
     } else if (selectedHours.length === 1) {
       const existing = selectedHours[0]
-      // Check if same date and consecutive hours
-      if (existing.date === date && Math.abs(hour - existing.hour) === 1) {
-        // Add consecutive hour on same date
-        const sorted = [existing, {hour, date}].sort((a, b) => a.hour - b.hour)
-        setSelectedHours(sorted)
-      } else {
-        // Not consecutive or different date, start fresh
+
+      // RULE 4: Must be same date
+      if (existing.date !== date) {
+        alert('Las horas seleccionadas deben ser del mismo día')
         setSelectedHours([{hour, date}])
+        return
       }
-    } else {
-      // Already have 2, start fresh
-      setSelectedHours([{hour, date}])
+
+      // RULE 5: Must be consecutive hours
+      if (Math.abs(hour - existing.hour) !== 1) {
+        alert('Las horas seleccionadas deben ser consecutivas')
+        setSelectedHours([{hour, date}])
+        return
+      }
+
+      // Add consecutive hour on same date
+      const sorted = [existing, {hour, date}].sort((a, b) => a.hour - b.hour)
+      setSelectedHours(sorted)
     }
   }
 
@@ -255,10 +299,18 @@ export default function ReservationGrid({
 
       await Promise.all(emailPromises)
 
-      // Close modal and show success
+      // Calculate credits used
+      const creditsUsed = user.is_vip ? 0 : selectedHours.length
+
+      // Close confirmation modal and show success modal
       setIsModalOpen(false)
+      setSuccessData({
+        date: selectedHours[0].date,
+        hours: selectedHours.map(s => s.hour),
+        creditsUsed
+      })
+      setShowSuccessModal(true)
       setSelectedHours([])
-      alert('¡Reserva confirmada! Revisa tu correo para más detalles.')
     } catch (error) {
       alert('Error al crear reserva')
       setIsModalOpen(false)
@@ -359,6 +411,23 @@ export default function ReservationGrid({
         credits={user.credits}
         isVip={user.is_vip}
       />
+
+      {/* Success Modal */}
+      {successData && (
+        <SuccessModal
+          isOpen={showSuccessModal}
+          userName={user.full_name}
+          date={successData.date}
+          hours={successData.hours}
+          creditsUsed={successData.creditsUsed}
+          creditsRemaining={user.is_vip ? user.credits : user.credits - successData.creditsUsed}
+          onMakeAnotherReservation={() => {
+            setShowSuccessModal(false)
+            setSuccessData(null)
+            window.location.reload()
+          }}
+        />
+      )}
     </div>
   )
 }

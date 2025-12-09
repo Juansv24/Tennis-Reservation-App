@@ -82,6 +82,45 @@ export async function POST(request: NextRequest) {
     )
   }
 
+  // Get today and tomorrow dates for validation
+  const today = new Date().toISOString().split('T')[0]
+  const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0]
+
+  // Get user's existing reservations for today and tomorrow
+  const { data: userReservations } = await supabase
+    .from('reservations')
+    .select('date, hour')
+    .eq('user_id', user.id)
+    .in('date', [today, tomorrow])
+
+  const userTodayReservations = userReservations?.filter(r => r.date === today).map(r => r.hour) || []
+  const userTomorrowReservations = userReservations?.filter(r => r.date === tomorrow).map(r => r.hour) || []
+
+  // RULE 1: Check if trying to book same hour on consecutive days
+  if (date === today && userTomorrowReservations.includes(hour)) {
+    const formattedHour = `${hour.toString().padStart(2, '0')}:00`
+    return NextResponse.json(
+      { error: `No puedes reservar a las ${formattedHour} hoy porque ya lo tienes reservado mañana. No se permite reservar el mismo horario dos días seguidos.` },
+      { status: 400 }
+    )
+  }
+  if (date === tomorrow && userTodayReservations.includes(hour)) {
+    const formattedHour = `${hour.toString().padStart(2, '0')}:00`
+    return NextResponse.json(
+      { error: `No puedes reservar a las ${formattedHour} mañana porque ya lo tienes reservado hoy. No se permite reservar el mismo horario dos días seguidos.` },
+      { status: 400 }
+    )
+  }
+
+  // RULE 2: Check daily limit (max 2 hours per day)
+  const userExistingHoursForDate = date === today ? userTodayReservations : userTomorrowReservations
+  if (userExistingHoursForDate.length >= 2) {
+    return NextResponse.json(
+      { error: `Máximo 2 horas por día. Ya tienes ${userExistingHoursForDate.length} hora(s) reservada(s) para este día.` },
+      { status: 400 }
+    )
+  }
+
   // Create reservation
   const { data: reservation, error: reservationError } = await supabase
     .from('reservations')

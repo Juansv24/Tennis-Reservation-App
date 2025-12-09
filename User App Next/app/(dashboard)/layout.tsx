@@ -53,7 +53,7 @@ export default async function DashboardLayout({
       .single(),
   ])
 
-  const hasReservations = userReservations.data && userReservations.data.length > 0
+  const hasReservations = !!(userReservations.data && userReservations.data.length > 0)
   const lockCode = lockCodeResult.data?.code || ''
 
   return (
