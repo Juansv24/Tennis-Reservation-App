@@ -56,15 +56,27 @@ export default async function DashboardLayout({
   const lockCode = lockCodeResult.data?.code || ''
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 flex flex-col">
       <Header user={profile} lockCode={lockCode} hasReservations={hasReservations} />
-      <main className="max-w-7xl mx-auto px-4 py-8">
+      <main className="max-w-7xl mx-auto px-4 py-8 flex-1">
         <div className="space-y-6">
           <WelcomeBanner user={profile} />
           <CollapsibleSections user={profile} />
           {children}
         </div>
       </main>
+
+      {/* Trademark Footer */}
+      <footer className="mt-auto">
+        <div className="max-w-7xl mx-auto px-4">
+          <hr className="border-gray-300" />
+          <div className="py-4 text-center">
+            <p className="text-xs text-gray-400">
+              © {new Date().getFullYear()} Sistema de reservas de cancha de tenis. Todos los derechos reservados. Desarrollado por Juan Sebastian Vallejo.
+            </p>
+          </div>
+        </div>
+      </footer>
     </div>
   )
 }
