@@ -43,32 +43,26 @@ function LoginForm() {
     try {
       const emailLower = email.trim().toLowerCase()
 
-      // Step 1: Check if user exists in the database
-      const { data: existingUser, error: userCheckError } = await supabase
-        .from('users')
-        .select('id')
-        .eq('email', emailLower)
-        .maybeSingle()
-
-      if (!existingUser) {
-        setError('Este email no está registrado. Por favor regístrate primero.')
-        setLoading(false)
-        return
-      }
-
-      // Step 2: User exists, now try to sign in
+      // Try to sign in - Supabase will validate credentials
       const { data, error: signInError } = await supabase.auth.signInWithPassword({
         email: emailLower,
         password,
       })
 
       if (signInError) {
-        setError('Contraseña incorrecta. Por favor verifica tu contraseña.')
+        // Handle different error types
+        if (signInError.message.includes('Invalid login credentials')) {
+          setError('Email o contraseña incorrectos. Por favor verifica tus datos.')
+        } else if (signInError.message.includes('Email not confirmed')) {
+          setError('Por favor verifica tu correo electrónico antes de iniciar sesión.')
+        } else {
+          setError('Error al iniciar sesión. Por favor intenta de nuevo.')
+        }
         setLoading(false)
         return
       }
 
-      // Step 3: Check if first login completed
+      // Check if first login completed
       const { data: profile } = await supabase
         .from('users')
         .select('first_login_completed')

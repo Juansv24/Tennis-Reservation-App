@@ -16,7 +16,7 @@ export default function TimeSlot({ hour, status, onClick, ownerName }: TimeSlotP
   const statusStyles = {
     available: 'bg-white border-2 border-us-open-light-blue text-us-open-blue hover:bg-blue-50 cursor-pointer',
     selected: 'bg-blue-100 border-4 border-us-open-light-blue text-us-open-blue cursor-pointer shadow-lg scale-105',
-    'my-reservation': 'bg-[#006039] text-white border-2 border-us-open-light-blue',
+    'my-reservation': 'bg-[#052c90] text-[#ffd400] border-2 border-[#001b59]',
     taken: 'bg-blue-50 border-2 border-blue-200 text-gray-600',
     past: 'bg-gray-100 border border-gray-200 text-gray-400 cursor-not-allowed opacity-60',
     maintenance: 'bg-orange-100 border-2 border-orange-400 text-orange-700',
