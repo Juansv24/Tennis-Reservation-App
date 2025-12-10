@@ -13,7 +13,7 @@ CREATE TABLE public.users (
   id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
   email TEXT NOT NULL,
   full_name TEXT NOT NULL,
-  credits INTEGER DEFAULT 7 NOT NULL,
+  credits INTEGER DEFAULT 0 NOT NULL,
   is_vip BOOLEAN DEFAULT false NOT NULL,
   first_login_completed BOOLEAN DEFAULT false NOT NULL,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
@@ -137,7 +137,7 @@ BEGIN
     NEW.id,
     NEW.email,
     COALESCE(NEW.raw_user_meta_data->>'full_name', 'User'),
-    7,
+    0,
     false,
     false
   );
@@ -159,7 +159,7 @@ COMMENT ON TABLE public.access_codes IS 'Access codes for user registration';
 COMMENT ON TABLE public.lock_code IS 'Lock code for court access';
 COMMENT ON TABLE public.maintenance_slots IS 'Maintenance/blocked time slots';
 
-COMMENT ON COLUMN public.users.credits IS 'Number of available reservation credits (default: 7)';
+COMMENT ON COLUMN public.users.credits IS 'Number of available reservation credits (default: 0)';
 COMMENT ON COLUMN public.users.is_vip IS 'VIP users have unlimited reservations';
 COMMENT ON COLUMN public.users.first_login_completed IS 'Whether user has completed first-time setup';
 COMMENT ON COLUMN public.reservations.hour IS 'Hour of reservation (6-21 represents 6am-9pm)';
