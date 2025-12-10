@@ -1,17 +1,38 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [success, setSuccess] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const router = useRouter()
+  const searchParams = useSearchParams()
   const supabase = createClient()
+
+  // Handle URL query parameters for success/error messages
+  useEffect(() => {
+    const verified = searchParams.get('verified')
+    const errorParam = searchParams.get('error')
+
+    if (verified === 'true') {
+      setSuccess('✅ Email verificado exitosamente! Ya puedes iniciar sesión.')
+    } else if (errorParam) {
+      const errorMessages: { [key: string]: string } = {
+        'invalid_token': 'Token de verificación inválido',
+        'token_not_found': 'Token de verificación no encontrado',
+        'token_expired': 'El enlace de verificación ha expirado. Por favor solicita uno nuevo.',
+        'verification_failed': 'Error al verificar el email',
+        'verification_error': 'Error durante la verificación'
+      }
+      setError(errorMessages[errorParam] || 'Error durante la verificación')
+    }
+  }, [searchParams])
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault()
@@ -95,6 +116,12 @@ export default function LoginPage() {
                 placeholder="••••••••"
               />
             </div>
+
+            {success && (
+              <div className="bg-green-50 text-green-700 px-4 py-3 rounded-lg text-sm border border-green-200">
+                {success}
+              </div>
+            )}
 
             {error && (
               <div className="bg-red-50 text-red-700 px-4 py-3 rounded-lg text-sm border border-red-200">

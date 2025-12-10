@@ -29,9 +29,9 @@ export default function AccessCodePage() {
         return
       }
 
-      // Success - redirect to dashboard
-      router.push('/')
-      router.refresh()
+      // Success - force hard navigation to ensure server components re-fetch
+      // This prevents the access code loop by ensuring first_login_completed flag is read fresh
+      window.location.href = '/'
     } catch (err) {
       setError('Error al validar código')
       setLoading(false)

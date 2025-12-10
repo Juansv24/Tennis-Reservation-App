@@ -1,8 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 
 export default function UpdatePasswordPage() {
@@ -10,8 +10,37 @@ export default function UpdatePasswordPage() {
   const [confirmPassword, setConfirmPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [tokenValid, setTokenValid] = useState<boolean | null>(null)
   const router = useRouter()
+  const searchParams = useSearchParams()
   const supabase = createClient()
+  const token = searchParams.get('token')
+
+  // Validate token on component mount
+  useEffect(() => {
+    async function validateToken() {
+      if (!token) {
+        setTokenValid(false)
+        return
+      }
+
+      try {
+        // Validate token exists and is not expired
+        const response = await fetch(`/api/auth/validate-reset-token?token=${token}`)
+        if (response.ok) {
+          setTokenValid(true)
+        } else {
+          setTokenValid(false)
+          setError('El enlace de recuperación es inválido o ha expirado')
+        }
+      } catch (err) {
+        setTokenValid(false)
+        setError('Error al validar el enlace')
+      }
+    }
+
+    validateToken()
+  }, [token])
 
   async function handleUpdatePassword(e: React.FormEvent) {
     e.preventDefault()
@@ -27,17 +56,45 @@ export default function UpdatePasswordPage() {
       return
     }
 
+    // Check if password contains at least one letter
+    if (!/[a-zA-Z]/.test(password)) {
+      setError('La contraseña debe contener al menos una letra')
+      return
+    }
+
+    // Check if password contains at least one number
+    if (!/[0-9]/.test(password)) {
+      setError('La contraseña debe contener al menos un número')
+      return
+    }
+
     setLoading(true)
 
     try {
-      const { error: updateError } = await supabase.auth.updateUser({
-        password: password
-      })
+      if (token) {
+        // Password reset via token
+        const response = await fetch('/api/auth/update-password-with-token', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token, password }),
+        })
 
-      if (updateError) {
-        setError('Error al actualizar la contraseña')
-        setLoading(false)
-        return
+        if (!response.ok) {
+          setError('Error al actualizar la contraseña')
+          setLoading(false)
+          return
+        }
+      } else {
+        // Direct password update (user is logged in)
+        const { error: updateError } = await supabase.auth.updateUser({
+          password: password
+        })
+
+        if (updateError) {
+          setError('Error al actualizar la contraseña')
+          setLoading(false)
+          return
+        }
       }
 
       // Success - redirect to login

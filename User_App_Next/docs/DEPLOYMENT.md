@@ -173,7 +173,7 @@ BEGIN
     NEW.id,
     NEW.email,
     COALESCE(NEW.raw_user_meta_data->>'full_name', 'User'),
-    5,
+    0,  -- Start with 0 credits
     false,
     false
   );

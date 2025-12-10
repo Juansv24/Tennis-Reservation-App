@@ -17,14 +17,14 @@ export default function ResetPasswordPage() {
     setLoading(true)
 
     try {
-      const { error: resetError } = await supabase.auth.resetPasswordForEmail(
-        email.trim().toLowerCase(),
-        {
-          redirectTo: `${window.location.origin}/update-password`,
-        }
-      )
+      // Call custom reset email API
+      const response = await fetch('/api/auth/send-reset-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim().toLowerCase() }),
+      })
 
-      if (resetError) {
+      if (!response.ok) {
         setError('Error al enviar el correo de recuperación')
         setLoading(false)
         return
