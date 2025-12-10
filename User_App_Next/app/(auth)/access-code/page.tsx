@@ -62,7 +62,6 @@ export default function AccessCodePage() {
             onChange={(e) => setCode(e.target.value.toUpperCase())}
             required
             className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-us-open-light-blue focus:border-transparent text-center text-lg font-mono tracking-wider"
-            placeholder="TENNIS2024"
             maxLength={20}
           />
         </div>

@@ -37,21 +37,38 @@ function LoginForm() {
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
+    setSuccess(null)
     setLoading(true)
 
     try {
-      const { data, error: signInError } = await supabase.auth.signInWithPassword({
-        email: email.trim().toLowerCase(),
-        password,
-      })
+      const emailLower = email.trim().toLowerCase()
 
-      if (signInError) {
-        setError('Email o contraseña incorrectos')
+      // Step 1: Check if user exists in the database
+      const { data: existingUser, error: userCheckError } = await supabase
+        .from('users')
+        .select('id')
+        .eq('email', emailLower)
+        .maybeSingle()
+
+      if (!existingUser) {
+        setError('Este email no está registrado. Por favor regístrate primero.')
         setLoading(false)
         return
       }
 
-      // Check if first login completed
+      // Step 2: User exists, now try to sign in
+      const { data, error: signInError } = await supabase.auth.signInWithPassword({
+        email: emailLower,
+        password,
+      })
+
+      if (signInError) {
+        setError('Contraseña incorrecta. Por favor verifica tu contraseña.')
+        setLoading(false)
+        return
+      }
+
+      // Step 3: Check if first login completed
       const { data: profile } = await supabase
         .from('users')
         .select('first_login_completed')
