@@ -24,14 +24,18 @@ export default function Header({ user, lockCode, hasReservations }: HeaderProps)
     <header className="bg-gradient-to-r from-us-open-blue to-us-open-light-blue text-white shadow-lg">
       <div className="max-w-7xl mx-auto px-4 py-6">
         <div className="flex items-start justify-between">
-          {/* Left section: Name and Credits */}
+          {/* Left section: Reservando como, Name and Credits */}
           <div>
-            <h1 className="text-3xl font-bold">
-              {user.full_name} {user.is_vip && '⭐'}
+            <p className="text-xs md:text-sm text-white opacity-75 mb-4 uppercase tracking-wide">
+              Reservando como:
+            </p>
+            <h1 className="text-2xl md:text-3xl font-bold flex items-center gap-1">
+              {user.full_name}
+              {user.is_vip && <span className="text-base md:text-lg">⭐</span>}
             </h1>
-            <div className="flex items-center gap-2 mt-1">
-              <span className="text-xl">🪙</span>
-              <p className="text-lg opacity-90">Créditos disponibles: {user.credits}</p>
+            <div className="flex items-center gap-2 mt-2">
+              <span className="text-lg md:text-xl">🪙</span>
+              <p className="text-base md:text-lg opacity-90">Créditos disponibles: {user.credits}</p>
             </div>
           </div>
 

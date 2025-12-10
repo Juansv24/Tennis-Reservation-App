@@ -56,27 +56,27 @@ export default async function DashboardLayout({
   const lockCode = lockCodeResult.data?.code || ''
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
-      <Header user={profile} lockCode={lockCode} hasReservations={hasReservations} />
-      <main className="max-w-7xl mx-auto px-4 py-8 flex-1">
-        <div className="space-y-6">
-          <WelcomeBanner user={profile} />
-          <CollapsibleSections user={profile} />
-          {children}
-        </div>
-      </main>
+    <div className="min-h-screen bg-white md:bg-gray-50 flex items-center justify-center md:block p-4 md:p-0">
+      <div className="w-full max-w-7xl md:max-w-none min-h-[95vh] md:min-h-screen flex flex-col bg-white rounded-lg md:rounded-none shadow-2xl md:shadow-none overflow-hidden">
+        <Header user={profile} lockCode={lockCode} hasReservations={hasReservations} />
+        <main className="px-4 py-8 flex-1 bg-white md:max-w-7xl md:mx-auto">
+          <div className="space-y-6">
+            <WelcomeBanner user={profile} />
+            <CollapsibleSections user={profile} />
+            {children}
+          </div>
+        </main>
 
-      {/* Trademark Footer */}
-      <footer className="mt-auto">
-        <div className="max-w-7xl mx-auto px-4">
+        {/* Trademark Footer */}
+        <footer className="mt-auto bg-white md:max-w-7xl md:mx-auto md:w-full">
           <hr className="border-gray-300" />
-          <div className="py-4 text-center">
+          <div className="py-4 text-center px-4">
             <p className="text-xs text-gray-400">
               © {new Date().getFullYear()} Sistema de reservas de cancha de tenis. Todos los derechos reservados. Desarrollado por Juan Sebastian Vallejo.
             </p>
           </div>
-        </div>
-      </footer>
+        </footer>
+      </div>
     </div>
   )
 }
