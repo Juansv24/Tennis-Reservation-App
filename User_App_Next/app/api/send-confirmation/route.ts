@@ -40,8 +40,8 @@ export async function POST(request: NextRequest) {
       },
     })
 
-    // Format date in Spanish
-    const dateObj = new Date(date + 'T00:00:00')
+    // Format date in Spanish (with Colombian timezone)
+    const dateObj = new Date(date + 'T00:00:00-05:00')
     const daysEs = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado']
     const monthsEs = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
                       'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
@@ -54,9 +54,9 @@ export async function POST(request: NextRequest) {
     const startTime = `${sortedHours[0].toString().padStart(2, '0')}:00`
     const endTime = `${(sortedHours[sortedHours.length - 1] + 1).toString().padStart(2, '0')}:00`
 
-    // Create Google Calendar link
-    const startDateTime = new Date(date + `T${sortedHours[0].toString().padStart(2, '0')}:00:00`)
-    const endDateTime = new Date(date + `T${(sortedHours[sortedHours.length - 1] + 1).toString().padStart(2, '0')}:00:00`)
+    // Create Google Calendar link (with Colombian timezone offset)
+    const startDateTime = new Date(date + `T${sortedHours[0].toString().padStart(2, '0')}:00:00-05:00`)
+    const endDateTime = new Date(date + `T${(sortedHours[sortedHours.length - 1] + 1).toString().padStart(2, '0')}:00:00-05:00`)
 
     const calStart = startDateTime.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z'
     const calEnd = endDateTime.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z'
