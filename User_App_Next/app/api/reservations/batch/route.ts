@@ -137,12 +137,25 @@ export async function POST(request: NextRequest) {
     const totalHoursForDate = userExistingHoursForDate.length + newReservationsForDate
 
     if (totalHoursForDate > 2) {
-      const existing = userExistingHoursForDate.length
-      const trying = newReservationsForDate
       return NextResponse.json(
-        { error: `Solo puedes reservar máximo 2 horas por día. Ya tienes ${existing} hora(s) reservada(s) para este día e intentas agregar ${trying} más.` },
+        { error: 'Solo puedes reservar máximo 2 horas por día.' },
         { status: 400 }
       )
+    }
+
+    // RULE 1b: If user has existing reservations for this day, all hours (existing + new) must be consecutive
+    if (userExistingHoursForDate.length > 0) {
+      const newHoursForDate = reservations.filter(r => r.date === date).map(r => r.hour)
+      const allHoursForDay = [...userExistingHoursForDate, ...newHoursForDate].sort((a, b) => a - b)
+      // Check if all hours are consecutive
+      for (let i = 1; i < allHoursForDay.length; i++) {
+        if (allHoursForDay[i] - allHoursForDay[i - 1] !== 1) {
+          return NextResponse.json(
+            { error: 'Las 2 horas reservadas deben ser consecutivas (una después de la otra).' },
+            { status: 400 }
+          )
+        }
+      }
     }
   }
 

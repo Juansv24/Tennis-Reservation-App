@@ -224,12 +224,33 @@ export default function ReservationGrid({
     const totalHoursAfterSelection = userExistingHoursForDate.length + selectedHoursForDate + 1
 
     if (totalHoursAfterSelection > 2) {
-      const existing = userExistingHoursForDate.length
-      alert(`Solo puedes reservar máximo 2 horas por día. Ya tienes ${existing} hora(s) reservada(s) para este día.`)
+      alert('Solo puedes reservar máximo 2 horas por día.')
       return
     }
 
-    // RULE 3: Check if already have 2 selections
+    // RULE 2b: If user has existing reservations for this day, new selections must be consecutive
+    if (userExistingHoursForDate.length > 0) {
+      const allHoursForDay = [...userExistingHoursForDate, ...selectedHours.filter(s => s.date === date).map(s => s.hour), hour].sort((a, b) => a - b)
+      // Check if all hours are consecutive
+      for (let i = 1; i < allHoursForDay.length; i++) {
+        if (allHoursForDay[i] - allHoursForDay[i - 1] !== 1) {
+          alert('Las 2 horas reservadas deben ser consecutivas (una después de la otra).')
+          return
+        }
+      }
+    }
+
+    // RULE 3: Check if trying to mix different days (must be checked BEFORE max selection check)
+    if (selectedHours.length > 0) {
+      const existingDates = [...new Set(selectedHours.map(s => s.date))]
+      if (existingDates.length > 0 && !existingDates.includes(date)) {
+        alert('Solo puedes hacer reservas para un día a la vez. Las horas seleccionadas deben ser del mismo día.')
+        setSelectedHours([{hour, date}])
+        return
+      }
+    }
+
+    // RULE 4: Check if already have 2 selections
     if (selectedHours.length >= 2) {
       alert('Máximo 2 horas por selección')
       return
@@ -241,16 +262,9 @@ export default function ReservationGrid({
     } else if (selectedHours.length === 1) {
       const existing = selectedHours[0]
 
-      // RULE 4: Must be same date
-      if (existing.date !== date) {
-        alert('Solo puedes hacer reservas para un día a la vez. Las horas seleccionadas deben ser del mismo día. Se ha reemplazado tu selección anterior.')
-        setSelectedHours([{hour, date}])
-        return
-      }
-
       // RULE 5: Must be consecutive hours
       if (Math.abs(hour - existing.hour) !== 1) {
-        alert('Si reservas 2 horas, deben ser consecutivas (una después de la otra). Se ha reemplazado tu selección anterior.')
+        alert('Si reservas 2 horas, deben ser consecutivas (una después de la otra).')
         setSelectedHours([{hour, date}])
         return
       }
