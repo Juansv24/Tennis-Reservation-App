@@ -78,7 +78,7 @@ export default function CollapsibleSections({ user }: CollapsibleSectionsProps) 
 
             <div>
               <p className="font-semibold text-gray-900 mb-1">📞 Contacto para Recargar:</p>
-              <p className="ml-4"><strong>Orlando</strong></p>
+              <p className="ml-4"><strong>Orlando Rios</strong></p>
               <p className="ml-4">
                 <strong>WhatsApp:</strong>{' '}
                 <a

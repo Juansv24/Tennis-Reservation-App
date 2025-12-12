@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
-import { getColombiaHour } from '@/lib/timezone'
+import { getColombiaHour, getColombiaToday, getColombiaTomorrow } from '@/lib/timezone'
 
 // POST /api/reservations/batch
 export async function POST(request: NextRequest) {
@@ -69,9 +69,9 @@ export async function POST(request: NextRequest) {
     )
   }
 
-  // Get today and tomorrow dates for validation
-  const today = new Date().toISOString().split('T')[0]
-  const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0]
+  // Get today and tomorrow dates for validation (Colombian timezone)
+  const today = getColombiaToday()
+  const tomorrow = getColombiaTomorrow()
 
   // Get user's existing reservations for today and tomorrow
   const { data: userReservations } = await supabase

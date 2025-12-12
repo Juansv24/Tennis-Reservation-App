@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { getColombiaTimeServer } from '@/lib/timezone-server'
 
 export async function POST(request: NextRequest) {
   try {
@@ -38,8 +39,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Token no válido' }, { status: 404 })
     }
 
-    // Check if token is expired
-    const now = new Date()
+    // Check if token is expired (using Colombian timezone)
+    const now = getColombiaTimeServer()
     const expiresAt = new Date(tokenData.expires_at)
     if (now > expiresAt) {
       return NextResponse.json({ error: 'Token expirado' }, { status: 410 })

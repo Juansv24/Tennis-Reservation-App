@@ -29,21 +29,32 @@ export function getTomorrowDate(): string {
 }
 
 // Format date for display (e.g., "Viernes, 7 de Diciembre")
+// Uses Colombian timezone to ensure correct day of week
 export function formatDateFull(dateString: string): string {
-  const date = new Date(dateString + 'T00:00:00')
-  return date.toLocaleDateString('es-ES', {
+  // Explicitly use Colombian timezone offset (-05:00)
+  const date = new Date(dateString + 'T00:00:00-05:00')
+  return date.toLocaleDateString('es-CO', {
     weekday: 'long',
     year: 'numeric',
     month: 'long',
     day: 'numeric',
+    timeZone: 'America/Bogota'
   })
 }
 
 // Format date short (e.g., "VIE 5 DIC")
+// Uses Colombian timezone to ensure correct day of week
 export function formatDateShort(dateString: string): string {
-  const date = new Date(dateString + 'T00:00:00')
-  const dayAbbrev = date.toLocaleDateString('es-ES', { weekday: 'short' }).toUpperCase()
+  // Explicitly use Colombian timezone offset (-05:00)
+  const date = new Date(dateString + 'T00:00:00-05:00')
+  const dayAbbrev = date.toLocaleDateString('es-CO', {
+    weekday: 'short',
+    timeZone: 'America/Bogota'
+  }).toUpperCase()
   const dayNum = date.getDate()
-  const monthAbbrev = date.toLocaleDateString('es-ES', { month: 'short' }).toUpperCase()
+  const monthAbbrev = date.toLocaleDateString('es-CO', {
+    month: 'short',
+    timeZone: 'America/Bogota'
+  }).toUpperCase()
   return `${dayAbbrev} ${dayNum} ${monthAbbrev}`
 }

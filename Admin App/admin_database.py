@@ -79,10 +79,8 @@ class AdminDatabaseManager:
         """Sincronizar y limpiar base de datos"""
         try:
             results = {
-                'expired_sessions_cleaned': 0,
                 'expired_tokens_cleaned': 0,
                 'expired_verifications_cleaned': 0,
-                'orphaned_records_cleaned': 0,
                 'success': True,
                 'message': 'Base de datos sincronizada exitosamente'
             }
@@ -90,23 +88,20 @@ class AdminDatabaseManager:
             import datetime
             now = datetime.datetime.utcnow().isoformat()
 
-            # 1. Limpiar sesiones expiradas
-            expired_sessions = self.client.table('user_sessions').delete().lt('expires_at', now).execute()
-            results['expired_sessions_cleaned'] = len(expired_sessions.data) if expired_sessions.data else 0
+            # 1. Limpiar tokens de reset expirados
+            try:
+                expired_tokens = self.client.table('password_reset_tokens').delete().lt('expires_at', now).execute()
+                results['expired_tokens_cleaned'] = len(expired_tokens.data) if expired_tokens.data else 0
+            except Exception:
+                pass  # Table may not exist
 
-            # 2. Limpiar tokens de reset expirados
-            expired_tokens = self.client.table('password_reset_tokens').delete().lt('expires_at', now).execute()
-            results['expired_tokens_cleaned'] = len(expired_tokens.data) if expired_tokens.data else 0
-
-            # 3. Limpiar verificaciones de email expiradas
-            expired_verifications = self.client.table('email_verifications').delete().lt('expires_at', now).execute()
-            results['expired_verifications_cleaned'] = len(
-                expired_verifications.data) if expired_verifications.data else 0
-
-            # 4. Marcar sesiones expiradas como inactivas (por si las anteriores fallan)
-            self.client.table('user_sessions').update({
-                'is_active': False
-            }).lt('expires_at', now).eq('is_active', True).execute()
+            # 2. Limpiar verificaciones de email expiradas (new table name)
+            try:
+                expired_verifications = self.client.table('email_verification_tokens').delete().lt('expires_at', now).execute()
+                results['expired_verifications_cleaned'] = len(
+                    expired_verifications.data) if expired_verifications.data else 0
+            except Exception:
+                pass  # Table may not exist
 
             return results
 
@@ -114,31 +109,32 @@ class AdminDatabaseManager:
             return {
                 'success': False,
                 'message': f'Error sincronizando base de datos: {str(e)}',
-                'expired_sessions_cleaned': 0,
                 'expired_tokens_cleaned': 0,
-                'expired_verifications_cleaned': 0,
-                'orphaned_records_cleaned': 0
+                'expired_verifications_cleaned': 0
             }
 
     def get_system_statistics(self) -> Dict:
         """Obtener estadísticas generales del sistema"""
         try:
-            # Usuarios totales
-            users_result = self.client.table('users').select('id, is_active, credits').execute()
+            # Usuarios totales (removed is_active - all users in table are active)
+            users_result = self.client.table('users').select('id, is_vip, credits').execute()
             total_users = len(users_result.data)
-            active_users = len([u for u in users_result.data if u['is_active']])
+            vip_users = len([u for u in users_result.data if u.get('is_vip', False)])
 
             # Reservas de hoy
             today = get_colombia_today().strftime('%Y-%m-%d')
             reservations_today = self.client.table('reservations').select('id').eq('date', today).execute()
 
             # Créditos totales emitidos
-            credits_result = self.client.table('credit_transactions').select('amount').eq('transaction_type', 'admin_grant').execute()
-            total_credits_issued = sum([t['amount'] for t in credits_result.data]) if credits_result.data else 0
+            try:
+                credits_result = self.client.table('credit_transactions').select('amount').eq('transaction_type', 'admin_grant').execute()
+                total_credits_issued = sum([t['amount'] for t in credits_result.data]) if credits_result.data else 0
+            except Exception:
+                total_credits_issued = 0  # Table may not exist yet
 
             return {
                 'total_users': total_users,
-                'active_users': active_users,
+                'vip_users': vip_users,
                 'today_reservations': len(reservations_today.data),
                 'total_credits_issued': total_credits_issued
             }
@@ -146,7 +142,7 @@ class AdminDatabaseManager:
             print(f"Error getting system statistics: {e}")
             return {
                 'total_users': 0,
-                'active_users': 0,
+                'vip_users': 0,
                 'today_reservations': 0,
                 'total_credits_issued': 0
             }
@@ -180,20 +176,27 @@ class AdminDatabaseManager:
     def search_users_for_reservations(self, search_term: str) -> List[Dict]:
         """Buscar usuarios por nombre o email para gestión de reservas"""
         try:
-            # Buscar por email o nombre
+            # Buscar por email o nombre (removed is_active filter)
             result = self.client.table('users').select('id, email, full_name').or_(
                 f'email.ilike.%{search_term}%,full_name.ilike.%{search_term}%'
-            ).eq('is_active', True).execute()
+            ).execute()
 
             return [{'id': u['id'], 'email': u['email'], 'name': u['full_name']} for u in result.data]
         except Exception:
             return []
 
     def get_user_reservations_history(self, user_email: str) -> List[Dict]:
-        """Obtener historial completo de reservas de un usuario"""
+        """Obtener historial completo de reservas de un usuario - Now uses user_id"""
         try:
+            # Get user_id from email
+            user_result = self.client.table('users').select('id').eq('email', user_email).execute()
+            if not user_result.data:
+                return []
+
+            user_id = user_result.data[0]['id']
+
             result = self.client.table('reservations').select('*').eq(
-                'email', user_email
+                'user_id', user_id
             ).order('date', desc=True).order('hour').execute()
 
             # Formatear fechas de creación
@@ -244,12 +247,15 @@ class AdminDatabaseManager:
             user_id_to_email = {user['id']: user['email'] for user in users_result.data}
             user_id_to_data = {user['id']: user for user in users_result.data}
 
-            # Get all reservations
-            reservations_result = self.client.table('reservations').select('email, date, hour').execute()
+            # Get all reservations (now uses user_id)
+            reservations_result = self.client.table('reservations').select('user_id, date, hour').execute()
 
             # Get all credit transactions using user_id
-            credits_transactions = self.client.table('credit_transactions').select(
-                'user_id, amount, transaction_type').execute()
+            try:
+                credits_transactions = self.client.table('credit_transactions').select(
+                    'user_id, amount, transaction_type').execute()
+            except Exception:
+                credits_transactions = type('obj', (object,), {'data': []})()  # Empty result if table doesn't exist
 
             # Calculate total credits bought per user
             credits_by_user_id = {}
@@ -260,31 +266,38 @@ class AdminDatabaseManager:
                         credits_by_user_id[user_id] = 0
                     credits_by_user_id[user_id] += transaction['amount']
 
-            # Convert to email-based dictionary
+            # Convert to email-based dictionary for backwards compatibility
             credits_dict = {}
             for user_id, total_credits in credits_by_user_id.items():
                 if user_id in user_id_to_email:
                     email = user_id_to_email[user_id]
                     credits_dict[email] = total_credits
 
-            # Process reservations by user
-            user_reservations = {}
+            # Process reservations by user (now uses user_id)
+            user_reservations_by_id = {}
             for res in reservations_result.data:
-                email = res['email']
-                if email not in user_reservations:
-                    user_reservations[email] = {
+                user_id = res['user_id']
+                if user_id not in user_reservations_by_id:
+                    user_reservations_by_id[user_id] = {
                         'total': 0,
                         'days': [],
                         'hours': []
                     }
-                user_reservations[email]['total'] += 1
+                user_reservations_by_id[user_id]['total'] += 1
 
                 # Add day of week
                 date_obj = datetime.strptime(res['date'], '%Y-%m-%d').date()
-                user_reservations[email]['days'].append(date_obj.weekday())
+                user_reservations_by_id[user_id]['days'].append(date_obj.weekday())
 
                 # Add hour
-                user_reservations[email]['hours'].append(res['hour'])
+                user_reservations_by_id[user_id]['hours'].append(res['hour'])
+
+            # Convert to email-based dict for backwards compatibility
+            user_reservations = {}
+            for user_id, res_data in user_reservations_by_id.items():
+                if user_id in user_id_to_email:
+                    email = user_id_to_email[user_id]
+                    user_reservations[email] = res_data
 
             # Build final user stats
             days_spanish = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo']
@@ -408,10 +421,8 @@ class AdminDatabaseManager:
                 f'email.ilike.%{search_term}%,full_name.ilike.%{search_term}%'
             ).execute()
 
-            # Formatear fechas para cada usuario
+            # Formatear fechas para cada usuario (removed last_login - doesn't exist)
             for user in result.data:
-                if 'last_login' in user:
-                    user['last_login'] = self._format_colombia_datetime(user['last_login'])
                 if 'created_at' in user:
                     user['created_at'] = self._format_colombia_datetime(user['created_at'])
 
@@ -420,26 +431,20 @@ class AdminDatabaseManager:
             return []
 
     def get_user_stats(self, user_id: int) -> Dict:
-        """Obtener estadísticas de un usuario específico"""
+        """Obtener estadísticas de un usuario específico - Now uses user_id"""
         try:
-            user_result = self.client.table('users').select('email').eq('id', user_id).execute()
-            if not user_result.data:
-                return {'total_reservations': 0, 'active_reservations': 0, 'last_reservation': None}
-
-            email = user_result.data[0]['email']
-
-            # Total de reservas
-            total_result = self.client.table('reservations').select('id').eq('email', email).execute()
+            # Total de reservas (now uses user_id)
+            total_result = self.client.table('reservations').select('id').eq('user_id', user_id).execute()
             total_reservations = len(total_result.data)
 
             # Reservas futuras
             today = get_colombia_today().strftime('%Y-%m-%d')
-            future_result = self.client.table('reservations').select('id').eq('email', email).gte('date',
+            future_result = self.client.table('reservations').select('id').eq('user_id', user_id).gte('date',
                                                                                                   today).execute()
             active_reservations = len(future_result.data)
 
             # Última reserva
-            last_result = self.client.table('reservations').select('date').eq('email', email).order('date',
+            last_result = self.client.table('reservations').select('date').eq('user_id', user_id).order('date',
                                                                                                     desc=True).limit(
                 1).execute()
             last_reservation = last_result.data[0]['date'] if last_result.data else None
@@ -452,68 +457,38 @@ class AdminDatabaseManager:
         except Exception:
             return {'total_reservations': 0, 'active_reservations': 0, 'last_reservation': None}
 
-    def toggle_user_status_with_notification(self, user_id: int) -> bool:
-        """Cambiar estado de usuario y notificar"""
-        try:
-            # Obtener info del usuario
-            user_result = self.client.table('users').select('email, full_name, is_active').eq('id', user_id).execute()
-            if not user_result.data:
-                return False
-
-            user = user_result.data[0]
-            success = self.toggle_user_status(user_id)
-
-            if success:
-                # Enviar notificación
-                new_status = "activada" if not user['is_active'] else "desactivada"
-                self._send_status_change_notification(user['email'], user['full_name'], new_status)
-
-            return success
-        except Exception:
-            return False
-
-    def _send_status_change_notification(self, email: str, name: str, status: str):
-        """Enviar notificación de cambio de estado"""
-        try:
-            from email_config import email_manager
-
-            if email_manager.is_configured():
-                subject = f"🎾 Cuenta {status.title()} - Sistema de Reservas"
-
-                html_body = f"""
-                <h2>Estado de Cuenta Actualizado</h2>
-                <p>Hola {name},</p>
-                <p>Tu cuenta ha sido <strong>{status}</strong> por el administrador.</p>
-                <p>Si tienes preguntas, contacta al administrador.</p>
-                """
-
-                email_manager.send_email(email, subject, html_body)
-        except Exception as e:
-            print(f"Error sending status change email: {e}")
+    # NOTE: User status toggle feature removed - is_active column doesn't exist in new schema
+    # All users in the users table are considered active. To deactivate a user, delete their account.
 
     def get_user_reservation_statistics(self) -> List[Dict]:
-        """Obtener estadísticas de reservas por usuario"""
+        """Obtener estadísticas de reservas por usuario - Now uses JOIN"""
         try:
-            result = self.client.table('reservations').select('email, name').execute()
+            result = self.client.table('reservations').select('user_id, users(email, full_name)').execute()
 
             # Contar reservas por usuario
             user_counts = {}
             for reservation in result.data:
-                email = reservation['email']
-                name = reservation['name']
-                if email in user_counts:
-                    user_counts[email]['count'] += 1
+                if not reservation.get('users'):
+                    continue
+
+                user_id = reservation['user_id']
+                email = reservation['users']['email']
+                name = reservation['users']['full_name']
+
+                if user_id in user_counts:
+                    user_counts[user_id]['count'] += 1
                 else:
-                    user_counts[email] = {'name': name, 'count': 1}
+                    user_counts[user_id] = {'email': email, 'name': name, 'count': 1}
 
             # Convertir a lista y ordenar
             user_stats = [
-                {'email': email, 'name': data['name'], 'reservations': data['count']}
-                for email, data in user_counts.items()
+                {'email': data['email'], 'name': data['name'], 'reservations': data['count']}
+                for user_id, data in user_counts.items()
             ]
 
             return sorted(user_stats, key=lambda x: x['reservations'], reverse=True)[:10]
-        except Exception:
+        except Exception as e:
+            print(f"Error getting user reservation statistics: {e}")
             return []
 
     def get_daily_reservation_stats(self, days: int = 7) -> List[Dict]:
@@ -556,9 +531,9 @@ class AdminDatabaseManager:
             return []
 
     def get_reservations_for_admin(self, date_filter, status_filter: str) -> List:
-        """Obtener reservas para gestión administrativa"""
+        """Obtener reservas para gestión administrativa - Now uses JOIN"""
         try:
-            query = self.client.table('reservations').select('id, date, hour, name, email, created_at')
+            query = self.client.table('reservations').select('id, date, hour, user_id, created_at, users(full_name, email)')
 
             # Aplicar filtro de fecha si se especifica
             if date_filter:
@@ -566,34 +541,45 @@ class AdminDatabaseManager:
 
             result = query.order('date', desc=True).order('hour').execute()
 
-            # Formatear fechas de creación
+            # Formatear datos para mantener compatibilidad con código existente
+            formatted_data = []
             for reservation in result.data:
-                if 'created_at' in reservation:
-                    reservation['created_at'] = self._format_colombia_datetime(reservation['created_at'])
+                if reservation.get('users'):
+                    formatted_reservation = {
+                        'id': reservation['id'],
+                        'date': reservation['date'],
+                        'hour': reservation['hour'],
+                        'user_id': reservation['user_id'],
+                        'name': reservation['users']['full_name'],
+                        'email': reservation['users']['email'],
+                        'created_at': self._format_colombia_datetime(reservation['created_at']) if reservation.get('created_at') else 'N/A'
+                    }
+                    formatted_data.append(formatted_reservation)
 
-            return result.data
-        except Exception:
+            return formatted_data
+        except Exception as e:
+            print(f"Error getting reservations for admin: {e}")
             return []
 
     def cancel_reservation(self, reservation_id: int) -> bool:
-        """Cancelar una reserva específica"""
+        """Cancelar una reserva específica - Now uses user_id"""
         try:
-            # Obtener datos de la reserva antes de cancelar
-            reservation_result = self.client.table('reservations').select('email, date, hour').eq('id',
+            # Obtener datos de la reserva antes de cancelar (now uses user_id)
+            reservation_result = self.client.table('reservations').select('user_id, date, hour').eq('id',
                                                                                                   reservation_id).execute()
 
             if not reservation_result.data:
                 return False
 
             reservation = reservation_result.data[0]
+            user_id = reservation['user_id']
 
             # Eliminar la reserva
             delete_result = self.client.table('reservations').delete().eq('id', reservation_id).execute()
 
             if delete_result.data:
                 # Obtener usuario para reembolso
-                user_result = self.client.table('users').select('id, credits').eq('email',
-                                                                                  reservation['email']).execute()
+                user_result = self.client.table('users').select('id, credits').eq('id', user_id).execute()
                 if user_result.data:
                     user = user_result.data[0]
                     current_credits = user['credits'] or 0
@@ -621,16 +607,14 @@ class AdminDatabaseManager:
             return False
 
     def get_all_users(self) -> List:
-        """Obtener todos los usuarios del sistema"""
+        """Obtener todos los usuarios del sistema - Removed is_active and last_login"""
         try:
             result = self.client.table('users').select(
-                'id, email, full_name, credits, is_active, last_login, created_at'
+                'id, email, full_name, credits, is_vip, first_login_completed, created_at'
             ).order('created_at', desc=True).execute()
 
-            # Formatear fechas para cada usuario
+            # Formatear fechas para cada usuario (removed last_login)
             for user in result.data:
-                if 'last_login' in user:
-                    user['last_login'] = self._format_colombia_datetime(user['last_login'])
                 if 'created_at' in user:
                     user['created_at'] = self._format_colombia_datetime(user['created_at'])
 
@@ -638,20 +622,20 @@ class AdminDatabaseManager:
         except Exception:
             return []
 
-    def toggle_user_status(self, user_id: int) -> bool:
-        """Alternar estado activo/inactivo de usuario"""
+    def toggle_vip_status(self, user_id: int) -> bool:
+        """Alternar estado VIP de usuario (replaces toggle_user_status)"""
         try:
             # Obtener estado actual
-            user_result = self.client.table('users').select('is_active').eq('id', user_id).execute()
+            user_result = self.client.table('users').select('is_vip').eq('id', user_id).execute()
             if not user_result.data:
                 return False
 
-            current_status = user_result.data[0]['is_active']
+            current_status = user_result.data[0].get('is_vip', False)
             new_status = not current_status
 
-            # Actualizar estado
+            # Actualizar estado VIP
             update_result = self.client.table('users').update({
-                'is_active': new_status
+                'is_vip': new_status
             }).eq('id', user_id).execute()
 
             return len(update_result.data) > 0
@@ -791,17 +775,11 @@ class AdminDatabaseManager:
             return []
 
     def get_user_reservation_history(self, user_id: int) -> List:
-        """Obtener historial de reservas de un usuario"""
+        """Obtener historial de reservas de un usuario - Now uses user_id"""
         try:
-            user_result = self.client.table('users').select('email').eq('id', user_id).execute()
-            if not user_result.data:
-                return []
-
-            email = user_result.data[0]['email']
-
             result = self.client.table('reservations').select(
                 'date, hour, created_at'
-            ).eq('email', email).order('date', desc=True).execute()
+            ).eq('user_id', user_id).order('date', desc=True).execute()
 
             # Formatear fechas de creación
             for reservation in result.data:
@@ -813,11 +791,18 @@ class AdminDatabaseManager:
             return []
 
     def get_user_recent_reservations(self, user_email: str, limit: int = 10) -> List[Dict]:
-        """Obtener reservas recientes de un usuario"""
+        """Obtener reservas recientes de un usuario - Now uses user_id"""
         try:
+            # Get user_id from email
+            user_result = self.client.table('users').select('id').eq('email', user_email).execute()
+            if not user_result.data:
+                return []
+
+            user_id = user_result.data[0]['id']
+
             result = self.client.table('reservations').select(
                 'date, hour, created_at'
-            ).eq('email', user_email).order('date', desc=True).limit(limit).execute()
+            ).eq('user_id', user_id).order('date', desc=True).limit(limit).execute()
 
             # Formatear fechas de creación
             for reservation in result.data:

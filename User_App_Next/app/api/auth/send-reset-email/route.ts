@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import nodemailer from 'nodemailer'
 import crypto from 'crypto'
+import { getColombiaTimePlusHours } from '@/lib/timezone-server'
 
 export async function POST(request: NextRequest) {
   try {
@@ -31,10 +32,9 @@ export async function POST(request: NextRequest) {
     // Always return success to prevent email enumeration
     // Only actually send email if user exists
     if (user) {
-      // Generate secure token
+      // Generate secure token (using Colombian timezone)
       const token = crypto.randomBytes(32).toString('hex')
-      const expiresAt = new Date()
-      expiresAt.setHours(expiresAt.getHours() + 24)
+      const expiresAt = getColombiaTimePlusHours(24)
 
       // Store token in database
       const { error: insertError } = await supabase

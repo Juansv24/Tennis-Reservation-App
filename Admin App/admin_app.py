@@ -310,8 +310,8 @@ def show_dashboard_tab():
     with col2:
         st.markdown(f"""
         <div class="stat-card">
-            <div class="stat-number">{stats['active_users']}</div>
-            <div class="stat-label">Usuarios Activos</div>
+            <div class="stat-number">{stats['vip_users']}</div>
+            <div class="stat-label">Usuarios VIP</div>
         </div>
         """, unsafe_allow_html=True)
 
@@ -812,9 +812,9 @@ def show_user_detailed_info(user):
         - **Nombre:** {user['full_name']}
         - **Email:** {user['email']}
         - **Créditos:** {user['credits'] or 0}
-        - **Estado:** {'✅ Activo' if user['is_active'] else '❌ Inactivo'}
-        - **Último login:** {user['last_login'][:10] if user['last_login'] else 'Nunca'}
-        - **Registrado:** {user['created_at'][:10]}
+        - **Estado VIP:** {'⭐ VIP' if user.get('is_vip', False) else '👤 Regular'}
+        - **Primer login completado:** {'✅ Sí' if user.get('first_login_completed', False) else '⏳ Pendiente'}
+        - **Registrado:** {user['created_at'][:10] if 'created_at' in user and user['created_at'] else 'N/A'}
         """)
 
     with col2:
@@ -827,14 +827,16 @@ def show_user_detailed_info(user):
         - **Última reserva:** {stats['last_reservation'] or 'Nunca'}
         """)
 
-    # Botón con callback
-    status_text = "Desactiva" if user['is_active'] else "Activa"
-    if st.button(f"🔄 {status_text} Usuario", key=f"toggle_{user['id']}"):
-        with st.spinner(f"🔄 {status_text.lower()}ndo usuario..."):
-            success = toggle_user_status_callback(user['id'], user['is_active'])
+    # Botón para toggle VIP (replaces is_active toggle)
+    is_vip = user.get('is_vip', False)
+    vip_text = "Quitar VIP" if is_vip else "Hacer VIP"
+    if st.button(f"⭐ {vip_text}", key=f"toggle_vip_{user['id']}"):
+        with st.spinner(f"🔄 Actualizando estado VIP..."):
+            success = toggle_vip_status_callback(user['id'], is_vip)
             if not success:
-                st.error(f"❌ Error al {status_text.lower()} usuario")
+                st.error(f"❌ Error al actualizar estado VIP")
             else:
+                st.success(f"✅ Estado VIP actualizado")
                 st.rerun()
 
 
@@ -1160,26 +1162,26 @@ def show_user_history(user_id):
     st.subheader("📊 Historial de Usuario")
     # Implementar vista de historial
 
-def toggle_user_status_callback(user_id, current_status):
-    """Callback para cambiar estado de usuario"""
-    status_text = "desactivado" if current_status else "activado"
+def toggle_vip_status_callback(user_id, current_vip_status):
+    """Callback para cambiar estado VIP de usuario"""
+    vip_text = "VIP removido" if current_vip_status else "VIP activado"
 
-    if admin_db_manager.toggle_user_status_with_notification(user_id):
+    if admin_db_manager.toggle_vip_status(user_id):
         # Marcar que se actualizó recientemente
         st.session_state[f'usuario_actualizado_recientemente_{user_id}'] = {
             'timestamp': get_colombia_now(),
-            'accion': 'cambio_estado',
-            'mensaje': f"Usuario {status_text} y notificado por email"
+            'accion': 'cambio_vip',
+            'mensaje': f"{vip_text} exitosamente"
         }
 
         # Marcar expander para mantenerlo abierto
-        mantener_expander_abierto_admin(user_id, 'cambio_estado', 15)
+        mantener_expander_abierto_admin(user_id, 'cambio_vip', 15)
 
         # Actualizar lista
         if 'found_users' in st.session_state:
             for i, u in enumerate(st.session_state.found_users):
                 if u['id'] == user_id:
-                    st.session_state.found_users[i]['is_active'] = not current_status
+                    st.session_state.found_users[i]['is_vip'] = not current_vip_status
                     break
 
         return True

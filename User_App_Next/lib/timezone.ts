@@ -33,7 +33,11 @@ export function getColombiaHour(): number {
  */
 export function getColombiaToday(): string {
   const colombiaTime = getColombiaTime()
-  return colombiaTime.toISOString().split('T')[0]
+  // Extract date components directly (don't use toISOString which converts back to UTC!)
+  const year = colombiaTime.getFullYear()
+  const month = String(colombiaTime.getMonth() + 1).padStart(2, '0')
+  const day = String(colombiaTime.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
 }
 
 /**
@@ -42,7 +46,11 @@ export function getColombiaToday(): string {
 export function getColombiaTomorrow(): string {
   const colombiaTime = getColombiaTime()
   colombiaTime.setDate(colombiaTime.getDate() + 1)
-  return colombiaTime.toISOString().split('T')[0]
+  // Extract date components directly (don't use toISOString which converts back to UTC!)
+  const year = colombiaTime.getFullYear()
+  const month = String(colombiaTime.getMonth() + 1).padStart(2, '0')
+  const day = String(colombiaTime.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
 }
 
 /**
