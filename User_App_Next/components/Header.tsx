@@ -29,9 +29,9 @@ export default function Header({ user, lockCode, hasReservations }: HeaderProps)
             <p className="text-xs md:text-sm text-white opacity-75 mb-4 uppercase tracking-wide">
               Reservando como:
             </p>
-            <h1 className="text-2xl md:text-3xl font-bold flex items-center gap-1">
+            <h1 className="text-2xl md:text-3xl font-bold">
               {user.full_name}
-              {user.is_vip && <span className="text-base md:text-lg">⭐</span>}
+              {user.is_vip && <span className="text-base md:text-lg ml-1">⭐</span>}
             </h1>
             <div className="flex items-center gap-2 mt-2">
               <span className="text-lg md:text-xl">🪙</span>
