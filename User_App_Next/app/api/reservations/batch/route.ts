@@ -25,6 +25,34 @@ export async function POST(request: NextRequest) {
     )
   }
 
+  // RULE 2: Validate single day selection - all reservations must be for the same date
+  const uniqueDates = [...new Set(reservations.map(r => r.date))]
+  if (uniqueDates.length > 1) {
+    return NextResponse.json(
+      { error: 'Solo puedes hacer reservas para un día a la vez. Por favor selecciona horas del mismo día.' },
+      { status: 400 }
+    )
+  }
+
+  // RULE 1: Validate max 2 hours and must be consecutive
+  if (reservations.length > 2) {
+    return NextResponse.json(
+      { error: 'Máximo 2 horas por día.' },
+      { status: 400 }
+    )
+  }
+
+  // If 2 hours selected, they must be consecutive
+  if (reservations.length === 2) {
+    const hours = reservations.map(r => r.hour).sort((a, b) => a - b)
+    if (hours[1] - hours[0] !== 1) {
+      return NextResponse.json(
+        { error: 'Las 2 horas reservadas deben ser consecutivas (una después de la otra).' },
+        { status: 400 }
+      )
+    }
+  }
+
   // Get user profile
   const { data: profile } = await supabase
     .from('users')
@@ -87,30 +115,32 @@ export async function POST(request: NextRequest) {
   for (const res of reservations) {
     const { date, hour } = res
 
-    // RULE 1: Check if trying to book same hour on consecutive days
+    // RULE 3: Check if trying to book same hour on consecutive days
     if (date === today && userTomorrowReservations.includes(hour)) {
       const formattedHour = `${hour.toString().padStart(2, '0')}:00`
       return NextResponse.json(
-        { error: `No puedes reservar a las ${formattedHour} hoy porque ya lo tienes reservado mañana.` },
+        { error: `No puedes reservar a las ${formattedHour} hoy porque ya lo tienes reservado mañana. No se permite reservar el mismo horario en días consecutivos.` },
         { status: 400 }
       )
     }
     if (date === tomorrow && userTodayReservations.includes(hour)) {
       const formattedHour = `${hour.toString().padStart(2, '0')}:00`
       return NextResponse.json(
-        { error: `No puedes reservar a las ${formattedHour} mañana porque ya lo tienes reservado hoy.` },
+        { error: `No puedes reservar a las ${formattedHour} mañana porque ya lo tienes reservado hoy. No se permite reservar el mismo horario en días consecutivos.` },
         { status: 400 }
       )
     }
 
-    // RULE 2: Check daily limit (max 2 hours per day)
+    // RULE 1: Check daily limit (max 2 hours per day)
     const userExistingHoursForDate = date === today ? userTodayReservations : userTomorrowReservations
     const newReservationsForDate = reservations.filter(r => r.date === date).length
     const totalHoursForDate = userExistingHoursForDate.length + newReservationsForDate
 
     if (totalHoursForDate > 2) {
+      const existing = userExistingHoursForDate.length
+      const trying = newReservationsForDate
       return NextResponse.json(
-        { error: `Máximo 2 horas por día. Ya tienes ${userExistingHoursForDate.length} hora(s) reservada(s).` },
+        { error: `Solo puedes reservar máximo 2 horas por día. Ya tienes ${existing} hora(s) reservada(s) para este día e intentas agregar ${trying} más.` },
         { status: 400 }
       )
     }

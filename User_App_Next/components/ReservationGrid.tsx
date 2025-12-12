@@ -224,7 +224,8 @@ export default function ReservationGrid({
     const totalHoursAfterSelection = userExistingHoursForDate.length + selectedHoursForDate + 1
 
     if (totalHoursAfterSelection > 2) {
-      alert(`Máximo 2 horas por día. Ya tienes ${userExistingHoursForDate.length} hora(s) reservada(s) para este día.`)
+      const existing = userExistingHoursForDate.length
+      alert(`Solo puedes reservar máximo 2 horas por día. Ya tienes ${existing} hora(s) reservada(s) para este día.`)
       return
     }
 
@@ -242,14 +243,14 @@ export default function ReservationGrid({
 
       // RULE 4: Must be same date
       if (existing.date !== date) {
-        alert('Las horas seleccionadas deben ser del mismo día')
+        alert('Solo puedes hacer reservas para un día a la vez. Las horas seleccionadas deben ser del mismo día. Se ha reemplazado tu selección anterior.')
         setSelectedHours([{hour, date}])
         return
       }
 
       // RULE 5: Must be consecutive hours
       if (Math.abs(hour - existing.hour) !== 1) {
-        alert('Las horas seleccionadas deben ser consecutivas')
+        alert('Si reservas 2 horas, deben ser consecutivas (una después de la otra). Se ha reemplazado tu selección anterior.')
         setSelectedHours([{hour, date}])
         return
       }
