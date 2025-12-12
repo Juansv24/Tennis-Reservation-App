@@ -47,7 +47,7 @@ export default function SuccessModal({
             <h2 className="text-2xl font-bold text-green-800">¡Reserva Confirmada!</h2>
           </div>
           <p className="text-green-700 text-sm">
-            Tu reserva ha sido procesada exitosamente
+            Tu reserva ha sido procesada exitosamente. Hemos enviado los detalles de tu reserva a tu correo electrónico registrado.
           </p>
         </div>
 

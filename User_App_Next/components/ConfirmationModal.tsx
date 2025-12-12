@@ -9,6 +9,7 @@ interface ConfirmationModalProps {
   date: string
   hours: number[]
   credits: number
+  isLoading?: boolean
 }
 
 export default function ConfirmationModal({
@@ -18,6 +19,7 @@ export default function ConfirmationModal({
   date,
   hours,
   credits,
+  isLoading = false,
 }: ConfirmationModalProps) {
   if (!isOpen) return null
 
@@ -40,9 +42,19 @@ export default function ConfirmationModal({
       onClick={onClose}
     >
       <div
-        className="bg-white rounded-lg shadow-2xl w-full max-w-md mx-4 transform transition-all duration-300 ease-in-out scale-100"
+        className="bg-white rounded-lg shadow-2xl w-full max-w-md mx-4 transform transition-all duration-300 ease-in-out scale-100 relative"
         onClick={(e) => e.stopPropagation()}
       >
+        {/* Loading Overlay */}
+        {isLoading && (
+          <div className="absolute inset-0 bg-gray-100 bg-opacity-75 rounded-lg flex items-center justify-center z-10">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-us-open-blue mx-auto mb-3"></div>
+              <p className="text-gray-700 font-semibold">Procesando...</p>
+            </div>
+          </div>
+        )}
+
         {/* Header */}
         <div className="bg-gradient-to-r from-us-open-blue to-us-open-light-blue text-white px-6 py-4 rounded-t-lg">
           <h2 className="text-2xl font-bold">Confirmar Reserva</h2>
@@ -100,13 +112,15 @@ export default function ConfirmationModal({
         <div className="px-6 pb-6 flex gap-3">
           <button
             onClick={onClose}
-            className="flex-1 px-4 py-3 bg-gray-200 text-gray-700 rounded-lg font-semibold hover:bg-gray-300 transition-colors"
+            disabled={isLoading}
+            className="flex-1 px-4 py-3 bg-gray-200 text-gray-700 rounded-lg font-semibold hover:bg-gray-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Cancelar
           </button>
           <button
             onClick={onConfirm}
-            className="flex-1 px-4 py-3 bg-gradient-to-r from-us-open-blue to-us-open-light-blue text-white rounded-lg font-semibold hover:from-us-open-light-blue hover:to-us-open-blue transition-all shadow-md hover:shadow-lg"
+            disabled={isLoading}
+            className="flex-1 px-4 py-3 bg-gradient-to-r from-us-open-blue to-us-open-light-blue text-white rounded-lg font-semibold hover:from-us-open-light-blue hover:to-us-open-blue transition-all shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Confirmar Reserva
           </button>

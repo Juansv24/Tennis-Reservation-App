@@ -10,6 +10,7 @@ interface CollapsibleSectionsProps {
 export default function CollapsibleSections({ user }: CollapsibleSectionsProps) {
   const [rulesOpen, setRulesOpen] = useState(false)
   const [creditsOpen, setCreditsOpen] = useState(false)
+  const [cancelOpen, setCancelOpen] = useState(false)
 
   // Determine reservation hours based on user type
   const reservationHours = user.is_vip ? '8:00 AM - 8:00 PM' : '8:00 AM - 5:00 PM'
@@ -42,14 +43,17 @@ export default function CollapsibleSections({ user }: CollapsibleSectionsProps) 
         {rulesOpen && (
           <div className="p-4 pt-0 text-gray-700">
             <ul className="space-y-2">
-              <li>• <strong>Solo se puede hacer reservar para hoy y para mañana</strong></li>
+              <li>• <strong>Puedes reservar para hoy y para mañana, pero solo un día a la vez</strong></li>
               <li>• <strong>Máximo 2 horas</strong> por persona por día</li>
               <li>• <strong>Horas consecutivas</strong> requeridas si se reservan 2 horas</li>
               <li>• No se permite reservar la cancha en <strong>los mismos horarios dos días consecutivos</strong></li>
               <li>• <strong>Horario para hacer reservas:</strong> {reservationHours}</li>
-              <li>• <strong>Horario de cancha:</strong> 6:00 AM - 9:00 PM</li>
-              <li>• ⏰ <strong>Importante:</strong> Solo puedes hacer reservas dentro del horario permitido</li>
             </ul>
+            <div className="bg-yellow-50 border-l-4 border-yellow-400 p-3 mt-3">
+              <p className="text-sm text-yellow-800">
+                <strong>⏰ Importante:</strong> Solo puedes hacer reservas dentro del horario permitido
+              </p>
+            </div>
           </div>
         )}
       </div>
@@ -107,6 +111,55 @@ export default function CollapsibleSections({ user }: CollapsibleSectionsProps) 
                 <li>• Contacta únicamente en los horarios establecidos para una respuesta rápida</li>
                 <li>• Puedes recargar múltiples créditos en una sola transacción</li>
               </ul>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Cancelar Reservas - Expandable */}
+      <div className="bg-white rounded-lg border border-gray-300">
+        <button
+          onClick={() => setCancelOpen(!cancelOpen)}
+          className="w-full p-4 text-left flex items-center gap-2 hover:bg-gray-50 transition-colors"
+        >
+          <span>❌</span>
+          <span className="font-semibold text-gray-800">¿Cómo Cancelar una Reserva?</span>
+          <span className="ml-auto text-gray-400 text-xl font-light">
+            {cancelOpen ? '−' : '+'}
+          </span>
+        </button>
+        {cancelOpen && (
+          <div className="p-4 pt-0 text-gray-700 space-y-3">
+            <p>Para cancelar una reserva, sigue estos pasos:</p>
+
+            <div>
+              <p className="font-semibold text-gray-900 mb-2">📞 Contacta al Administrador:</p>
+              <ul className="space-y-1 ml-4">
+                <li>• Comunícate con el administrador para solicitar la cancelación</li>
+                <li>• Explica el motivo de la cancelación</li>
+              </ul>
+            </div>
+
+            <div>
+              <p className="font-semibold text-gray-900 mb-2">✅ Validación y Procesamiento:</p>
+              <ul className="space-y-1 ml-4">
+                <li>• El administrador revisará tu solicitud</li>
+                <li>• Una vez validada, el administrador procederá con la cancelación</li>
+              </ul>
+            </div>
+
+            <div>
+              <p className="font-semibold text-gray-900 mb-2">🪙 Devolución de Créditos:</p>
+              <ul className="space-y-1 ml-4">
+                <li>• Los créditos correspondientes serán devueltos a tu cuenta automáticamente</li>
+                <li>• Podrás utilizar estos créditos para futuras reservas</li>
+              </ul>
+            </div>
+
+            <div className="bg-yellow-50 border-l-4 border-yellow-400 p-3 mt-3">
+              <p className="text-sm text-yellow-800">
+                <strong>⚠️ Nota:</strong> Las cancelaciones están sujetas a aprobación del administrador.
+              </p>
             </div>
           </div>
         )}

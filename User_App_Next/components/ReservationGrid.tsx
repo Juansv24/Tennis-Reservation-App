@@ -26,6 +26,7 @@ export default function ReservationGrid({
   const [maintenance, setMaintenance] = useState(initialMaintenance)
   const [loading, setLoading] = useState(false)
   const [isModalOpen, setIsModalOpen] = useState(false)
+  const [isConfirming, setIsConfirming] = useState(false)
   const [selectedHours, setSelectedHours] = useState<Array<{hour: number, date: string}>>([])
   const [todayReservations, setTodayReservations] = useState<Reservation[]>([])
   const [tomorrowReservations, setTomorrowReservations] = useState<Reservation[]>([])
@@ -43,9 +44,54 @@ export default function ReservationGrid({
 
   // Check if user can make reservations based on current time
   useEffect(() => {
-    const [allowed, errorMsg] = canMakeReservationNow(user.is_vip)
-    setCanReserve(allowed)
-    setReservationError(errorMsg)
+    const checkReservationTime = () => {
+      const [allowed, errorMsg] = canMakeReservationNow(user.is_vip)
+      setCanReserve(allowed)
+      setReservationError(errorMsg)
+      return allowed
+    }
+
+    const scheduleNextCheck = () => {
+      const currentHour = getColombiaHour()
+      const maxHour = user.is_vip ? 20 : 16
+
+      let msUntilChange: number
+
+      if (currentHour < 8) {
+        // Before 8 AM - wait until 8 AM
+        const now = getColombiaTime()
+        const next8AM = new Date(now)
+        next8AM.setHours(8, 0, 0, 0)
+        msUntilChange = next8AM.getTime() - now.getTime()
+      } else if (currentHour <= maxHour) {
+        // During allowed hours - wait until restriction time
+        const now = getColombiaTime()
+        const nextRestriction = new Date(now)
+        nextRestriction.setHours(maxHour + 1, 0, 0, 0)
+        msUntilChange = nextRestriction.getTime() - now.getTime()
+      } else {
+        // After hours - wait until 8 AM tomorrow
+        const now = getColombiaTime()
+        const next8AM = new Date(now)
+        next8AM.setDate(next8AM.getDate() + 1)
+        next8AM.setHours(8, 0, 0, 0)
+        msUntilChange = next8AM.getTime() - now.getTime()
+      }
+
+      // Set timeout for the exact moment the state changes
+      return setTimeout(() => {
+        checkReservationTime()
+        scheduleNextCheck() // Schedule the next check
+      }, msUntilChange)
+    }
+
+    // Check immediately
+    checkReservationTime()
+
+    // Schedule the next automatic check
+    const timeoutId = scheduleNextCheck()
+
+    return () => clearTimeout(timeoutId)
   }, [user.is_vip])
 
   // Fetch both days' data on mount
@@ -284,6 +330,8 @@ export default function ReservationGrid({
   async function handleConfirmReservation() {
     if (selectedHours.length === 0) return
 
+    setIsConfirming(true)
+
     try {
       // Create all reservations in a single batch request
       const response = await fetch('/api/reservations/batch', {
@@ -304,6 +352,7 @@ export default function ReservationGrid({
         alert(result.error || 'Error al crear reserva')
         setIsModalOpen(false)
         setSelectedHours([])
+        setIsConfirming(false)
         return
       }
 
@@ -344,11 +393,13 @@ export default function ReservationGrid({
       })
       setShowSuccessModal(true)
       setSelectedHours([])
+      setIsConfirming(false)
     } catch (error) {
       console.error('Reservation error:', error)
       alert('Error al crear reserva')
       setIsModalOpen(false)
       setSelectedHours([])
+      setIsConfirming(false)
     }
   }
 
@@ -609,6 +660,7 @@ export default function ReservationGrid({
         date={selectedHours.length > 0 ? selectedHours[0].date : today}
         hours={selectedHours.map(s => s.hour)}
         credits={user.credits}
+        isLoading={isConfirming}
       />
 
       {/* Success Modal */}
