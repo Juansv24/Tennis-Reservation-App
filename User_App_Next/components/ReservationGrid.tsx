@@ -130,17 +130,40 @@ export default function ReservationGrid({
           filter: `date=eq.${today}`,
         },
         async (payload) => {
-          if (payload.eventType === 'INSERT') {
-            const { data } = await supabase
-              .from('reservations')
-              .select('*, users(full_name)')
-              .eq('id', payload.new.id)
-              .single()
-            if (data) {
-              setTodayReservations((prev) => [...prev, data])
+          try {
+            if (payload.eventType === 'INSERT') {
+              // Validate payload has required data
+              if (!payload.new?.id) {
+                console.warn('INSERT event missing new.id', payload)
+                return
+              }
+
+              const { data, error } = await supabase
+                .from('reservations')
+                .select('*, users(full_name)')
+                .eq('id', payload.new.id)
+                .single()
+
+              if (error) {
+                console.error('Error fetching new reservation:', error)
+                return
+              }
+
+              if (data) {
+                setTodayReservations((prev) => [...prev, data])
+              }
+            } else if (payload.eventType === 'DELETE') {
+              // Validate payload has required data
+              if (!payload.old?.id) {
+                console.warn('DELETE event missing old.id', payload)
+                return
+              }
+
+              setTodayReservations((prev) => prev.filter((r) => r.id !== payload.old.id))
             }
-          } else if (payload.eventType === 'DELETE') {
-            setTodayReservations((prev) => prev.filter((r) => r.id !== payload.old.id))
+          } catch (error) {
+            console.error('Error handling real-time update for today:', error)
+            // Don't crash - just log and continue
           }
         }
       )
@@ -164,17 +187,40 @@ export default function ReservationGrid({
           filter: `date=eq.${tomorrow}`,
         },
         async (payload) => {
-          if (payload.eventType === 'INSERT') {
-            const { data } = await supabase
-              .from('reservations')
-              .select('*, users(full_name)')
-              .eq('id', payload.new.id)
-              .single()
-            if (data) {
-              setTomorrowReservations((prev) => [...prev, data])
+          try {
+            if (payload.eventType === 'INSERT') {
+              // Validate payload has required data
+              if (!payload.new?.id) {
+                console.warn('INSERT event missing new.id', payload)
+                return
+              }
+
+              const { data, error } = await supabase
+                .from('reservations')
+                .select('*, users(full_name)')
+                .eq('id', payload.new.id)
+                .single()
+
+              if (error) {
+                console.error('Error fetching new reservation:', error)
+                return
+              }
+
+              if (data) {
+                setTomorrowReservations((prev) => [...prev, data])
+              }
+            } else if (payload.eventType === 'DELETE') {
+              // Validate payload has required data
+              if (!payload.old?.id) {
+                console.warn('DELETE event missing old.id', payload)
+                return
+              }
+
+              setTomorrowReservations((prev) => prev.filter((r) => r.id !== payload.old.id))
             }
-          } else if (payload.eventType === 'DELETE') {
-            setTomorrowReservations((prev) => prev.filter((r) => r.id !== payload.old.id))
+          } catch (error) {
+            console.error('Error handling real-time update for tomorrow:', error)
+            // Don't crash - just log and continue
           }
         }
       )

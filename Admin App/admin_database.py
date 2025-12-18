@@ -116,7 +116,7 @@ class AdminDatabaseManager:
     def get_system_statistics(self) -> Dict:
         """Obtener estadísticas generales del sistema"""
         try:
-            # Usuarios totales (removed is_active - all users in table are active)
+            # Usuarios totales - all users in table are active
             users_result = self.client.table('users').select('id, is_vip, credits').execute()
             total_users = len(users_result.data)
             vip_users = len([u for u in users_result.data if u.get('is_vip', False)])
@@ -176,7 +176,7 @@ class AdminDatabaseManager:
     def search_users_for_reservations(self, search_term: str) -> List[Dict]:
         """Buscar usuarios por nombre o email para gestión de reservas"""
         try:
-            # Buscar por email o nombre (removed is_active filter)
+            # Buscar por email o nombre
             result = self.client.table('users').select('id, email, full_name').or_(
                 f'email.ilike.%{search_term}%,full_name.ilike.%{search_term}%'
             ).execute()
@@ -421,7 +421,7 @@ class AdminDatabaseManager:
                 f'email.ilike.%{search_term}%,full_name.ilike.%{search_term}%'
             ).execute()
 
-            # Formatear fechas para cada usuario (removed last_login - doesn't exist)
+            # Formatear fechas para cada usuario
             for user in result.data:
                 if 'created_at' in user:
                     user['created_at'] = self._format_colombia_datetime(user['created_at'])
@@ -607,13 +607,13 @@ class AdminDatabaseManager:
             return False
 
     def get_all_users(self) -> List:
-        """Obtener todos los usuarios del sistema - Removed is_active and last_login"""
+        """Obtener todos los usuarios del sistema"""
         try:
             result = self.client.table('users').select(
                 'id, email, full_name, credits, is_vip, first_login_completed, created_at'
             ).order('created_at', desc=True).execute()
 
-            # Formatear fechas para cada usuario (removed last_login)
+            # Formatear fechas para cada usuario
             for user in result.data:
                 if 'created_at' in user:
                     user['created_at'] = self._format_colombia_datetime(user['created_at'])
@@ -864,7 +864,7 @@ class AdminDatabaseManager:
         """Obtener todos los usuarios para exportación"""
         try:
             result = self.client.table('users').select(
-                'id, email, full_name, credits, is_active, last_login, created_at'
+                'id, email, full_name, credits, is_vip, first_login_completed, created_at'
             ).order('created_at', desc=True).execute()
 
             # Formatear datos para Excel
@@ -875,9 +875,9 @@ class AdminDatabaseManager:
                     'Nombre Completo': user['full_name'],
                     'Email': user['email'],
                     'Créditos': user['credits'] or 0,
-                    'Estado': 'Activo' if user['is_active'] else 'Inactivo',
-                    'Último Login': self._format_colombia_datetime(user['last_login']),  # FORMATEADO A COLOMBIA
-                    'Fecha Registro': self._format_colombia_datetime(user['created_at'])  # FORMATEADO A COLOMBIA
+                    'Estado VIP': 'Sí' if user.get('is_vip', False) else 'No',
+                    'Primer Login Completado': 'Sí' if user.get('first_login_completed', False) else 'No',
+                    'Fecha Registro': self._format_colombia_datetime(user['created_at'])
                 })
 
             return formatted_users
@@ -886,10 +886,10 @@ class AdminDatabaseManager:
             return []
 
     def get_all_reservations_for_export(self) -> List[Dict]:
-        """Obtener todas las reservas para exportación"""
+        """Obtener todas las reservas para exportación - Uses JOIN to users table"""
         try:
             result = self.client.table('reservations').select(
-                'id, date, hour, name, email, created_at'
+                'id, date, hour, user_id, created_at, users(full_name, email)'
             ).order('date', desc=True).order('hour').execute()
 
             # Formatear datos para Excel
@@ -905,13 +905,17 @@ class AdminDatabaseManager:
                 except:
                     fecha_display = reservation['date']
 
+                # Get user data from JOIN
+                user_name = reservation['users']['full_name'] if reservation.get('users') else 'Usuario Eliminado'
+                user_email = reservation['users']['email'] if reservation.get('users') else 'N/A'
+
                 formatted_reservations.append({
                     'ID Reserva': reservation['id'],
                     'Fecha': fecha_display,
                     'Hora': f"{reservation['hour']}:00 - {reservation['hour'] + 1}:00",
-                    'Nombre Usuario': reservation['name'],
-                    'Email Usuario': reservation['email'],
-                    'Fecha Creación': self._format_colombia_datetime(reservation['created_at'])  # FORMATEADO A COLOMBIA
+                    'Nombre Usuario': user_name,
+                    'Email Usuario': user_email,
+                    'Fecha Creación': self._format_colombia_datetime(reservation['created_at'])
                 })
 
             return formatted_reservations
@@ -924,7 +928,7 @@ class AdminDatabaseManager:
         try:
             result = self.client.table('users').select('id, email, full_name, credits').or_(
                 f'email.ilike.%{search_term}%,full_name.ilike.%{search_term}%'
-            ).eq('is_active', True).order('full_name').execute()
+            ).order('full_name').execute()
 
             return [{
                 'id': u['id'],
@@ -982,22 +986,23 @@ class AdminDatabaseManager:
             return None
 
     def get_users_with_active_reservations(self) -> List[Dict]:
-        """Obtener lista de usuarios con reservas activas (que no han pasado)"""
+        """Obtener lista de usuarios con reservas activas (que no han pasado) - Uses JOIN"""
         try:
             today = get_colombia_today().strftime('%Y-%m-%d')
 
-            # Obtener todas las reservas futuras
-            result = self.client.table('reservations').select('email, full_name').gte('date', today).execute()
+            # Obtener todas las reservas futuras con JOIN a users
+            result = self.client.table('reservations').select('user_id, users(email, full_name)').gte('date', today).execute()
 
             # Crear un diccionario para evitar duplicados
             users_dict = {}
             for reservation in result.data:
-                email = reservation['email']
-                if email not in users_dict:
-                    users_dict[email] = {
-                        'email': email,
-                        'name': reservation.get('full_name', 'Usuario')
-                    }
+                if reservation.get('users'):
+                    email = reservation['users']['email']
+                    if email not in users_dict:
+                        users_dict[email] = {
+                            'email': email,
+                            'name': reservation['users']['full_name']
+                        }
 
             return list(users_dict.values())
         except Exception as e:
@@ -1146,30 +1151,44 @@ class AdminDatabaseManager:
             return False
 
     def get_vip_users(self) -> List[Dict]:
-        """Obtener lista de usuarios VIP"""
+        """Obtener lista de usuarios VIP - Now uses users.is_vip column"""
         try:
-            result = self.client.table('vip_users').select('*').order('created_at', desc=True).execute()
+            result = self.client.table('users').select('id, email, full_name, created_at').eq('is_vip', True).order('created_at', desc=True).execute()
             return result.data
         except Exception as e:
             print(f"Error obteniendo usuarios VIP: {e}")
             return []
 
     def add_vip_user(self, email: str, admin_username: str) -> bool:
-        """Agregar usuario VIP"""
+        """Agregar usuario VIP - Now sets users.is_vip = true"""
         try:
-            result = self.client.table('vip_users').insert({
-                'email': email.strip().lower(),
-                'created_by': admin_username
-            }).execute()
+            # First check if user exists
+            user_result = self.client.table('users').select('id, is_vip').eq('email', email.strip().lower()).execute()
+            if not user_result.data:
+                return False
+
+            user = user_result.data[0]
+
+            # Check if already VIP
+            if user.get('is_vip', False):
+                return False  # Already VIP
+
+            # Set is_vip to true
+            result = self.client.table('users').update({
+                'is_vip': True
+            }).eq('email', email.strip().lower()).execute()
+
             return len(result.data) > 0
         except Exception as e:
             print(f"Error agregando usuario VIP: {e}")
             return False
 
     def remove_vip_user(self, email: str) -> bool:
-        """Remover usuario VIP"""
+        """Remover usuario VIP - Now sets users.is_vip = false"""
         try:
-            result = self.client.table('vip_users').delete().eq('email', email.strip().lower()).execute()
+            result = self.client.table('users').update({
+                'is_vip': False
+            }).eq('email', email.strip().lower()).execute()
             return len(result.data) > 0
         except Exception as e:
             print(f"Error removiendo usuario VIP: {e}")
@@ -1285,40 +1304,44 @@ class AdminDatabaseManager:
             }
 
     def get_user_activity_stats(self, days: int = 30) -> List[Dict]:
-        """Obtener estadísticas de actividad de usuarios"""
+        """Obtener estadísticas de actividad de usuarios - Uses JOIN"""
         try:
             start_date = (get_colombia_today() - timedelta(days=days)).strftime('%Y-%m-%d')
 
-            # Obtener reservas recientes
-            result = self.client.table('reservations').select('email, name, date, created_at').gte(
+            # Obtener reservas recientes con JOIN a users
+            result = self.client.table('reservations').select('user_id, date, created_at, users(email, full_name)').gte(
                 'date', start_date
             ).execute()
 
             # Obtener datos de usuarios
-            users_result = self.client.table('users').select('email, full_name, last_login, created_at').execute()
-            users_dict = {u['email']: u for u in users_result.data}
+            users_result = self.client.table('users').select('id, email, full_name, created_at').execute()
+            users_dict = {u['id']: u for u in users_result.data}
 
             # Agrupar actividad por usuario
             user_activity = {}
             for reservation in result.data:
-                email = reservation['email']
-                if email not in user_activity:
-                    user_info = users_dict.get(email, {})
-                    user_activity[email] = {
-                        'name': reservation['name'],
+                if not reservation.get('users'):
+                    continue
+
+                user_id = reservation['user_id']
+                email = reservation['users']['email']
+
+                if user_id not in user_activity:
+                    user_info = users_dict.get(user_id, {})
+                    user_activity[user_id] = {
+                        'name': reservation['users']['full_name'],
                         'email': email,
                         'recent_reservations': 0,
                         'last_reservation': None,
-                        'last_login': self._format_colombia_datetime(user_info.get('last_login')),
                         'member_since': self._format_colombia_datetime(user_info.get('created_at'))
                     }
 
-                user_activity[email]['recent_reservations'] += 1
+                user_activity[user_id]['recent_reservations'] += 1
 
                 # Actualizar última reserva
-                if (not user_activity[email]['last_reservation'] or
-                        reservation['date'] > user_activity[email]['last_reservation']):
-                    user_activity[email]['last_reservation'] = reservation['date']
+                if (not user_activity[user_id]['last_reservation'] or
+                        reservation['date'] > user_activity[user_id]['last_reservation']):
+                    user_activity[user_id]['last_reservation'] = reservation['date']
 
             # Convertir a lista ordenada por actividad
             return sorted(user_activity.values(),
@@ -1330,12 +1353,33 @@ class AdminDatabaseManager:
 
     def save_cancellation_record(self, reservation_id: int, reservation_data: Dict,
                                  reason: str, admin_username: str) -> bool:
-        """Guardar registro de cancelación"""
+        """Guardar registro de cancelación - Now includes user_id"""
         try:
+            # Get user info from reservation_data
+            user_id = reservation_data.get('user_id')
+
+            # If we don't have user info in reservation_data, fetch from users table
+            if not reservation_data.get('email') or not reservation_data.get('name'):
+                if user_id:
+                    user_result = self.client.table('users').select('email, full_name').eq('id', user_id).execute()
+                    if user_result.data:
+                        user_email = user_result.data[0]['email']
+                        user_name = user_result.data[0]['full_name']
+                    else:
+                        user_email = 'Unknown'
+                        user_name = 'Unknown'
+                else:
+                    user_email = 'Unknown'
+                    user_name = 'Unknown'
+            else:
+                user_email = reservation_data.get('email')
+                user_name = reservation_data.get('name')
+
             result = self.client.table('reservation_cancellations').insert({
                 'original_reservation_id': reservation_id,
-                'user_email': reservation_data.get('email'),
-                'user_name': reservation_data.get('name'),
+                'user_id': user_id,
+                'user_email': user_email,
+                'user_name': user_name,
                 'reservation_date': reservation_data.get('date'),
                 'reservation_hour': reservation_data.get('hour'),
                 'cancellation_reason': reason,
