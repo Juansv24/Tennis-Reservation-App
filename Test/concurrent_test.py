@@ -19,11 +19,14 @@ from selenium.webdriver.firefox.options import Options
 from selenium.common.exceptions import TimeoutException, NoSuchElementException, WebDriverException
 from dotenv import load_dotenv
 
-# Load environment
-load_dotenv()
+os.chdir('C:/Users/jsval/OneDrive/Documents/Personal/Code/Python Proyects/Tennis-Reservation-App/Test')
+
+# Load environment variables
+load_dotenv('credentials.env')
 
 # Configuration
-APP_URL = os.getenv('APP_URL', 'http://localhost:3000')
+APP_URL = os.getenv('APP_URL')
+
 TEST_USERS = [
     {"email": "testuser1@test.com", "password": "TestUser2024!", "name": "Test User 1 VIP"},
     {"email": "testuser2@test.com", "password": "TestUser2024!", "name": "Test User 2 VIP"},
