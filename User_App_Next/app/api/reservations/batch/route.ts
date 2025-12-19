@@ -159,73 +159,60 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  // DEBUG: Log what we're sending to the database
-  console.log('=== RPC Call Debug ===')
-  console.log('user.id:', user.id)
-  console.log('reservations:', JSON.stringify(reservations, null, 2))
-  console.log('reservations type:', typeof reservations)
-  console.log('reservations isArray:', Array.isArray(reservations))
-  console.log('creditsNeeded:', creditsNeeded)
-  console.log('=====================')
+  // Create all reservations (direct INSERT - simpler approach)
+  const reservationInserts = reservations.map(res => ({
+    user_id: user.id,
+    date: res.date,
+    hour: res.hour,
+  }))
 
-  // Use atomic database function to create reservations and deduct credits
-  // This eliminates race conditions - the database guarantees atomicity
-  const { data: result, error: rpcError } = await supabase
-    .rpc('create_batch_reservations', {
-      p_user_id: user.id,
-      p_reservations: reservations,
-      p_credits_needed: creditsNeeded
-    })
-    .single() as { data: { success: boolean; error?: string; new_credits?: number; reservation_ids?: string[]; slot_taken?: { date: string; hour: number } } | null; error: any }
-
-  // DEBUG: Log the result
-  console.log('=== RPC Result Debug ===')
-  console.log('result:', result)
-  console.log('rpcError:', rpcError)
-  console.log('========================')
-
-  if (rpcError) {
-    console.error('RPC error:', rpcError)
-    return NextResponse.json(
-      { error: `Error del sistema: ${rpcError.message}` },
-      { status: 500 }
-    )
-  }
-
-  if (!result) {
-    return NextResponse.json(
-      { error: 'Error del sistema: No response from database' },
-      { status: 500 }
-    )
-  }
-
-  // Check if the atomic operation failed
-  if (!result.success) {
-    // Check if it's a slot taken error (race condition)
-    if (result.slot_taken) {
-      return NextResponse.json(
-        { error: result.error || 'Uno o más slots ya están reservados' },
-        { status: 409 }
-      )
-    }
-
-    // Other validation errors (credits, daily limit, etc.)
-    return NextResponse.json(
-      { error: result.error || 'Error al crear reserva' },
-      { status: 400 }
-    )
-  }
-
-  // Fetch the created reservations for the response
-  const { data: createdReservations } = await supabase
+  const { data: createdReservations, error: reservationError } = await supabase
     .from('reservations')
-    .select('*')
-    .in('id', result.reservation_ids || [])
+    .insert(reservationInserts)
+    .select()
+
+  // Handle unique constraint violation (slot already taken)
+  if (reservationError?.code === '23505') {
+    return NextResponse.json(
+      { error: 'Uno o más slots ya están reservados' },
+      { status: 409 }
+    )
+  }
+
+  if (reservationError) {
+    return NextResponse.json(
+      { error: reservationError.message },
+      { status: 500 }
+    )
+  }
+
+  // Deduct credits - AFTER successful reservation creation
+  const { error: updateError } = await supabase
+    .from('users')
+    .update({ credits: profile.credits - creditsNeeded })
+    .eq('id', user.id)
+
+  if (updateError) {
+    // Rollback: delete the reservations we just created
+    const ids = createdReservations?.map(r => r.id) || []
+    if (ids.length > 0) {
+      await supabase
+        .from('reservations')
+        .delete()
+        .in('id', ids)
+    }
+    return NextResponse.json(
+      { error: 'Error al actualizar créditos' },
+      { status: 500 }
+    )
+  }
+
+  const newCredits = profile.credits - creditsNeeded
 
   return NextResponse.json({
     success: true,
-    reservations: createdReservations || [],
+    reservations: createdReservations,
     credits_used: creditsNeeded,
-    new_credits: result.new_credits,
+    new_credits: newCredits,
   })
 }

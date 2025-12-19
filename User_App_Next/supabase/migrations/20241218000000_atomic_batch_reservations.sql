@@ -3,7 +3,7 @@
 
 CREATE OR REPLACE FUNCTION create_batch_reservations(
   p_user_id UUID,
-  p_reservations JSONB, -- Array of {date: 'YYYY-MM-DD', hour: number}
+  p_reservations TEXT, -- Array of {date: 'YYYY-MM-DD', hour: number} as JSON string
   p_credits_needed INTEGER
 ) RETURNS JSONB AS $$
 DECLARE
@@ -44,7 +44,7 @@ BEGIN
   -- Sort by date and hour to prevent deadlocks
   FOR v_reservation IN
     SELECT DISTINCT (elem->>'date')::DATE as res_date, (elem->>'hour')::INTEGER as res_hour
-    FROM jsonb_array_elements(p_reservations) AS elem
+    FROM jsonb_array_elements(p_reservations::jsonb) AS elem
     ORDER BY (elem->>'date')::DATE, (elem->>'hour')::INTEGER
   LOOP
     -- Advisory lock: Only ONE transaction can hold this lock at a time
@@ -55,7 +55,7 @@ BEGIN
   END LOOP;
 
   -- PHASE 2: Validate ALL slots AFTER acquiring locks
-  FOR v_reservation IN SELECT * FROM jsonb_array_elements(p_reservations)
+  FOR v_reservation IN SELECT * FROM jsonb_array_elements(p_reservations::jsonb)
   LOOP
     v_date := (v_reservation->>'date')::DATE;
     v_hour := (v_reservation->>'hour')::INTEGER;
@@ -79,7 +79,7 @@ BEGIN
   -- Group by date and check limits (FIXED: use record dot notation)
   FOR v_reservation IN
     SELECT (elem->>'date')::DATE as check_date, COUNT(*)::INTEGER as new_count
-    FROM jsonb_array_elements(p_reservations) AS elem
+    FROM jsonb_array_elements(p_reservations::jsonb) AS elem
     GROUP BY (elem->>'date')::DATE
   LOOP
     SELECT COUNT(*) INTO v_existing_count
@@ -95,7 +95,7 @@ BEGIN
   END LOOP;
 
   -- PHASE 2: All validations passed - now insert ALL reservations
-  FOR v_reservation IN SELECT * FROM jsonb_array_elements(p_reservations)
+  FOR v_reservation IN SELECT * FROM jsonb_array_elements(p_reservations::jsonb)
   LOOP
     v_date := (v_reservation->>'date')::DATE;
     v_hour := (v_reservation->>'hour')::INTEGER;
