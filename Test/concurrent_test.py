@@ -142,13 +142,13 @@ class UserSimulator:
             logger.info(f"{self.thread_name}: Navigating to {APP_URL}/login")
             self.driver.get(f"{APP_URL}/login")
 
-            # Wait for login form
+            # Wait for login form (inputs use id, not name)
             email_input = WebDriverWait(self.driver, 10).until(
-                EC.presence_of_element_located((By.NAME, "email"))
+                EC.presence_of_element_located((By.ID, "email"))
             )
 
-            password_input = self.driver.find_element(By.NAME, "password")
-            login_button = self.driver.find_element(By.XPATH, "//button[contains(text(), 'Iniciar')]")
+            password_input = self.driver.find_element(By.ID, "password")
+            login_button = self.driver.find_element(By.XPATH, "//button[@type='submit']")
 
             # Enter credentials
             email_input.send_keys(self.user_config['email'])
@@ -159,9 +159,9 @@ class UserSimulator:
             # Click login
             login_button.click()
 
-            # Wait for redirect to home/reservations page
+            # Wait for redirect away from login page (should go to dashboard '/')
             WebDriverWait(self.driver, 15).until(
-                EC.url_contains('/reservas')
+                lambda driver: '/login' not in driver.current_url
             )
 
             logger.info(f"{self.thread_name}: ✅ Login successful")
@@ -179,32 +179,59 @@ class UserSimulator:
             self._take_screenshot('login_error')
             return False
 
-    def select_random_slot(self) -> Optional[tuple]:
-        """Select a random available slot"""
+    def select_specific_slots(self, target_hours=[7, 8]) -> bool:
+        """Select specific time slots (default: 7 AM and 8 AM for tomorrow)"""
         try:
-            # Wait for reservation grid to load
+            # Wait for page to load
+            time.sleep(1)
+
+            # Expand "MAÑANA" (Tomorrow) accordion
+            try:
+                tomorrow_button = self.driver.find_element(By.XPATH, "//button[contains(., 'MAÑANA')]")
+                logger.debug(f"{self.thread_name}: Expanding 'MAÑANA' accordion")
+                self.driver.execute_script("arguments[0].click();", tomorrow_button)
+                time.sleep(0.8)
+            except Exception as e:
+                logger.error(f"{self.thread_name}: Could not expand MAÑANA accordion: {e}")
+                return False
+
+            # Wait for time slots to appear
             WebDriverWait(self.driver, 10).until(
-                EC.presence_of_element_located((By.CLASS_NAME, "reservation-grid"))
+                EC.presence_of_element_located((By.XPATH, "//button[contains(@class, 'bg-white') or contains(@class, 'bg-blue-100')]"))
             )
 
-            # Find all available slots
-            available_slots = self.driver.find_elements(
-                By.XPATH, "//button[contains(@class, 'available') or contains(@class, 'bg-green')]"
-            )
+            selected_count = 0
+            # Try to select each target hour
+            for hour in target_hours:
+                try:
+                    # Find the slot button containing the hour (e.g., "07:00" or "08:00")
+                    hour_text = f"{hour:02d}:00"
 
-            if not available_slots:
-                logger.warning(f"{self.thread_name}: No available slots found")
-                return None
+                    # Find all available slots
+                    available_slots = self.driver.find_elements(
+                        By.XPATH, f"//button[contains(@class, 'bg-white') and contains(@class, 'border-us-open-light-blue') and not(@disabled) and contains(., '{hour_text}')]"
+                    )
 
-            # Select random slot
-            slot = random.choice(available_slots)
-            slot_text = slot.text
-            logger.debug(f"{self.thread_name}: Clicking slot: {slot_text}")
+                    if available_slots:
+                        slot = available_slots[0]
+                        logger.info(f"{self.thread_name}: Selecting slot {hour_text}")
 
-            slot.click()
-            time.sleep(0.5)  # Brief pause for UI update
+                        # Use JavaScript to click the element
+                        self.driver.execute_script("arguments[0].click();", slot)
+                        time.sleep(0.4)
+                        selected_count += 1
+                    else:
+                        logger.warning(f"{self.thread_name}: Slot {hour_text} not available")
 
-            return (slot_text, slot)
+                except Exception as e:
+                    logger.error(f"{self.thread_name}: Error selecting slot {hour}: {e}")
+
+            if selected_count > 0:
+                logger.info(f"{self.thread_name}: Selected {selected_count} slot(s)")
+                return True
+            else:
+                logger.warning(f"{self.thread_name}: No slots were selected")
+                return False
 
         except Exception as e:
             logger.error(f"{self.thread_name}: Error selecting slot: {e}")
@@ -214,31 +241,41 @@ class UserSimulator:
     def confirm_reservation(self) -> bool:
         """Confirm the reservation"""
         try:
-            # Wait for confirmation modal
+            # Step 1: Click "Continuar" button (appears at bottom after selecting slots)
+            continue_button = WebDriverWait(self.driver, 5).until(
+                EC.presence_of_element_located((By.XPATH, "//button[contains(text(), 'Continuar')]"))
+            )
+            logger.debug(f"{self.thread_name}: Clicking 'Continuar' button")
+            # Use JavaScript click for reliability
+            self.driver.execute_script("arguments[0].click();", continue_button)
+            time.sleep(0.8)
+
+            # Step 2: Wait for confirmation modal and click "Confirmar Reserva"
             confirm_button = WebDriverWait(self.driver, 5).until(
-                EC.element_to_be_clickable((By.XPATH, "//button[contains(text(), 'Confirmar')]"))
+                EC.presence_of_element_located((By.XPATH, "//button[contains(text(), 'Confirmar Reserva')]"))
             )
 
-            logger.debug(f"{self.thread_name}: Clicking confirm button")
-            confirm_button.click()
+            logger.debug(f"{self.thread_name}: Clicking 'Confirmar Reserva' button")
+            # Use JavaScript click for reliability
+            self.driver.execute_script("arguments[0].click();", confirm_button)
 
             # Wait for success or error
             try:
-                # Check for success modal
+                # Check for success modal or message
                 WebDriverWait(self.driver, 5).until(
-                    EC.presence_of_element_located((By.XPATH, "//*[contains(text(), 'Reserva confirmada') or contains(text(), 'exitosa')]"))
+                    EC.presence_of_element_located((By.XPATH, "//*[contains(text(), 'Reserva confirmada') or contains(text(), 'exitosa') or contains(text(), 'éxito')]"))
                 )
                 logger.info(f"{self.thread_name}: ✅ Reservation confirmed successfully")
                 self._record_success('reservation')
                 return True
 
             except TimeoutException:
-                # Check for error message
+                # Check for error message (alert or modal)
                 try:
-                    error_msg = self.driver.find_element(By.XPATH, "//*[contains(@class, 'error') or contains(text(), 'Error') or contains(text(), 'ya está reservado')]")
+                    error_msg = self.driver.find_element(By.XPATH, "//*[contains(@class, 'error') or contains(text(), 'Error') or contains(text(), 'ya está reservado') or contains(text(), 'ya fue reservado')]")
                     error_text = error_msg.text
 
-                    if '409' in error_text or 'ya está reservado' in error_text:
+                    if '409' in error_text or 'ya está reservado' in error_text or 'ya fue reservado' in error_text:
                         logger.warning(f"{self.thread_name}: ⚠️  Race condition: {error_text}")
                         self._record_race_condition(error_text)
                     else:
@@ -295,27 +332,19 @@ class UserSimulator:
             if self.check_for_crashes():
                 return
 
-            # Navigate to reservations page
-            self.driver.get(f"{APP_URL}/reservas")
-            time.sleep(1)
+            # Wait for reservation grid to load (login already redirects to dashboard)
+            time.sleep(2)
 
-            # Try to make 1-3 reservations
-            num_attempts = random.randint(1, 3)
-            logger.info(f"{self.thread_name}: Attempting {num_attempts} reservation(s)")
+            # Select specific slots (7 AM and 8 AM for tomorrow) to create race condition
+            logger.info(f"{self.thread_name}: Attempting to reserve 7 AM and 8 AM slots for tomorrow")
 
-            for i in range(num_attempts):
-                # Select slot
-                slot_info = self.select_random_slot()
-                if not slot_info:
-                    logger.warning(f"{self.thread_name}: No slots available")
-                    break
-
+            if self.select_specific_slots([7, 8]):
                 # Check for crash after slot selection
                 if self.check_for_crashes():
                     return
 
-                # Random delay before confirming
-                time.sleep(random.uniform(0.3, 1.5))
+                # Small delay before confirming
+                time.sleep(random.uniform(0.3, 1.0))
 
                 # Confirm reservation
                 self.confirm_reservation()
@@ -323,10 +352,8 @@ class UserSimulator:
                 # Check for crash after confirmation
                 if self.check_for_crashes():
                     return
-
-                # Wait between reservations
-                if i < num_attempts - 1:
-                    time.sleep(random.uniform(1, 3))
+            else:
+                logger.warning(f"{self.thread_name}: Could not select slots")
 
             logger.info(f"{self.thread_name}: Test scenario completed")
 
@@ -512,7 +539,7 @@ if __name__ == "__main__":
     parser.add_argument('--delay', type=float, default=0.5, help='Stagger delay between users in seconds (default: 0.5)')
     parser.add_argument('--url', type=str, help='App URL (default: http://localhost:3000)')
 
-    args = parser.parse_args()
+    args, unknown = parser.parse_known_args()  # Ignore IDE debugger args (e.g., from PyCharm)
 
     if args.url:
         APP_URL = args.url

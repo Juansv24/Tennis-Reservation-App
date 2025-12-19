@@ -40,48 +40,65 @@ BEGIN
     );
   END IF;
 
-  -- Validate and insert each reservation atomically
+  -- PHASE 1: Acquire advisory locks FIRST (prevents phantom reads)
+  -- Sort by date and hour to prevent deadlocks
+  FOR v_reservation IN
+    SELECT DISTINCT (elem->>'date')::DATE as res_date, (elem->>'hour')::INTEGER as res_hour
+    FROM jsonb_array_elements(p_reservations) AS elem
+    ORDER BY (elem->>'date')::DATE, (elem->>'hour')::INTEGER
+  LOOP
+    -- Advisory lock: Only ONE transaction can hold this lock at a time
+    -- Lock is automatically released at transaction end
+    PERFORM pg_advisory_xact_lock(
+      hashtext(v_reservation.res_date::TEXT || '-' || v_reservation.res_hour::TEXT)
+    );
+  END LOOP;
+
+  -- PHASE 2: Validate ALL slots AFTER acquiring locks
   FOR v_reservation IN SELECT * FROM jsonb_array_elements(p_reservations)
   LOOP
     v_date := (v_reservation->>'date')::DATE;
     v_hour := (v_reservation->>'hour')::INTEGER;
 
-    -- Check if slot is already taken (with row lock)
+    -- Now check if slot is taken (we have exclusive lock, safe to check)
     SELECT EXISTS(
       SELECT 1 FROM reservations
       WHERE date = v_date AND hour = v_hour
-      FOR UPDATE -- Lock to prevent concurrent inserts
     ) INTO v_slot_taken;
 
     IF v_slot_taken THEN
-      -- Rollback will happen automatically
       RETURN jsonb_build_object(
         'success', false,
         'error', format('El slot %s:00 del %s ya está reservado', v_hour, v_date),
         'slot_taken', jsonb_build_object('date', v_date, 'hour', v_hour)
       );
     END IF;
+  END LOOP;
 
-    -- Check daily limit (max 2 hours per day)
+  -- Check daily limit ONCE for all reservations
+  -- Group by date and check limits (FIXED: use record dot notation)
+  FOR v_reservation IN
+    SELECT (elem->>'date')::DATE as check_date, COUNT(*)::INTEGER as new_count
+    FROM jsonb_array_elements(p_reservations) AS elem
+    GROUP BY (elem->>'date')::DATE
+  LOOP
     SELECT COUNT(*) INTO v_existing_count
     FROM reservations
-    WHERE user_id = p_user_id AND date = v_date;
+    WHERE user_id = p_user_id AND date = v_reservation.check_date;
 
-    -- Count how many we're trying to add for this date
-    DECLARE
-      v_new_for_date INTEGER;
-    BEGIN
-      SELECT COUNT(*) INTO v_new_for_date
-      FROM jsonb_array_elements(p_reservations) AS r
-      WHERE (r->>'date')::DATE = v_date;
+    IF v_existing_count + v_reservation.new_count > 2 THEN
+      RETURN jsonb_build_object(
+        'success', false,
+        'error', 'Solo puedes reservar máximo 2 horas por día'
+      );
+    END IF;
+  END LOOP;
 
-      IF v_existing_count + v_new_for_date > 2 THEN
-        RETURN jsonb_build_object(
-          'success', false,
-          'error', 'Solo puedes reservar máximo 2 horas por día'
-        );
-      END IF;
-    END;
+  -- PHASE 2: All validations passed - now insert ALL reservations
+  FOR v_reservation IN SELECT * FROM jsonb_array_elements(p_reservations)
+  LOOP
+    v_date := (v_reservation->>'date')::DATE;
+    v_hour := (v_reservation->>'hour')::INTEGER;
 
     -- Insert the reservation
     INSERT INTO reservations (user_id, date, hour)

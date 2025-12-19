@@ -249,13 +249,14 @@ export default function ReservationGrid({
     }
 
     // Check if past (using Colombian timezone)
-    const colombiaTime = getColombiaTime()
-    const slotDate = new Date(date + 'T00:00:00')
-    const currentHour = getColombiaHour()
+    // TEMPORARILY DISABLED FOR TESTING
+    // const colombiaTime = getColombiaTime()
+    // const slotDate = new Date(date + 'T00:00:00')
+    // const currentHour = getColombiaHour()
 
-    if (slotDate.toDateString() === colombiaTime.toDateString() && hour < currentHour) {
-      return { status: 'past' }
-    }
+    // if (slotDate.toDateString() === colombiaTime.toDateString() && hour < currentHour) {
+    //   return { status: 'past' }
+    // }
 
     // Check if reserved
     const reservation = reservationsList.find((r) => r.hour === hour)
@@ -462,7 +463,8 @@ export default function ReservationGrid({
 
     return COURT_HOURS.filter(hour => {
       // Check if past
-      if (isToday && hour < currentHour) return false
+      // TEMPORARILY DISABLED FOR TESTING
+      // if (isToday && hour < currentHour) return false
 
       // Check if in maintenance
       if (maintenanceList.some(m => m.hour === hour)) return false
@@ -578,7 +580,8 @@ export default function ReservationGrid({
                       const isToday = slotDate.toDateString() === colombiaTime.toDateString()
 
                       const availableHours = COURT_HOURS.filter(hour => {
-                        if (isToday && hour < currentHour) return false
+                        // TEMPORARILY DISABLED FOR TESTING
+                        // if (isToday && hour < currentHour) return false
                         return true
                       })
 
