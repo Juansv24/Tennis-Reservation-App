@@ -174,7 +174,7 @@ export async function POST(request: NextRequest) {
   // Handle unique constraint violation (slot already taken)
   if (reservationError?.code === '23505') {
     return NextResponse.json(
-      { error: 'Uno o más slots ya están reservados' },
+      { error: 'Uno o más horarios ya están reservados' },
       { status: 409 }
     )
   }
