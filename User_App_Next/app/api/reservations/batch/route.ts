@@ -80,7 +80,7 @@ export async function POST(request: NextRequest) {
 
   // Check time-based reservation restrictions (Colombian timezone)
   const currentHour = getColombiaHour()
-  const maxHour = profile.is_vip ? 20 : 16 // VIP: 8 PM, Regular: 4 PM (last hour to make reservation)
+  const maxHour = profile.is_vip ? 23 : 16 // VIP: 11 PM, Regular: 4 PM (last hour to make reservation)
 
   if (currentHour < 8) {
     return NextResponse.json(
@@ -90,7 +90,7 @@ export async function POST(request: NextRequest) {
   }
 
   if (currentHour > maxHour) {
-    const maxTime = profile.is_vip ? '8:00 PM' : '5:00 PM'
+    const maxTime = profile.is_vip ? '11:00 PM' : '5:00 PM'
     return NextResponse.json(
       { error: `Las reservas están disponibles hasta las ${maxTime}` },
       { status: 400 }

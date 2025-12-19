@@ -62,14 +62,14 @@ export function canMakeReservationNow(isVip: boolean): [boolean, string] {
   const currentHour = getColombiaHour()
 
   if (isVip) {
-    // VIP users: 8 AM - 8 PM (20:00)
-    if (currentHour >= 8 && currentHour <= 20) {
+    // VIP users: 8 AM - 11 PM (23:00)
+    if (currentHour >= 8 && currentHour <= 23) {
       return [true, '']
     } else {
       if (currentHour < 8) {
         return [false, 'Las reservas están disponibles a partir de las 8:00 AM']
       } else {
-        return [false, 'Las reservas están disponibles hasta las 8:00 PM']
+        return [false, 'Las reservas están disponibles hasta las 11:00 PM']
       }
     }
   } else {

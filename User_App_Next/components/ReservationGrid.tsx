@@ -53,7 +53,7 @@ export default function ReservationGrid({
 
     const scheduleNextCheck = () => {
       const currentHour = getColombiaHour()
-      const maxHour = user.is_vip ? 20 : 16
+      const maxHour = user.is_vip ? 23 : 16
 
       let msUntilChange: number
 
@@ -249,14 +249,13 @@ export default function ReservationGrid({
     }
 
     // Check if past (using Colombian timezone)
-    // TEMPORARILY DISABLED FOR TESTING
-    // const colombiaTime = getColombiaTime()
-    // const slotDate = new Date(date + 'T00:00:00')
-    // const currentHour = getColombiaHour()
+    const colombiaTime = getColombiaTime()
+    const slotDate = new Date(date + 'T00:00:00')
+    const currentHour = getColombiaHour()
 
-    // if (slotDate.toDateString() === colombiaTime.toDateString() && hour < currentHour) {
-    //   return { status: 'past' }
-    // }
+    if (slotDate.toDateString() === colombiaTime.toDateString() && hour < currentHour) {
+      return { status: 'past' }
+    }
 
     // Check if reserved
     const reservation = reservationsList.find((r) => r.hour === hour)
@@ -463,8 +462,7 @@ export default function ReservationGrid({
 
     return COURT_HOURS.filter(hour => {
       // Check if past
-      // TEMPORARILY DISABLED FOR TESTING
-      // if (isToday && hour < currentHour) return false
+      if (isToday && hour < currentHour) return false
 
       // Check if in maintenance
       if (maintenanceList.some(m => m.hour === hour)) return false
@@ -580,8 +578,7 @@ export default function ReservationGrid({
                       const isToday = slotDate.toDateString() === colombiaTime.toDateString()
 
                       const availableHours = COURT_HOURS.filter(hour => {
-                        // TEMPORARILY DISABLED FOR TESTING
-                        // if (isToday && hour < currentHour) return false
+                        if (isToday && hour < currentHour) return false
                         return true
                       })
 
