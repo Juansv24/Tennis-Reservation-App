@@ -159,15 +159,30 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  // DEBUG: Log what we're sending to the database
+  console.log('=== RPC Call Debug ===')
+  console.log('user.id:', user.id)
+  console.log('reservations:', JSON.stringify(reservations, null, 2))
+  console.log('reservations type:', typeof reservations)
+  console.log('reservations isArray:', Array.isArray(reservations))
+  console.log('creditsNeeded:', creditsNeeded)
+  console.log('=====================')
+
   // Use atomic database function to create reservations and deduct credits
   // This eliminates race conditions - the database guarantees atomicity
   const { data: result, error: rpcError } = await supabase
     .rpc('create_batch_reservations', {
       p_user_id: user.id,
-      p_reservations: JSON.stringify(reservations),
+      p_reservations: reservations,
       p_credits_needed: creditsNeeded
     })
     .single() as { data: { success: boolean; error?: string; new_credits?: number; reservation_ids?: string[]; slot_taken?: { date: string; hour: number } } | null; error: any }
+
+  // DEBUG: Log the result
+  console.log('=== RPC Result Debug ===')
+  console.log('result:', result)
+  console.log('rpcError:', rpcError)
+  console.log('========================')
 
   if (rpcError) {
     console.error('RPC error:', rpcError)
