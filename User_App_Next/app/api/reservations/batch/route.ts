@@ -164,7 +164,7 @@ export async function POST(request: NextRequest) {
   const { data: result, error: rpcError } = await supabase
     .rpc('create_batch_reservations', {
       p_user_id: user.id,
-      p_reservations: reservations,
+      p_reservations: JSON.stringify(reservations),
       p_credits_needed: creditsNeeded
     })
     .single() as { data: { success: boolean; error?: string; new_credits?: number; reservation_ids?: string[]; slot_taken?: { date: string; hour: number } } | null; error: any }
