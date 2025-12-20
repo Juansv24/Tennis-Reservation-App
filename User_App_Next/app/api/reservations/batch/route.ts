@@ -159,60 +159,98 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  // Create all reservations (direct INSERT - simpler approach)
-  const reservationInserts = reservations.map(res => ({
-    user_id: user.id,
-    date: res.date,
-    hour: res.hour,
-  }))
+  // Use single-payload RPC approach to avoid JSONB serialization issues
+  // All parameters wrapped in one JSONB object
+  const { data: result, error: rpcError } = await supabase
+    .rpc('confirm_batch_reservation', {
+      payload: {
+        user_id: user.id,
+        credits_needed: creditsNeeded,
+        slots: reservations.map(r => ({
+          res_date: r.date,
+          res_hour: r.hour
+        }))
+      }
+    })
+    .single() as { data: { success: boolean; error_code?: string; error?: string; new_credits?: number; reservation_ids?: string[] } | null; error: any }
 
-  const { data: createdReservations, error: reservationError } = await supabase
-    .from('reservations')
-    .insert(reservationInserts)
-    .select()
-
-  // Handle unique constraint violation (slot already taken)
-  if (reservationError?.code === '23505') {
+  // Handle RPC errors (system-level failures)
+  if (rpcError) {
+    console.error('RPC error:', rpcError)
     return NextResponse.json(
-      { error: 'Uno o más horarios ya están reservados' },
-      { status: 409 }
-    )
-  }
-
-  if (reservationError) {
-    return NextResponse.json(
-      { error: reservationError.message },
+      { error: `Error del sistema: ${rpcError.message}` },
       { status: 500 }
     )
   }
 
-  // Deduct credits - AFTER successful reservation creation
-  const { error: updateError } = await supabase
-    .from('users')
-    .update({ credits: profile.credits - creditsNeeded })
-    .eq('id', user.id)
+  if (!result) {
+    return NextResponse.json(
+      { error: 'Error del sistema: No response from database' },
+      { status: 500 }
+    )
+  }
 
-  if (updateError) {
-    // Rollback: delete the reservations we just created
-    const ids = createdReservations?.map(r => r.id) || []
-    if (ids.length > 0) {
-      await supabase
-        .from('reservations')
-        .delete()
-        .in('id', ids)
+  // Handle business logic failures (returned by function)
+  if (!result.success) {
+    switch (result.error_code) {
+      case 'SLOT_ALREADY_TAKEN':
+        return NextResponse.json(
+          { error: result.error || 'Uno o más horarios ya están reservados' },
+          { status: 409 }
+        )
+      case 'INSUFFICIENT_CREDITS':
+        return NextResponse.json(
+          { error: result.error || 'Sin créditos suficientes' },
+          { status: 400 }
+        )
+      case 'DAILY_LIMIT_EXCEEDED':
+        return NextResponse.json(
+          { error: result.error || 'Máximo 2 horas por día' },
+          { status: 400 }
+        )
+      case 'NON_CONSECUTIVE_HOURS':
+        return NextResponse.json(
+          { error: result.error || 'Las 2 horas reservadas deben ser consecutivas' },
+          { status: 400 }
+        )
+      case 'CONSECUTIVE_DAY_SAME_HOUR':
+        return NextResponse.json(
+          { error: result.error || 'No puedes reservar el mismo horario en días consecutivos' },
+          { status: 400 }
+        )
+      case 'MULTIPLE_DATES':
+        return NextResponse.json(
+          { error: result.error || 'Solo puedes hacer reservas para un día a la vez' },
+          { status: 400 }
+        )
+      case 'TOO_MANY_SLOTS':
+        return NextResponse.json(
+          { error: result.error || 'Máximo 2 horas por reserva' },
+          { status: 400 }
+        )
+      case 'UNAUTHORIZED':
+        return NextResponse.json(
+          { error: result.error || 'No autorizado' },
+          { status: 403 }
+        )
+      default:
+        return NextResponse.json(
+          { error: result.error || 'Error al crear reserva' },
+          { status: 400 }
+        )
     }
-    return NextResponse.json(
-      { error: 'Error al actualizar créditos' },
-      { status: 500 }
-    )
   }
 
-  const newCredits = profile.credits - creditsNeeded
+  // Success! Fetch the created reservations for the response
+  const { data: createdReservations } = await supabase
+    .from('reservations')
+    .select('*')
+    .in('id', result.reservation_ids || [])
 
   return NextResponse.json({
     success: true,
-    reservations: createdReservations,
+    reservations: createdReservations || [],
     credits_used: creditsNeeded,
-    new_credits: newCredits,
+    new_credits: result.new_credits,
   })
 }
