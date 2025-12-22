@@ -83,11 +83,12 @@ test_results = {
 class UserSimulator:
     """Simulates a single user interacting with the app"""
 
-    def __init__(self, user_config: Dict, user_index: int):
+    def __init__(self, user_config: Dict, user_index: int, target_hours: List[int] = None):
         self.user_config = user_config
         self.user_index = user_index
         self.driver: Optional[webdriver.Firefox] = None
         self.thread_name = f"User{user_index}"
+        self.target_hours = target_hours if target_hours else [7, 8]
 
     def setup_driver(self):
         """Initialize Firefox WebDriver"""
@@ -335,10 +336,11 @@ class UserSimulator:
             # Wait for reservation grid to load (login already redirects to dashboard)
             time.sleep(2)
 
-            # Select specific slots (7 AM and 8 AM for tomorrow) to create race condition
-            logger.info(f"{self.thread_name}: Attempting to reserve 7 AM and 8 AM slots for tomorrow")
+            # Select specific slots to create race condition
+            hours_str = " and ".join([f"{h} AM" if h < 12 else f"{h-12} PM" for h in self.target_hours])
+            logger.info(f"{self.thread_name}: Attempting to reserve {hours_str} slots for tomorrow")
 
-            if self.select_specific_slots([7, 8]):
+            if self.select_specific_slots(self.target_hours):
                 # Check for crash after slot selection
                 if self.check_for_crashes():
                     return
@@ -447,13 +449,28 @@ def run_concurrent_test(num_users: int = 10, stagger_delay: float = 0.5):
     with results_lock:
         test_results['total_users'] = num_users
 
-    # Create threads for each user
+    # Create threads for each user with different hour slots
+    # Strategy: Mix of overlapping and non-overlapping slots
+    hour_assignments = [
+        [7, 8],   # User 1
+        [7, 8],   # User 2 (overlaps with User 1)
+        [8, 9],   # User 3 (overlaps hour 8 with Users 1-2)
+        [9, 10],  # User 4
+        [9, 10],  # User 5 (overlaps with User 4)
+        [10, 11], # User 6 (overlaps hour 10 with Users 4-5)
+        [11, 12], # User 7
+        [12, 13], # User 8
+        [13, 14], # User 9
+        [14, 15], # User 10
+    ]
+
     threads = []
     simulators = []
 
     for i in range(num_users):
         user_config = TEST_USERS[i % len(TEST_USERS)]
-        simulator = UserSimulator(user_config, i + 1)
+        target_hours = hour_assignments[i % len(hour_assignments)]
+        simulator = UserSimulator(user_config, i + 1, target_hours)
         simulators.append(simulator)
 
         thread = threading.Thread(

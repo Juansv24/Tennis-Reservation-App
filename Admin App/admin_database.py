@@ -1262,8 +1262,8 @@ class AdminDatabaseManager:
             start_date = week_dates[0].strftime('%Y-%m-%d')
             end_date = week_dates[6].strftime('%Y-%m-%d')
 
-            # Obtener reservas de la semana
-            result = self.client.table('reservations').select('date, hour, name, email').gte(
+            # Obtener reservas de la semana with JOIN to users table
+            result = self.client.table('reservations').select('date, hour, user_id, users(full_name, email)').gte(
                 'date', start_date
             ).lte('date', end_date).execute()
 
@@ -1277,12 +1277,19 @@ class AdminDatabaseManager:
             for reservation in result.data:
                 date_str = reservation['date']
                 hour = reservation['hour']
-                name = reservation['name']
+
+                # Get name from JOIN - handle case where user was deleted
+                if reservation.get('users'):
+                    name = reservation['users']['full_name']
+                    email = reservation['users']['email']
+                else:
+                    name = 'Usuario Eliminado'
+                    email = 'N/A'
 
                 if date_str in reservations_grid:
                     reservations_grid[date_str][hour] = {
                         'name': name,
-                        'email': reservation['email']
+                        'email': email
                     }
 
             return {
@@ -1502,7 +1509,7 @@ class AdminDatabaseManager:
             # Verificar si ya existen reservas en alguna de las horas
             conflicting_reservations = []
             for hour in hours_to_block:
-                existing_reservation = self.client.table('reservations').select('id, email, hour').eq(
+                existing_reservation = self.client.table('reservations').select('id').eq(
                     'date', date
                 ).eq('hour', hour).execute()
 
