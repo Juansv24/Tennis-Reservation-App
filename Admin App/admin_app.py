@@ -461,6 +461,7 @@ def show_dashboard_tab():
         # Crear el calendario como tabla
         week_dates = calendar_data['week_dates']
         reservations_grid = calendar_data['reservations_grid']
+        maintenance_grid = calendar_data.get('maintenance_grid', {})
 
         # Nombres de los días
         day_names = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo']
@@ -481,10 +482,17 @@ def show_dashboard_tab():
                 date_str = date.strftime('%Y-%m-%d')
                 day_name = day_names[i]
 
-                # Obtener reserva para este día/hora
+                # Check for maintenance first (it blocks reservations)
+                maintenance = maintenance_grid.get(date_str, {}).get(hour)
                 reservation = reservations_grid.get(date_str, {}).get(hour)
 
-                if reservation:
+                if maintenance:
+                    # Check if it's Tennis School or regular maintenance
+                    if maintenance.get('type') == 'tennis_school':
+                        row[f"{day_name}\n{date.strftime('%d/%m')}"] = "🎾🏫 Escuela de Tenis"
+                    else:
+                        row[f"{day_name}\n{date.strftime('%d/%m')}"] = f"🔧 {maintenance.get('reason', 'Mantenimiento')}"
+                elif reservation:
                     # Mostrar nombre (truncado si es muy largo)
                     name = reservation['name']
                     if len(name) > 12:
@@ -504,12 +512,24 @@ def show_dashboard_tab():
         # Aplicar estilos a la tabla
         def style_calendar_table(val):
             """Aplicar estilos según el contenido"""
-            if "🎾" in str(val):
+            val_str = str(val)
+
+            # Tennis School slots - Light green background, dark green border and text
+            if "🎾🏫" in val_str or "Escuela de Tenis" in val_str:
+                return 'background-color: #d4edda; color: #155724; text-align: center; font-weight: bold; border: 2px solid #28a745; font-size: 0.9em;'
+            # Regular maintenance - Gray/orange
+            elif "🔧" in val_str:
+                return 'background-color: #fff3cd; color: #856404; text-align: center; font-weight: bold; border: 1px solid #ffc107;'
+            # Regular reservations - Light green
+            elif "🎾" in val_str and "🏫" not in val_str:
                 return 'background-color: #e8f5e8; color: #2e7d32; text-align: center; font-weight: bold; border: 1px solid #4caf50;'
-            elif "⚪ Libre" in str(val):
+            # Free slots
+            elif "⚪ Libre" in val_str:
                 return 'background-color: #f5f5f5; color: #757575; text-align: center; border: 1px solid #e0e0e0;'
-            elif "Hora" in str(val):
+            # Hour column
+            elif "Hora" in val_str:
                 return 'background-color: #1976d2; color: white; text-align: center; font-weight: bold; border: 1px solid #1565c0;'
+            # Day headers
             else:
                 return 'text-align: center; font-weight: bold; border: 1px solid #2478CC; background-color: #e3f2fd;'
 
@@ -518,13 +538,15 @@ def show_dashboard_tab():
         st.dataframe(styled_df, use_container_width=True, hide_index=True)
 
         # Leyenda
-        col1, col2, col3 = st.columns(3)
+        col1, col2, col3, col4 = st.columns(4)
         with col1:
-            st.markdown("🎾 **Reservado** - Usuario asignado")
+            st.markdown("🎾 **Reservado**")
         with col2:
-            st.markdown("⚪ **Libre** - Disponible para reservar")
+            st.markdown("🎾🏫 **Escuela de Tenis**")
         with col3:
-            st.markdown(f"📊 **Total: {calendar_data['total_reservations']} reservas**")
+            st.markdown("🔧 **Mantenimiento**")
+        with col4:
+            st.markdown("⚪ **Libre**")
 
     else:
         st.error("❌ Error cargando datos del calendario")
@@ -812,6 +834,7 @@ def show_user_detailed_info(user):
         - **Nombre:** {user['full_name']}
         - **Email:** {user['email']}
         - **Créditos:** {user['credits'] or 0}
+        - **Estado:** {'✅ Activo' if user.get('is_active', True) else '🚫 Bloqueado'}
         - **Estado VIP:** {'⭐ VIP' if user.get('is_vip', False) else '👤 Regular'}
         - **Primer login completado:** {'✅ Sí' if user.get('first_login_completed', False) else '⏳ Pendiente'}
         - **Registrado:** {user['created_at'][:10] if 'created_at' in user and user['created_at'] else 'N/A'}
@@ -827,17 +850,30 @@ def show_user_detailed_info(user):
         - **Última reserva:** {stats['last_reservation'] or 'Nunca'}
         """)
 
-    # Botón para toggle VIP (replaces is_active toggle)
-    is_vip = user.get('is_vip', False)
-    vip_text = "Quitar VIP" if is_vip else "Hacer VIP"
-    if st.button(f"⭐ {vip_text}", key=f"toggle_vip_{user['id']}"):
-        with st.spinner(f"🔄 Actualizando estado VIP..."):
-            success = toggle_vip_status_callback(user['id'], is_vip)
-            if not success:
-                st.error(f"❌ Error al actualizar estado VIP")
+    # Botón para bloquear/desbloquear usuario
+    is_active = user.get('is_active', True)
+    block_text = "🚫 Bloquear Usuario" if is_active else "✅ Desbloquear Usuario"
+    block_type = "secondary" if is_active else "primary"
+
+    if st.button(block_text, key=f"toggle_block_{user['id']}", type=block_type):
+        admin_user = st.session_state.get('admin_user', {})
+        admin_username = admin_user.get('username', 'admin')
+
+        with st.spinner(f"🔄 {'Bloqueando' if is_active else 'Desbloqueando'} usuario..."):
+            if is_active:
+                # Block user
+                success, message = admin_db_manager.block_user(user['email'], admin_username)
             else:
-                st.success(f"✅ Estado VIP actualizado")
+                # Unblock user
+                success, message = admin_db_manager.unblock_user(user['email'], admin_username)
+
+            if success:
+                st.success(message)
+                # Keep expander open after blocking/unblocking
+                mantener_expander_abierto_admin(user['id'], 'bloqueo', 15)
                 st.rerun()
+            else:
+                st.error(message)
 
 
 def show_users_management_tab():
@@ -1516,7 +1552,74 @@ def show_config_tab():
 
     st.markdown("---")
 
+    # ========================================
+    # ESCUELA DE TENIS
+    # ========================================
+    st.markdown("""
+    <div style="
+        background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%);
+        border: 2px solid #28a745;
+        border-radius: 15px;
+        padding: 20px;
+        margin: 20px 0;
+        text-align: center;
+    ">
+        <h3 style="margin: 0; color: #155724;">🎾 Escuela de Tenis</h3>
+        <p style="margin: 10px 0 0 0; color: #155724;">Bloquear Sábados y Domingos 8:00 AM - 12:00 PM</p>
+    </div>
+    """, unsafe_allow_html=True)
 
+    col1, col2, col3 = st.columns([1, 2, 1])
+
+    with col2:
+        is_enabled = admin_db_manager.get_tennis_school_enabled()
+
+        st.markdown(f"""
+        <div style="
+            text-align: center;
+            padding: 15px;
+            background: {'#d4edda' if is_enabled else '#f8d7da'};
+            border-radius: 10px;
+            margin: 15px 0;
+        ">
+            <p style="margin: 0; font-size: 1.3em; font-weight: bold; color: {'#155724' if is_enabled else '#721c24'};">
+                {'✅ ACTIVA' if is_enabled else '❌ INACTIVA'}
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
+
+        if is_enabled:
+            if st.button("🔴 Desactivar", key="tennis_school_disable", type="secondary", use_container_width=True):
+                admin_username = st.session_state.admin_user.get('username', 'admin')
+                success, message = admin_db_manager.set_tennis_school_enabled(False, admin_username)
+                if success:
+                    st.success(message)
+                    st.rerun()
+                else:
+                    st.error(message)
+        else:
+            if st.button("✅ Activar", key="tennis_school_enable", type="primary", use_container_width=True):
+                admin_username = st.session_state.admin_user.get('username', 'admin')
+                success, message = admin_db_manager.set_tennis_school_enabled(True, admin_username)
+                if success:
+                    st.success(message)
+                    st.balloons()
+                    st.rerun()
+                else:
+                    st.error(message)
+
+        with st.expander("ℹ️ ¿Qué hace esto?", expanded=False):
+            st.markdown("""
+            **Cuando está activa:**
+            - Todos los sábados y domingos de 8:00 AM a 12:00 PM quedan bloqueados
+            - Los usuarios no pueden hacer reservas en estos horarios
+            - Los horarios aparecen marcados como "Escuela de Tenis"
+
+            **Cuando está inactiva:**
+            - Los sábados y domingos están disponibles para reservas normales
+            """)
+
+    st.markdown("---")
 
     # Gestión de Usuarios del comité
     st.markdown("""
@@ -1577,6 +1680,9 @@ def show_maintenance_tab():
     """Mostrar pestaña de gestión de mantenimiento"""
     st.subheader("🔧 Gestión de Mantenimiento de Cancha")
 
+    # ========================================
+    # MAINTENANCE SECTION
+    # ========================================
     st.markdown("""
     <div style="
         background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
@@ -1710,13 +1816,13 @@ def show_maintenance_tab():
     start_date = get_colombia_today().strftime('%Y-%m-%d')
     end_date = (get_colombia_today() + timedelta(days=days_range)).strftime('%Y-%m-%d')
 
-    maintenance_slots = admin_db_manager.get_maintenance_slots(start_date, end_date)
+    blocked_slots = admin_db_manager.get_blocked_slots(start_date, end_date)
 
-    if maintenance_slots:
-        st.info(f"📊 Total de mantenimientos programados: {len(maintenance_slots)}")
+    if blocked_slots:
+        st.info(f"📊 Total de mantenimientos programados: {len(blocked_slots)}")
 
         # Mostrar cada mantenimiento
-        for slot in maintenance_slots:
+        for slot in blocked_slots:
             # Formatear fecha
             try:
                 from datetime import datetime as dt

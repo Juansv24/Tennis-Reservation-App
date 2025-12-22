@@ -44,7 +44,7 @@ const date = new Date(dateString + 'T00:00:00')  // No timezone!
 **What it fixes:**
 - `users.created_at` - Now uses `timezone('America/Bogota', now())`
 - `reservations.created_at` - Colombian time
-- `maintenance_slots.created_at` - Colombian time
+- `blocked_slots.created_at` - Colombian time
 - `access_codes.created_at` - Colombian time
 - `email_verification_tokens.created_at` - Colombian time
 - `password_reset_tokens.created_at` - Colombian time

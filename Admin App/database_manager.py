@@ -329,11 +329,21 @@ class SupabaseManager:
                 return False
 
             # Check for maintenance slots
-            maintenance_result = self.client.table('maintenance_slots').select('id').eq(
+            maintenance_result = self.client.table('blocked_slots').select('id').eq(
                 'date', date.strftime('%Y-%m-%d')
             ).eq('hour', hour).execute()
 
-            return len(maintenance_result.data) == 0
+            if maintenance_result.data:
+                return False
+
+            # Check for Tennis School time (if enabled)
+            tennis_school_check = self.client.table('system_settings').select('tennis_school_enabled').limit(1).execute()
+            if tennis_school_check.data and tennis_school_check.data[0].get('tennis_school_enabled', False):
+                # Check if Saturday/Sunday 8-11 AM
+                if date.weekday() in [5, 6] and hour in [8, 9, 10, 11]:
+                    return False
+
+            return True
 
         except Exception as e:
             print(f"Error checking slot availability: {e}")
@@ -420,10 +430,10 @@ class SupabaseManager:
         except Exception as e:
             return False, f"Error: {str(e)}"
 
-    def get_maintenance_slots_for_date(self, date: datetime.date) -> List[int]:
+    def get_blocked_slots_for_date(self, date: datetime.date) -> List[int]:
         """Obtener horarios de mantenimiento para una fecha"""
         try:
-            result = self.client.table('maintenance_slots').select('hour').eq(
+            result = self.client.table('blocked_slots').select('hour').eq(
                 'date', date.strftime('%Y-%m-%d')
             ).execute()
             return [row['hour'] for row in result.data]

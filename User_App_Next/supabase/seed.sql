@@ -59,7 +59,7 @@ ON CONFLICT DO NOTHING;
 --
 -- Replace dates with actual dates you want to block
 
--- INSERT INTO public.maintenance_slots (date, hour, reason) VALUES
+-- INSERT INTO public.blocked_slots (date, hour, reason) VALUES
 --   ('2025-12-10', 8, 'Mantenimiento de cancha'),
 --   ('2025-12-10', 9, 'Mantenimiento de cancha'),
 --   ('2025-12-15', 14, 'Evento especial')
@@ -77,4 +77,4 @@ ON CONFLICT DO NOTHING;
 -- SELECT * FROM public.lock_code ORDER BY created_at DESC LIMIT 1;
 
 -- Check maintenance slots (if any)
--- SELECT * FROM public.maintenance_slots ORDER BY date, hour;
+-- SELECT * FROM public.blocked_slots ORDER BY date, hour;

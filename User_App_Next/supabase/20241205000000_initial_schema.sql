@@ -105,7 +105,7 @@ CREATE POLICY "Authenticated users can view lock code"
 -- MAINTENANCE SLOTS TABLE
 -- =====================================================
 -- Stores maintenance/blocked time slots
-CREATE TABLE public.maintenance_slots (
+CREATE TABLE public.blocked_slots (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   date DATE NOT NULL,
   hour INTEGER NOT NULL CHECK (hour >= 6 AND hour <= 21),
@@ -115,15 +115,15 @@ CREATE TABLE public.maintenance_slots (
 );
 
 -- Enable Row Level Security
-ALTER TABLE public.maintenance_slots ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.blocked_slots ENABLE ROW LEVEL SECURITY;
 
 -- Maintenance slots RLS Policies
 CREATE POLICY "Anyone can view maintenance slots"
-  ON public.maintenance_slots FOR SELECT
+  ON public.blocked_slots FOR SELECT
   USING (true);
 
 -- Create index for faster queries
-CREATE INDEX idx_maintenance_slots_date ON public.maintenance_slots(date);
+CREATE INDEX idx_blocked_slots_date ON public.blocked_slots(date);
 
 -- =====================================================
 -- TRIGGERS
@@ -157,7 +157,7 @@ COMMENT ON TABLE public.users IS 'User profiles extending Supabase auth.users';
 COMMENT ON TABLE public.reservations IS 'Court time slot reservations';
 COMMENT ON TABLE public.access_codes IS 'Access codes for user registration';
 COMMENT ON TABLE public.lock_code IS 'Lock code for court access';
-COMMENT ON TABLE public.maintenance_slots IS 'Maintenance/blocked time slots';
+COMMENT ON TABLE public.blocked_slots IS 'Maintenance/blocked time slots';
 
 COMMENT ON COLUMN public.users.credits IS 'Number of available reservation credits (default: 0)';
 COMMENT ON COLUMN public.users.is_vip IS 'VIP users have unlimited reservations';

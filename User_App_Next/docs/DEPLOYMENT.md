@@ -144,7 +144,7 @@ CREATE POLICY "Authenticated users can view lock code"
   USING (auth.uid() IS NOT NULL);
 
 -- Maintenance slots table
-CREATE TABLE public.maintenance_slots (
+CREATE TABLE public.blocked_slots (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   date DATE NOT NULL,
   hour INTEGER NOT NULL CHECK (hour >= 6 AND hour <= 21),
@@ -154,15 +154,15 @@ CREATE TABLE public.maintenance_slots (
 );
 
 -- Enable Row Level Security
-ALTER TABLE public.maintenance_slots ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.blocked_slots ENABLE ROW LEVEL SECURITY;
 
 -- Maintenance slots RLS Policies
 CREATE POLICY "Anyone can view maintenance slots"
-  ON public.maintenance_slots FOR SELECT
+  ON public.blocked_slots FOR SELECT
   USING (true);
 
 -- Create index for faster queries
-CREATE INDEX idx_maintenance_slots_date ON public.maintenance_slots(date);
+CREATE INDEX idx_blocked_slots_date ON public.blocked_slots(date);
 
 -- Function to create user profile on signup
 CREATE OR REPLACE FUNCTION public.handle_new_user()
@@ -218,7 +218,7 @@ VALUES ('1234');
 1. Go to **Database** > **Replication**
 2. Find the `reservations` table in the list
 3. Enable replication by toggling the switch to **ON**
-4. Find the `maintenance_slots` table
+4. Find the `blocked_slots` table
 5. Enable replication for this table as well
 
 ### Step 6: Configure Authentication

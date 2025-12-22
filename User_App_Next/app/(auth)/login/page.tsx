@@ -62,13 +62,22 @@ function LoginForm() {
         return
       }
 
-      // Check if first login completed
+      // Check if user is active (not blocked)
       const { data: profile } = await supabase
         .from('users')
-        .select('first_login_completed')
+        .select('is_active, first_login_completed')
         .eq('id', data.user.id)
         .single()
 
+      // If user is blocked, sign them out and show error
+      if (profile && profile.is_active === false) {
+        await supabase.auth.signOut()
+        setError('Tu cuenta ha sido bloqueada. Por favor contacta al administrador de la aplicación para más información.')
+        setLoading(false)
+        return
+      }
+
+      // Check if first login completed
       if (!profile?.first_login_completed) {
         router.push('/access-code')
       } else {

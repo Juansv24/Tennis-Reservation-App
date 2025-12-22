@@ -102,8 +102,8 @@ export default function ReservationGrid({
       const [todayResData, tomorrowResData, todayMainData, tomorrowMainData] = await Promise.all([
         supabase.from('reservations').select('*, users(full_name)').eq('date', today).order('hour'),
         supabase.from('reservations').select('*, users(full_name)').eq('date', tomorrow).order('hour'),
-        supabase.from('maintenance_slots').select('*').eq('date', today),
-        supabase.from('maintenance_slots').select('*').eq('date', tomorrow),
+        supabase.from('blocked_slots').select('*').eq('date', today),
+        supabase.from('blocked_slots').select('*').eq('date', tomorrow),
       ])
 
       if (todayResData.data) setTodayReservations(todayResData.data)

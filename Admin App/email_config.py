@@ -430,5 +430,70 @@ class EmailManager:
 
         return self.send_email(to_email, subject, html_body, text_body)
 
+    def send_account_blocked_notification(self, user_email: str, user_name: str) -> bool:
+        """Send notification when a user account is blocked"""
+        subject = "⚠️ Tu cuenta ha sido bloqueada - Sistema de Reservas"
+
+        html_body = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <style>
+                body {{ font-family: Arial, sans-serif; background-color: #f4f4f4; margin: 0; padding: 20px; }}
+                .container {{ max-width: 600px; margin: 0 auto; background: white; border-radius: 10px; overflow: hidden; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }}
+                .header {{ background: linear-gradient(135deg, #dc3545 0%, #c82333 100%); color: white; padding: 30px; text-align: center; }}
+                .content {{ padding: 30px; }}
+                .footer {{ background: #f8f9fa; padding: 20px; text-align: center; font-size: 12px; color: #6c757d; }}
+                .warning-box {{ background: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; margin: 20px 0; }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <h1 style="margin: 0;">⚠️ Cuenta Bloqueada</h1>
+                    <p style="margin: 10px 0 0 0; opacity: 0.9;">Sistema de Reservas - Cancha de Tenis</p>
+                </div>
+
+                <div class="content">
+                    <p>Hola <strong>{user_name}</strong>,</p>
+
+                    <div class="warning-box">
+                        <p style="margin: 0;"><strong>Tu cuenta ha sido bloqueada.</strong></p>
+                    </div>
+
+                    <p>No podrás acceder al sistema de reservas hasta que tu cuenta sea reactivada.</p>
+
+                    <p><strong>¿Qué hacer ahora?</strong></p>
+                    <p>Por favor contacta al administrador de la aplicación para más información sobre el bloqueo de tu cuenta.</p>
+
+                    <p style="margin-top: 30px;">Gracias por tu comprensión.</p>
+                </div>
+
+                <div class="footer">
+                    <p>Sistema de Reservas de Cancha de Tenis - Colina Campestre</p>
+                    <p>Este es un mensaje automatizado, por favor no respondas.</p>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+
+        text_body = f"""
+        Cuenta Bloqueada - Sistema de Reservas
+
+        Hola {user_name},
+
+        Tu cuenta ha sido bloqueada.
+
+        No podrás acceder al sistema de reservas hasta que tu cuenta sea reactivada.
+
+        Por favor contacta al administrador de la aplicación para más información.
+
+        Sistema de Reservas de Cancha de Tenis - Colina Campestre
+        """
+
+        return self.send_email(user_email, subject, html_body, text_body)
+
 # Instancia global
 email_manager = EmailManager()

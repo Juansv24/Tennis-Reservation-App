@@ -146,7 +146,7 @@ At minimum, you need to create the following tables in Supabase:
 - `reservations` - Court reservations by date/hour
 - `access_codes` - Registration access codes
 - `lock_code` - Current court lock code
-- `maintenance_slots` - Maintenance periods
+- `blocked_slots` - Maintenance periods
 
 ### 5. Start Development Server
 
@@ -199,7 +199,7 @@ The app will be available at [http://localhost:3000](http://localhost:3000)
 | `code` | TEXT | Current lock code |
 | `created_at` | TIMESTAMP | When code was set |
 
-### Maintenance Slots Table (`maintenance_slots`)
+### Maintenance Slots Table (`blocked_slots`)
 
 | Column | Type | Description |
 |--------|------|-------------|

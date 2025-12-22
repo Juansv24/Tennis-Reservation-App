@@ -31,7 +31,7 @@ export default async function DashboardPage() {
       .eq('date', today)
       .order('hour'),
     supabase
-      .from('maintenance_slots')
+      .from('blocked_slots')
       .select('*')
       .eq('date', today),
   ])

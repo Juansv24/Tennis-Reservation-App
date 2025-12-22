@@ -1267,11 +1267,18 @@ class AdminDatabaseManager:
                 'date', start_date
             ).lte('date', end_date).execute()
 
+            # Obtener mantenimientos de la semana (incluyendo tipo)
+            maintenance_result = self.client.table('blocked_slots').select('date, hour, maintenance_type, reason').gte(
+                'date', start_date
+            ).lte('date', end_date).execute()
+
             # Organizar datos por fecha y hora
             reservations_grid = {}
+            maintenance_grid = {}
             for date in week_dates:
                 date_str = date.strftime('%Y-%m-%d')
                 reservations_grid[date_str] = {}
+                maintenance_grid[date_str] = {}
 
             # Llenar el grid con las reservas
             for reservation in result.data:
@@ -1292,9 +1299,35 @@ class AdminDatabaseManager:
                         'email': email
                     }
 
+            # Llenar el grid con los mantenimientos
+            for maintenance in maintenance_result.data:
+                date_str = maintenance['date']
+                hour = maintenance['hour']
+
+                if date_str in maintenance_grid:
+                    maintenance_grid[date_str][hour] = {
+                        'type': maintenance.get('maintenance_type', 'single_hour'),
+                        'reason': maintenance.get('reason', 'Mantenimiento')
+                    }
+
+            # Add Tennis School slots dynamically if enabled
+            if self.get_tennis_school_enabled():
+                for date in week_dates:
+                    date_str = date.strftime('%Y-%m-%d')
+                    # Check if it's Saturday or Sunday
+                    if self.is_tennis_school_time(date, 8):  # Just check if it's a weekend
+                        # Add hours 8-11
+                        for hour in [8, 9, 10, 11]:
+                            if date_str in maintenance_grid:
+                                maintenance_grid[date_str][hour] = {
+                                    'type': 'tennis_school',
+                                    'reason': 'Escuela de Tenis'
+                                }
+
             return {
                 'week_dates': week_dates,
                 'reservations_grid': reservations_grid,
+                'maintenance_grid': maintenance_grid,
                 'week_start': week_dates[0].strftime('%d/%m/%Y'),
                 'week_end': week_dates[6].strftime('%d/%m/%Y'),
                 'total_reservations': len(result.data)
@@ -1445,10 +1478,10 @@ class AdminDatabaseManager:
             print(f"Error getting cancellation history: {e}")
             return []
 
-    def get_maintenance_slots(self, start_date: str = None, end_date: str = None) -> List[Dict]:
+    def get_blocked_slots(self, start_date: str = None, end_date: str = None) -> List[Dict]:
         """Obtener horarios de mantenimiento agrupados por rangos"""
         try:
-            query = self.client.table('maintenance_slots').select('*')
+            query = self.client.table('blocked_slots').select('*')
 
             if start_date:
                 query = query.gte('date', start_date)
@@ -1523,7 +1556,7 @@ class AdminDatabaseManager:
             # Verificar si ya existe mantenimiento en alguna de las horas
             conflicting_maintenance = []
             for hour in hours_to_block:
-                existing_maintenance = self.client.table('maintenance_slots').select('id, hour').eq(
+                existing_maintenance = self.client.table('blocked_slots').select('id, hour').eq(
                     'date', date
                 ).eq('hour', hour).execute()
 
@@ -1538,7 +1571,7 @@ class AdminDatabaseManager:
             maintenance_type = 'whole_day' if is_whole_day else 'time_range'
 
             for hour in hours_to_block:
-                self.client.table('maintenance_slots').insert({
+                self.client.table('blocked_slots').insert({
                     'date': date,
                     'hour': hour,
                     'start_hour': start_hour,
@@ -1560,7 +1593,7 @@ class AdminDatabaseManager:
     def remove_maintenance_slot(self, maintenance_id: int) -> bool:
         """Eliminar horario de mantenimiento individual"""
         try:
-            result = self.client.table('maintenance_slots').delete().eq('id', maintenance_id).execute()
+            result = self.client.table('blocked_slots').delete().eq('id', maintenance_id).execute()
             return len(result.data) > 0
         except Exception as e:
             print(f"Error removing maintenance slot: {e}")
@@ -1570,7 +1603,7 @@ class AdminDatabaseManager:
         """Eliminar un rango completo de mantenimiento"""
         try:
             # Obtener todos los mantenimientos en ese rango
-            result = self.client.table('maintenance_slots').select('id').eq('date', date).eq(
+            result = self.client.table('blocked_slots').select('id').eq('date', date).eq(
                 'start_hour', start_hour
             ).eq('end_hour', end_hour).execute()
 
@@ -1580,7 +1613,7 @@ class AdminDatabaseManager:
             # Eliminar todos los slots del rango
             deleted_count = 0
             for slot in result.data:
-                delete_result = self.client.table('maintenance_slots').delete().eq('id', slot['id']).execute()
+                delete_result = self.client.table('blocked_slots').delete().eq('id', slot['id']).execute()
                 if delete_result.data:
                     deleted_count += 1
 
@@ -1596,10 +1629,157 @@ class AdminDatabaseManager:
     def get_maintenance_for_date(self, date: str) -> List[int]:
         """Obtener horas de mantenimiento para una fecha específica"""
         try:
-            result = self.client.table('maintenance_slots').select('hour').eq('date', date).execute()
+            result = self.client.table('blocked_slots').select('hour').eq('date', date).execute()
             return [row['hour'] for row in result.data]
         except Exception:
             return []
+
+    def get_tennis_school_enabled(self) -> bool:
+        """Get Tennis School enabled status from system_settings"""
+        try:
+            result = self.client.table('system_settings').select('tennis_school_enabled').limit(1).execute()
+            if result.data and len(result.data) > 0:
+                return result.data[0].get('tennis_school_enabled', False)
+            return False
+        except Exception as e:
+            print(f"Error getting tennis school status: {e}")
+            return False
+
+    def set_tennis_school_enabled(self, enabled: bool, admin_username: str) -> Tuple[bool, str]:
+        """
+        Enable or disable Tennis School - just toggles a flag
+
+        Args:
+            enabled: True to enable, False to disable
+            admin_username: Admin making the change
+        """
+        try:
+            # Get the settings row first (only one exists)
+            get_result = self.client.table('system_settings').select('id').limit(1).execute()
+
+            if not get_result.data:
+                return False, "Error: No existe configuración del sistema"
+
+            settings_id = get_result.data[0]['id']
+
+            # Update the settings row
+            result = self.client.table('system_settings').update({
+                'tennis_school_enabled': enabled,
+                'updated_at': datetime.now().isoformat(),
+                'updated_by': admin_username
+            }).eq('id', settings_id).execute()
+
+            if result.data:
+                status = "activada" if enabled else "desactivada"
+                return True, f"✅ Escuela de Tenis {status}"
+            else:
+                return False, "Error al actualizar configuración"
+
+        except Exception as e:
+            print(f"Error setting tennis school status: {e}")
+            return False, f"Error: {str(e)}"
+
+    def is_tennis_school_time(self, date_obj, hour: int) -> bool:
+        """
+        Check if a given date/hour falls in Tennis School time
+        Saturday/Sunday 8-11 AM (8:00-12:00)
+
+        Args:
+            date_obj: datetime.date object
+            hour: hour (0-23)
+        """
+        # Check if it's Saturday (5) or Sunday (6)
+        if date_obj.weekday() not in [5, 6]:
+            return False
+
+        # Check if hour is 8-11 (8 AM to 12 PM)
+        if hour not in [8, 9, 10, 11]:
+            return False
+
+        return True
+
+    def block_user(self, user_email: str, admin_username: str) -> Tuple[bool, str]:
+        """
+        Block a user account, sign out from all sessions, and send notification email
+
+        Args:
+            user_email: Email of the user to block
+            admin_username: Admin making the change
+        """
+        try:
+            # Get user details
+            user_result = self.client.table('users').select('id, full_name, email, is_active').eq(
+                'email', user_email.strip().lower()
+            ).execute()
+
+            if not user_result.data:
+                return False, "Usuario no encontrado"
+
+            user = user_result.data[0]
+
+            if not user['is_active']:
+                return False, "El usuario ya está bloqueado"
+
+            # Block the user
+            update_result = self.client.table('users').update({
+                'is_active': False
+            }).eq('id', user['id']).execute()
+
+            if update_result.data:
+                # Sign out user from all active sessions using Admin API
+                try:
+                    self.client.auth.admin.sign_out(user['id'])
+                    print(f"✅ Signed out user {user['email']} from all sessions")
+                except Exception as e:
+                    print(f"⚠️ Warning: Could not sign out user sessions: {e}")
+                    # Continue even if sign out fails - user is already blocked
+
+                # Send blocking notification email
+                from email_config import email_manager
+                email_manager.send_account_blocked_notification(user['email'], user['full_name'])
+                return True, f"✅ Usuario bloqueado y desconectado: {user['email']}"
+            else:
+                return False, "Error al bloquear usuario"
+
+        except Exception as e:
+            print(f"Error blocking user: {e}")
+            return False, f"Error: {str(e)}"
+
+    def unblock_user(self, user_email: str, admin_username: str) -> Tuple[bool, str]:
+        """
+        Unblock a user account
+
+        Args:
+            user_email: Email of the user to unblock
+            admin_username: Admin making the change
+        """
+        try:
+            # Get user details
+            user_result = self.client.table('users').select('id, full_name, email, is_active').eq(
+                'email', user_email.strip().lower()
+            ).execute()
+
+            if not user_result.data:
+                return False, "Usuario no encontrado"
+
+            user = user_result.data[0]
+
+            if user['is_active']:
+                return False, "El usuario ya está activo"
+
+            # Unblock the user
+            update_result = self.client.table('users').update({
+                'is_active': True
+            }).eq('id', user['id']).execute()
+
+            if update_result.data:
+                return True, f"✅ Usuario desbloqueado: {user['email']}"
+            else:
+                return False, "Error al desbloquear usuario"
+
+        except Exception as e:
+            print(f"Error unblocking user: {e}")
+            return False, f"Error: {str(e)}"
 
 # Instancia global
 admin_db_manager = AdminDatabaseManager()
