@@ -85,8 +85,7 @@ class AdminDatabaseManager:
                 'message': 'Base de datos sincronizada exitosamente'
             }
 
-            import datetime
-            now = datetime.datetime.utcnow().isoformat()
+            now = datetime.utcnow().isoformat()
 
             # 1. Limpiar tokens de reset expirados
             try:
@@ -209,33 +208,9 @@ class AdminDatabaseManager:
             return []
 
     def get_users_detailed_statistics(self) -> List[Dict]:
-        """Get detailed statistics for all users using optimized SQL function"""
-        try:
-            # Call optimized PostgreSQL function that does all processing in the database
-            result = self.client.rpc('get_users_detailed_statistics').execute()
-
-            if not result.data:
-                return []
-
-            # Convert to expected format
-            user_stats = []
-            for row in result.data:
-                user_stats.append({
-                    'email': row['email'],
-                    'name': row['full_name'],
-                    'registered_date': row['registered_date'],
-                    'total_credits_bought': row['total_credits_bought'],
-                    'total_reservations': row['total_reservations'],
-                    'favorite_day': row['favorite_day'],
-                    'favorite_time': row['favorite_time']
-                })
-
-            return user_stats
-
-        except Exception as e:
-            print(f"Error getting detailed user statistics: {e}")
-            # Fallback to old method if SQL function doesn't exist yet
-            return self._get_users_detailed_statistics_fallback()
+        """Get detailed statistics for all users"""
+        # Use Python-based processing (RPC function not implemented in database)
+        return self._get_users_detailed_statistics_fallback()
 
     def _get_users_detailed_statistics_fallback(self) -> List[Dict]:
         """Fallback method using Python processing (for backwards compatibility)"""
@@ -376,41 +351,21 @@ class AdminDatabaseManager:
             from email_config import email_manager
 
             if email_manager.is_configured():
-                subject = "🎾 Reserva Cancelada - Sistema de Reservas"
+                # Get user's full name
+                user_result = self.client.table('users').select('full_name').eq(
+                    'email', user_email.strip().lower()
+                ).execute()
 
-                reason_section = ""
-                if reason and reason != "Sin motivo especificado":
-                    reason_section = f"""
-                    <div style="background: #fff3cd; border: 1px solid #ffc107; border-radius: 8px; padding: 15px; margin: 15px 0;">
-                        <h4 style="margin: 0; color: #856404;">📋 Motivo de la cancelación:</h4>
-                        <p style="margin: 10px 0 0 0; color: #856404;">{reason}</p>
-                    </div>
-                    """
+                user_name = user_result.data[0]['full_name'] if user_result.data else 'Usuario'
 
-                html_body = f"""
-                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-                    <div style="background: linear-gradient(135deg, #001854 0%, #2478CC 100%); color: white; padding: 20px; text-align: center; border-radius: 10px;">
-                        <h1>🎾 Reserva Cancelada</h1>
-                    </div>
-
-                    <div style="background: #f9f9f9; padding: 20px; border-radius: 10px; margin: 20px 0;">
-                        <h2>Tu reserva ha sido cancelada</h2>
-                        <p>Lamentamos informarte que tu reserva ha sido <strong>cancelada por el administrador</strong>:</p>
-
-                        <div style="background: white; padding: 15px; border-radius: 8px; border-left: 5px solid #FFD400;">
-                            <p><strong>📅 Fecha:</strong> {reservation['date']}</p>
-                            <p><strong>🕐 Hora:</strong> {reservation['hour']}:00</p>
-                        </div>
-
-                        {reason_section}
-
-                        <p>✅ <strong>Se ha reembolsado 1 crédito</strong> a tu cuenta automáticamente.</p>
-                        <p>Si tienes preguntas, contacta al administrador.</p>
-                    </div>
-                </div>
-                """
-
-                email_manager.send_email(user_email, subject, html_body)
+                # Send cancellation email using the new template
+                email_manager.send_reservation_cancelled_notification(
+                    user_email=user_email,
+                    user_name=user_name,
+                    date=reservation['date'],
+                    hour=reservation['hour'],
+                    cancelled_by='admin'  # Admin cancelled
+                )
         except Exception as e:
             print(f"Error sending cancellation email: {e}")
 
@@ -896,14 +851,8 @@ class AdminDatabaseManager:
             formatted_reservations = []
             for reservation in result.data:
                 # Formatear fecha más legible
-                try:
-                    from datetime import datetime
-                    fecha_obj = datetime.strptime(reservation['date'], '%Y-%m-%d')
-                    fecha_formateada = fecha_obj.strftime('%d/%m/%Y')
-                    dia_semana = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'][fecha_obj.weekday()]
-                    fecha_display = f"{dia_semana} {fecha_formateada}"
-                except:
-                    fecha_display = reservation['date']
+                from timezone_utils import format_date_display
+                fecha_display = format_date_display(reservation['date'])
 
                 # Get user data from JOIN
                 user_name = reservation['users']['full_name'] if reservation.get('users') else 'Usuario Eliminado'
@@ -1108,8 +1057,6 @@ class AdminDatabaseManager:
     def update_lock_code(self, new_code: str, admin_username: str) -> bool:
         """Actualizar contraseña del candado y notificar a usuarios con reservas activas"""
         try:
-            from datetime import datetime
-
             # Insertar nueva contraseña (mantiene historial)
             result = self.client.table('lock_code').insert({
                 'code': new_code,
@@ -1206,8 +1153,6 @@ class AdminDatabaseManager:
     def update_access_code(self, new_code: str, admin_username: str) -> bool:
         """Actualizar código de acceso"""
         try:
-            from datetime import datetime
-
             result = self.client.table('access_codes').insert({
                 'code': new_code,
                 'admin_user': admin_username,
@@ -1246,8 +1191,6 @@ class AdminDatabaseManager:
     def get_weekly_calendar_data(self, week_offset: int = 0) -> Dict:
         """Obtener datos de reservas para vista de calendario semanal"""
         try:
-            from datetime import datetime, timedelta
-
             # Calcular el lunes de la semana seleccionada
             today = get_colombia_today()
             days_to_monday = today.weekday()  # 0 = lunes, 6 = domingo
@@ -1452,14 +1395,8 @@ class AdminDatabaseManager:
                 hour_display = f"{cancellation['reservation_hour']:02d}:00"
 
                 # Formatear fecha de reserva
-                try:
-                    from datetime import datetime
-                    date_obj = datetime.strptime(cancellation['reservation_date'], '%Y-%m-%d')
-                    formatted_date = date_obj.strftime('%d/%m/%Y')
-                    day_name = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'][date_obj.weekday()]
-                    reservation_date_display = f"{day_name} {formatted_date}"
-                except:
-                    reservation_date_display = cancellation['reservation_date']
+                from timezone_utils import format_date_display
+                reservation_date_display = format_date_display(cancellation['reservation_date'])
 
                 formatted_cancellations.append({
                     'user_name': cancellation['user_name'],
@@ -1602,25 +1539,16 @@ class AdminDatabaseManager:
     def remove_maintenance_range(self, date: str, start_hour: int, end_hour: int) -> Tuple[bool, str]:
         """Eliminar un rango completo de mantenimiento"""
         try:
-            # Obtener todos los mantenimientos en ese rango
-            result = self.client.table('blocked_slots').select('id').eq('date', date).eq(
+            # Eliminar todos los slots del rango con una sola query
+            delete_result = self.client.table('blocked_slots').delete().eq('date', date).eq(
                 'start_hour', start_hour
             ).eq('end_hour', end_hour).execute()
 
-            if not result.data:
-                return False, "No se encontró mantenimiento en ese rango"
-
-            # Eliminar todos los slots del rango
-            deleted_count = 0
-            for slot in result.data:
-                delete_result = self.client.table('blocked_slots').delete().eq('id', slot['id']).execute()
-                if delete_result.data:
-                    deleted_count += 1
-
-            if deleted_count > 0:
+            if delete_result.data and len(delete_result.data) > 0:
+                deleted_count = len(delete_result.data)
                 return True, f"Se eliminaron {deleted_count} horas de mantenimiento"
             else:
-                return False, "No se pudo eliminar el mantenimiento"
+                return False, "No se encontró mantenimiento en ese rango"
 
         except Exception as e:
             print(f"Error removing maintenance range: {e}")
@@ -1773,6 +1701,9 @@ class AdminDatabaseManager:
             }).eq('id', user['id']).execute()
 
             if update_result.data:
+                # Send reactivation notification email
+                from email_config import email_manager
+                email_manager.send_account_reactivated_notification(user['email'], user['full_name'])
                 return True, f"✅ Usuario desbloqueado: {user['email']}"
             else:
                 return False, "Error al desbloquear usuario"

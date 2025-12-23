@@ -364,7 +364,6 @@ def show_dashboard_tab():
             st.info("No hay datos de reservas disponibles")
 
     with col2:
-        import pandas as pd
         st.subheader("⏰ Horas Más Populares")
         hourly_stats = admin_db_manager.get_hourly_reservation_stats()
         if hourly_stats:
@@ -470,8 +469,6 @@ def show_dashboard_tab():
         court_hours = list(range(6, 22))
 
         # Crear DataFrame para el calendario
-        import pandas as pd
-
         # Preparar datos para la tabla
         calendar_table = []
 
@@ -534,7 +531,7 @@ def show_dashboard_tab():
                 return 'text-align: center; font-weight: bold; border: 1px solid #2478CC; background-color: #e3f2fd;'
 
         # Mostrar tabla estilizada
-        styled_df = df_calendar.style.applymap(style_calendar_table)
+        styled_df = df_calendar.style.map(style_calendar_table)
         st.dataframe(styled_df, use_container_width=True, hide_index=True)
 
         # Leyenda
@@ -625,14 +622,8 @@ def show_reservations_management_tab():
 
         for i, reservation in enumerate(user_reservations):
             # Formatear fecha más legible
-            try:
-                from datetime import datetime as dt
-                fecha_obj = dt.strptime(reservation['date'], '%Y-%m-%d')
-                fecha_formateada = fecha_obj.strftime('%d/%m/%Y')
-                dia_semana = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'][fecha_obj.weekday()]
-                fecha_display = f"{dia_semana} {fecha_formateada}"
-            except:
-                fecha_display = reservation['date']
+            from timezone_utils import format_date_display
+            fecha_display = format_date_display(reservation['date'])
 
             # Crear título del expander más claro
             titulo_expander = f"📅 {fecha_display} • 🕐 {reservation['hour']}:00"
@@ -722,7 +713,6 @@ def show_reservations_management_tab():
             f"📊 **Total de cancelaciones:** {len(cancellations)} {'en todos los registros' if show_all_cancellations else f'en los últimos {days_back} días'}")
 
         # Convertir a DataFrame para mejor visualización
-        import pandas as pd
         df_cancellations = pd.DataFrame(cancellations)
 
         # Renombrar columnas para display
@@ -863,15 +853,22 @@ def show_user_detailed_info(user):
             if is_active:
                 # Block user
                 success, message = admin_db_manager.block_user(user['email'], admin_username)
+                new_state = "🚫 Bloqueado"
             else:
                 # Unblock user
                 success, message = admin_db_manager.unblock_user(user['email'], admin_username)
+                new_state = "✅ Activo"
 
             if success:
-                st.success(message)
-                # Keep expander open after blocking/unblocking
-                mantener_expander_abierto_admin(user['id'], 'bloqueo', 15)
-                st.rerun()
+                # Clear search results to allow searching for another user
+                st.session_state.found_users = []
+
+                # Show success message with new state
+                st.success(f"{message}\n\n**Nuevo estado del usuario:** {new_state}")
+
+                # Button to search for another user
+                if st.button("🔍 Buscar otro usuario", type="primary"):
+                    st.rerun()
             else:
                 st.error(message)
 
@@ -916,8 +913,6 @@ def show_users_management_tab():
         users_stats = admin_db_manager.get_users_detailed_statistics()
 
     if users_stats:
-        import pandas as pd
-
         df = pd.DataFrame(users_stats)
         df = df.rename(columns={
             'name': 'Nombre',
@@ -1113,7 +1108,7 @@ def show_credits_management_tab():
 
                 if success:
                     st.success(f"✅ {credits_amount} créditos {action_msg} {selected_user['name']}")
-                    send_credits_notification_email(
+                    email_manager.send_credits_notification(
                         selected_user['email'], credits_amount, reason, operation.lower()
                     )
 
@@ -1152,76 +1147,6 @@ def show_credits_management_tab():
     else:
         st.info("No hay transacciones de créditos")
 
-def send_cancellation_email(reservation):
-    """Enviar email de cancelación de reserva"""
-    try:
-        if email_manager.is_configured():
-            # Implementar envío de email de cancelación
-            pass
-    except Exception as e:
-        st.warning(f"Error enviando email: {e}")
-
-def send_reminder_email(reservation):
-    """Enviar email recordatorio"""
-    try:
-        if email_manager.is_configured():
-            # Implementar envío de recordatorio
-            pass
-    except Exception as e:
-        st.warning(f"Error enviando recordatorio: {e}")
-
-def send_credits_notification_email(user_email, credits_amount, reason, operation):
-    """Enviar notificación de cambio de créditos"""
-    try:
-        if email_manager.is_configured():
-            action = "agregados" if operation == "agregar" else "removidos"
-            subject = f"🎾 Créditos {action.title()} - Sistema de Reservas"
-
-            html_body = f"""
-            <h2>Actualización de Créditos</h2>
-            <p>Se han <strong>{action} {credits_amount} crédito(s)</strong> {'a' if operation == 'agregar' else 'de'} tu cuenta.</p>
-            <p><strong>Motivo:</strong> {reason}</p>
-            <p>Revisa tu saldo actual en la aplicación.</p>
-            """
-
-            email_manager.send_email(user_email, subject, html_body)
-    except Exception as e:
-        st.warning(f"Error enviando notificación: {e}")
-
-def show_send_email_form(user):
-    """Mostrar formulario para enviar email a usuario"""
-    st.subheader(f"📧 Enviar Email a {user['Nombre']}")
-    # Implementar formulario de email
-
-def show_user_history(user_id):
-    """Mostrar historial de usuario"""
-    st.subheader("📊 Historial de Usuario")
-    # Implementar vista de historial
-
-def toggle_vip_status_callback(user_id, current_vip_status):
-    """Callback para cambiar estado VIP de usuario"""
-    vip_text = "VIP removido" if current_vip_status else "VIP activado"
-
-    if admin_db_manager.toggle_vip_status(user_id):
-        # Marcar que se actualizó recientemente
-        st.session_state[f'usuario_actualizado_recientemente_{user_id}'] = {
-            'timestamp': get_colombia_now(),
-            'accion': 'cambio_vip',
-            'mensaje': f"{vip_text} exitosamente"
-        }
-
-        # Marcar expander para mantenerlo abierto
-        mantener_expander_abierto_admin(user_id, 'cambio_vip', 15)
-
-        # Actualizar lista
-        if 'found_users' in st.session_state:
-            for i, u in enumerate(st.session_state.found_users):
-                if u['id'] == user_id:
-                    st.session_state.found_users[i]['is_vip'] = not current_vip_status
-                    break
-
-        return True
-    return False
 
 def mostrar_feedback_usuario(user_id):
     """Mostrar feedback de actualización de usuario"""
@@ -1824,14 +1749,8 @@ def show_maintenance_tab():
         # Mostrar cada mantenimiento
         for slot in blocked_slots:
             # Formatear fecha
-            try:
-                from datetime import datetime as dt
-                date_obj = dt.strptime(slot['date'], '%Y-%m-%d')
-                formatted_date = date_obj.strftime('%d/%m/%Y')
-                day_name = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'][date_obj.weekday()]
-                date_display = f"{day_name} {formatted_date}"
-            except:
-                date_display = slot['date']
+            from timezone_utils import format_date_display
+            date_display = format_date_display(slot['date'])
 
             # Determinar el tipo de mantenimiento y formato de hora
             maintenance_type = slot.get('maintenance_type', 'single_hour')

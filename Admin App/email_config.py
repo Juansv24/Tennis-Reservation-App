@@ -495,5 +495,220 @@ class EmailManager:
 
         return self.send_email(user_email, subject, html_body, text_body)
 
+    def send_account_reactivated_notification(self, user_email: str, user_name: str) -> bool:
+        """Send notification when a user account is reactivated"""
+        subject = "✅ Tu cuenta ha sido reactivada - Sistema de Reservas"
+
+        html_body = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <style>
+                body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
+                .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
+                .header {{ background: linear-gradient(135deg, #001854 0%, #2478CC 100%);
+                          color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }}
+                .content {{ background: #ffffff; padding: 30px; border: 1px solid #ddd; }}
+                .success-box {{ background: #d4edda; border-left: 4px solid #28a745;
+                                padding: 15px; margin: 20px 0; border-radius: 4px; }}
+                .footer {{ background: #f8f9fa; padding: 20px; text-align: center;
+                          border-radius: 0 0 10px 10px; font-size: 12px; color: #666; }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <h1 style="margin: 0;">🎾 Sistema de Reservas</h1>
+                    <p style="margin: 10px 0 0 0;">Notificación de Cuenta</p>
+                </div>
+                <div class="content">
+                    <p>Hola <strong>{user_name}</strong>,</p>
+                    <div class="success-box">
+                        <p style="margin: 0;"><strong>✅ Tu cuenta ha sido reactivada.</strong></p>
+                    </div>
+                    <p>Ya puedes acceder nuevamente al sistema de reservas y realizar tus reservas de cancha de tenis.</p>
+                    <p>Si tienes alguna pregunta, no dudes en contactar al administrador.</p>
+                    <p>¡Bienvenido de vuelta!</p>
+                </div>
+                <div class="footer">
+                    <p style="margin: 0;">Sistema de Reservas de Cancha de Tenis - Colina Campestre</p>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+
+        text_body = f"""
+        Hola {user_name},
+
+        ✅ Tu cuenta ha sido reactivada.
+
+        Ya puedes acceder nuevamente al sistema de reservas y realizar tus reservas de cancha de tenis.
+
+        Si tienes alguna pregunta, no dudes en contactar al administrador.
+
+        ¡Bienvenido de vuelta!
+
+        Sistema de Reservas de Cancha de Tenis - Colina Campestre
+        """
+
+        return self.send_email(user_email, subject, html_body, text_body)
+
+    def send_reservation_cancelled_notification(self, user_email: str, user_name: str, date: str, hour: int, cancelled_by: str = "user") -> bool:
+        """
+        Send notification when a reservation is cancelled
+
+        Args:
+            user_email: User's email address
+            user_name: User's full name
+            date: Reservation date (YYYY-MM-DD)
+            hour: Reservation hour (0-23)
+            cancelled_by: Who cancelled ('user' or 'admin')
+        """
+        from timezone_utils import format_date_display
+
+        subject = "🚫 Reserva Cancelada - Sistema de Reservas"
+        formatted_date = format_date_display(date)
+        hour_display = f"{hour:02d}:00"
+
+        cancellation_reason = "Has cancelado tu reserva" if cancelled_by == "user" else "Tu reserva ha sido cancelada por el administrador"
+
+        html_body = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <style>
+                body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
+                .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
+                .header {{ background: linear-gradient(135deg, #001854 0%, #2478CC 100%);
+                          color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }}
+                .content {{ background: #ffffff; padding: 30px; border: 1px solid #ddd; }}
+                .cancel-box {{ background: #fff3cd; border-left: 4px solid #ffc107;
+                               padding: 15px; margin: 20px 0; border-radius: 4px; }}
+                .info-box {{ background: #f8f9fa; padding: 15px; margin: 20px 0; border-radius: 4px; }}
+                .footer {{ background: #f8f9fa; padding: 20px; text-align: center;
+                          border-radius: 0 0 10px 10px; font-size: 12px; color: #666; }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <h1 style="margin: 0;">🎾 Sistema de Reservas</h1>
+                    <p style="margin: 10px 0 0 0;">Confirmación de Cancelación</p>
+                </div>
+                <div class="content">
+                    <p>Hola <strong>{user_name}</strong>,</p>
+                    <div class="cancel-box">
+                        <p style="margin: 0;"><strong>🚫 {cancellation_reason}</strong></p>
+                    </div>
+                    <div class="info-box">
+                        <p style="margin: 5px 0;"><strong>📅 Fecha:</strong> {formatted_date}</p>
+                        <p style="margin: 5px 0;"><strong>🕐 Hora:</strong> {hour_display}</p>
+                    </div>
+                    <p>La cancelación se ha procesado exitosamente. El crédito utilizado para esta reserva ha sido devuelto a tu cuenta.</p>
+                    <p>Puedes hacer una nueva reserva cuando lo desees ingresando a la aplicación.</p>
+                    <p>¡Gracias por usar nuestro sistema!</p>
+                </div>
+                <div class="footer">
+                    <p style="margin: 0;">Sistema de Reservas de Cancha de Tenis - Colina Campestre</p>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+
+        text_body = f"""
+        Hola {user_name},
+
+        🚫 {cancellation_reason}
+
+        Detalles de la reserva cancelada:
+        📅 Fecha: {formatted_date}
+        🕐 Hora: {hour_display}
+
+        La cancelación se ha procesado exitosamente. El crédito utilizado para esta reserva ha sido devuelto a tu cuenta.
+
+        Puedes hacer una nueva reserva cuando lo desees ingresando a la aplicación.
+
+        ¡Gracias por usar nuestro sistema!
+
+        Sistema de Reservas de Cancha de Tenis - Colina Campestre
+        """
+
+        return self.send_email(user_email, subject, html_body, text_body)
+
+    def send_credits_notification(self, user_email: str, credits_amount: int, reason: str, operation: str) -> bool:
+        """
+        Send notification when user credits are modified
+
+        Args:
+            user_email: User's email address
+            credits_amount: Number of credits added or removed
+            reason: Reason for credit change
+            operation: 'agregar' or 'remover'
+        """
+        try:
+            if not self.is_configured():
+                return False
+
+            action = "agregados" if operation == "agregar" else "removidos"
+            subject = f"🎾 Créditos {action.title()} - Sistema de Reservas"
+
+            html_body = f"""
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <style>
+                    body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
+                    .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
+                    .header {{ background: linear-gradient(135deg, #001854 0%, #2478CC 100%);
+                              color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }}
+                    .content {{ background: #ffffff; padding: 30px; border: 1px solid #ddd; }}
+                    .credits-box {{ background: #f0f8ff; border-left: 4px solid #2478CC;
+                                    padding: 15px; margin: 20px 0; }}
+                    .footer {{ background: #f8f9fa; padding: 20px; text-align: center;
+                              border-radius: 0 0 10px 10px; font-size: 12px; color: #666; }}
+                </style>
+            </head>
+            <body>
+                <div class="container">
+                    <div class="header">
+                        <h1 style="margin: 0;">🎾 Sistema de Reservas</h1>
+                        <p style="margin: 10px 0 0 0;">Actualización de Créditos</p>
+                    </div>
+                    <div class="content">
+                        <p>Hola,</p>
+                        <div class="credits-box">
+                            <p style="margin: 0;"><strong>Se han {action} {credits_amount} crédito(s)</strong> {'a' if operation == 'agregar' else 'de'} tu cuenta.</p>
+                        </div>
+                        <p><strong>Motivo:</strong> {reason}</p>
+                        <p>Puedes revisar tu saldo actual iniciando sesión en la aplicación.</p>
+                        <p>¡Gracias por usar nuestro sistema de reservas!</p>
+                    </div>
+                    <div class="footer">
+                        <p style="margin: 0;">Sistema de Reservas de Cancha de Tenis - Colina Campestre</p>
+                    </div>
+                </div>
+            </body>
+            </html>
+            """
+
+            text_body = f"""
+            Actualización de Créditos
+
+            Se han {action} {credits_amount} crédito(s) {'a' if operation == 'agregar' else 'de'} tu cuenta.
+
+            Motivo: {reason}
+
+            Revisa tu saldo actual en la aplicación.
+
+            Sistema de Reservas de Cancha de Tenis - Colina Campestre
+            """
+
+            return self.send_email(user_email, subject, html_body, text_body)
+        except Exception as e:
+            print(f"Error sending credits notification: {e}")
+            return False
+
 # Instancia global
 email_manager = EmailManager()
