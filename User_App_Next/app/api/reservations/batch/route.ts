@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
 import { getColombiaHour, getColombiaToday, getColombiaTomorrow } from '@/lib/timezone'
+import { logActivity } from '@/lib/activity-logger'
 
 // POST /api/reservations/batch
 export async function POST(request: NextRequest) {
@@ -110,6 +111,59 @@ export async function POST(request: NextRequest) {
 
   const userTodayReservations = userReservations?.filter(r => r.date === today).map(r => r.hour) || []
   const userTomorrowReservations = userReservations?.filter(r => r.date === tomorrow).map(r => r.hour) || []
+
+  // CHECK FOR TENNIS SCHOOL FIRST - MUST BE BEFORE ALL OTHER VALIDATIONS
+  const { data: systemSettings } = await supabase
+    .from('system_settings')
+    .select('tennis_school_enabled')
+    .single()
+
+  if (systemSettings?.tennis_school_enabled) {
+    for (const res of reservations) {
+      const { date, hour } = res
+      const dayOfWeek = new Date(date).getDay() // 0 = Sunday, 6 = Saturday
+      const isTennisSchoolDay = dayOfWeek === 0 || dayOfWeek === 6 // Saturday or Sunday
+      const isTennisSchoolHour = hour >= 8 && hour <= 11 // 8:00-11:00
+
+      if (isTennisSchoolDay && isTennisSchoolHour) {
+        const formattedHour = `${hour.toString().padStart(2, '0')}:00`
+        return NextResponse.json(
+          { error: `No se puede reservar a las ${formattedHour}: Escuela de Tenis (Sábados y Domingos 8:00-12:00). Recargue su navegador para ver la información más actualizada.` },
+          { status: 400 }
+        )
+      }
+    }
+  }
+
+  // CHECK FOR BLOCKED SLOTS (maintenance) - BEFORE ALL OTHER VALIDATIONS
+  for (const res of reservations) {
+    const { date, hour } = res
+
+    const { data: blockedSlot, error: blockedError } = await supabase
+      .from('blocked_slots')
+      .select('id, maintenance_type, reason')
+      .eq('date', date)
+      .eq('hour', hour)
+      .maybeSingle()
+
+    // If there's an error checking blocked slots, fail the request
+    if (blockedError) {
+      console.error('Error checking blocked slots:', blockedError)
+      return NextResponse.json(
+        { error: `Error verificando disponibilidad: ${blockedError.message}` },
+        { status: 500 }
+      )
+    }
+
+    // If slot is blocked by maintenance, reject immediately (before deducting credits)
+    if (blockedSlot) {
+      const formattedHour = `${hour.toString().padStart(2, '0')}:00`
+      return NextResponse.json(
+        { error: `No se puede reservar a las ${formattedHour}: Cancha en mantenimiento. Recargue su navegador para ver la información más actualizada.` },
+        { status: 400 }
+      )
+    }
+  }
 
   // Validate each reservation
   for (const res of reservations) {
@@ -246,6 +300,24 @@ export async function POST(request: NextRequest) {
     .from('reservations')
     .select('*')
     .in('id', result.reservation_ids || [])
+
+  // Log activity - batch reservation created successfully
+  const hours = reservations.map(r => r.hour).sort((a, b) => a - b)
+  const hoursStr = hours.map(h => `${h.toString().padStart(2, '0')}:00`).join(', ')
+  await logActivity(
+    supabase,
+    user.id,
+    'reservation_create',
+    `Reserved ${reservations[0].date} at ${hoursStr}`,
+    {
+      date: reservations[0].date,
+      hours,
+      reservation_ids: result.reservation_ids,
+      credits_used: creditsNeeded,
+      new_credits: result.new_credits,
+      reservation_count: reservations.length
+    }
+  )
 
   return NextResponse.json({
     success: true,

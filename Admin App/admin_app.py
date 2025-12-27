@@ -6,9 +6,13 @@ Gestión de reservas, usuarios y créditos
 import streamlit as st
 from admin_auth import admin_auth_manager, require_admin_auth
 from admin_database import admin_db_manager
+from database_manager import SupabaseManager
 from timezone_utils import get_colombia_now, get_colombia_today
 from email_config import email_manager
 import pandas as pd
+import plotly.express as px
+import plotly.graph_objects as go
+from datetime import datetime, timedelta
 
 
 # Colores US Open
@@ -258,7 +262,7 @@ def show_admin_dashboard():
 
     tab = st.segmented_control(
         "Navegación Admin",
-        ["📊 Dashboard", "📅 Reservas", "👥 Usuarios", "💰 Créditos", "🔧 Mantenimiento", "⚙️ Config"],  # AGREGADO
+        ["📊 Dashboard", "📅 Reservas", "👥 Usuarios", "💰 Créditos", "🔧 Mantenimiento", "⚙️ Config"],
         selection_mode="single",
         default="📊 Dashboard",
         label_visibility="collapsed",
@@ -284,7 +288,7 @@ def show_admin_dashboard():
         show_users_management_tab()
     elif tab == "💰 Créditos":
         show_credits_management_tab()
-    elif tab == "🔧 Mantenimiento":  # NUEVO
+    elif tab == "🔧 Mantenimiento":
         show_maintenance_tab()
     elif tab == "⚙️ Config":
         show_config_tab()
@@ -330,6 +334,203 @@ def show_dashboard_tab():
             <div class="stat-label">Créditos Emitidos</div>
         </div>
         """, unsafe_allow_html=True)
+
+    st.divider()
+
+    # ========================================
+    # ANALYTICS SECTION
+    # ========================================
+    st.markdown("### 📈 Actividad de Usuarios")
+
+    # Initialize database manager for analytics
+    db_manager = SupabaseManager()
+
+    # Date range selector in a clean layout
+    col1, col2, col3 = st.columns([1, 1, 1])
+
+    with col1:
+        # Default to 30 days ago
+        default_start = (get_colombia_today() - timedelta(days=30))
+        start_date = st.date_input(
+            "📅 Fecha de inicio",
+            value=default_start,
+            max_value=get_colombia_today(),
+            key="analytics_start_date"
+        )
+
+    with col2:
+        end_date = st.date_input(
+            "📅 Fecha de fin",
+            value=get_colombia_today(),
+            max_value=get_colombia_today(),
+            key="analytics_end_date"
+        )
+
+    with col3:
+        granularity = st.selectbox(
+            "📊 Nivel de detalle",
+            ["Hora", "Día", "Mes"],
+            index=1,
+            key="analytics_granularity"
+        )
+
+    granularity_map = {"Hora": "hour", "Día": "day", "Mes": "month"}
+    selected_granularity = granularity_map[granularity]
+
+    # Validate and fetch data
+    if start_date <= end_date:
+        try:
+            # Debug info
+            st.caption(f"📊 Consultando datos desde {start_date.strftime('%Y-%m-%d')} hasta {end_date.strftime('%Y-%m-%d')}")
+
+            # Get activity timeline data
+            timeline_data = db_manager.get_activity_timeline_data(
+                start_date=start_date.strftime('%Y-%m-%d'),
+                end_date=end_date.strftime('%Y-%m-%d'),
+                granularity=selected_granularity
+            )
+
+            # Get activity statistics
+            activity_stats = db_manager.get_activity_stats(
+                start_date=start_date.strftime('%Y-%m-%d'),
+                end_date=end_date.strftime('%Y-%m-%d')
+            )
+
+            # Debug: Show what was returned
+            st.caption(f"✓ Registros encontrados: {len(timeline_data) if timeline_data else 0}")
+
+            if timeline_data and len(timeline_data) > 0:
+                # Display activity summary
+                col1, col2, col3, col4 = st.columns(4)
+
+                with col1:
+                    st.metric("🎯 Total Actividades", activity_stats.get('total_activities', 0))
+
+                with col2:
+                    st.metric("👥 Usuarios Únicos", activity_stats.get('unique_users', 0))
+
+                with col3:
+                    st.metric("📱 Sesiones", activity_stats.get('unique_sessions', 0))
+
+                with col4:
+                    avg_activities = activity_stats.get('total_activities', 0) / max(activity_stats.get('unique_users', 1), 1)
+                    st.metric("📊 Promedio/Usuario", f"{avg_activities:.1f}")
+
+                st.markdown("---")
+
+                # Process data for timeline
+                df_timeline = pd.DataFrame(timeline_data)
+                # Timestamps are already in Colombian timezone, just parse them
+                df_timeline['created_at'] = pd.to_datetime(df_timeline['created_at'])
+
+                # Create time bucket based on granularity
+                if selected_granularity == 'hour':
+                    df_timeline['time_bucket'] = df_timeline['created_at'].dt.floor('H')
+                    time_format = '%Y-%m-%d %H:%M'
+                elif selected_granularity == 'day':
+                    df_timeline['time_bucket'] = df_timeline['created_at'].dt.floor('D')
+                    time_format = '%Y-%m-%d'
+                else:  # month
+                    df_timeline['time_bucket'] = df_timeline['created_at'].dt.to_period('M').dt.to_timestamp()
+                    time_format = '%Y-%m'
+
+                # Count activities per time bucket
+                activity_counts = df_timeline.groupby('time_bucket').agg({
+                    'id': 'count',
+                    'user_id': 'nunique'
+                }).reset_index()
+                activity_counts.columns = ['time_bucket', 'total_activities', 'unique_users']
+
+                # Timeline and Scatter plot side by side
+                col_timeline, col_scatter = st.columns(2)
+
+                with col_timeline:
+                    st.markdown("**📈 Timeline de Actividad**")
+
+                    # Import plotly for charts
+                    import plotly.graph_objects as go
+
+                    # Create timeline plot
+                    fig_timeline = go.Figure()
+
+                    fig_timeline.add_trace(go.Scatter(
+                        x=activity_counts['time_bucket'],
+                        y=activity_counts['total_activities'],
+                        mode='lines+markers',
+                        name='Actividades',
+                        line=dict(color=US_OPEN_BLUE, width=2),
+                        marker=dict(size=6),
+                        hovertemplate='<b>%{x|' + time_format + '}</b><br>Actividades: %{y}<extra></extra>'
+                    ))
+
+                    fig_timeline.update_layout(
+                        height=400,
+                        showlegend=False,
+                        margin=dict(l=0, r=0, t=20, b=0),
+                        xaxis_title='Tiempo',
+                        yaxis_title='Actividades',
+                        xaxis=dict(tickformat='%Y-%m-%d %H:%M' if selected_granularity == 'hour' else time_format)
+                    )
+
+                    st.plotly_chart(fig_timeline, use_container_width=True)
+
+                    # Peak usage info
+                    peak_activity = activity_counts.loc[activity_counts['total_activities'].idxmax()]
+                    st.info(f"📊 **Pico:** {peak_activity['time_bucket'].strftime(time_format)} ({int(peak_activity['total_activities'])} actividades)")
+
+                with col_scatter:
+                    st.markdown("**👥 Actividad por Usuario**")
+
+                    # Prepare scatter plot data
+                    df_scatter = pd.DataFrame(timeline_data)
+                    # Timestamps are already in Colombian timezone, just parse them
+                    df_scatter['created_at'] = pd.to_datetime(df_scatter['created_at'])
+                    df_scatter['user_name'] = df_scatter['users'].apply(
+                        lambda x: x.get('full_name', 'Desconocido') if isinstance(x, dict) else 'Desconocido'
+                    )
+                    df_scatter['user_email'] = df_scatter['users'].apply(
+                        lambda x: x.get('email', '') if isinstance(x, dict) else ''
+                    )
+
+                    # Create scatter plot - showing users over time
+                    fig_scatter = px.scatter(
+                        df_scatter,
+                        x='created_at',
+                        y='user_name',
+                        color='user_name',
+                        hover_data={
+                            'created_at': '|%Y-%m-%d %H:%M',
+                            'user_name': False,
+                            'user_email': True,
+                            'activity_type': True
+                        },
+                        labels={
+                            'created_at': 'Tiempo',
+                            'user_name': 'Usuario'
+                        }
+                    )
+
+                    fig_scatter.update_layout(
+                        height=400,
+                        showlegend=False,
+                        margin=dict(l=0, r=0, t=20, b=0),
+                        xaxis=dict(tickformat='%Y-%m-%d %H:%M')
+                    )
+                    fig_scatter.update_traces(marker=dict(size=8, opacity=0.7))
+
+                    st.plotly_chart(fig_scatter, use_container_width=True)
+
+                    # Show most active user
+                    user_activity_count = df_scatter.groupby('user_name').size().reset_index(name='count')
+                    if not user_activity_count.empty:
+                        top_user = user_activity_count.loc[user_activity_count['count'].idxmax()]
+                        st.info(f"🏆 **Más activo:** {top_user['user_name']} ({int(top_user['count'])} reservas)")
+
+            else:
+                st.info("ℹ️ No hay datos de actividad en el período seleccionado. La tabla debe existir y tener datos.")
+
+        except Exception as e:
+            st.warning(f"⚠️ Analytics no disponible: {str(e)}")
 
     st.divider()
 
@@ -405,7 +606,7 @@ def show_dashboard_tab():
                                 <p style="margin: 4px 0;"><strong>💰 Créditos:</strong> {user_info.get('credits', 0)}</p>
                             </div>
                             <div>
-                                <p style="margin: 4px 0;"><strong>🕒 Último login:</strong> {user_info['last_login'][:10] if user_info.get('last_login') else 'Nunca'}</p>
+                                <p style="margin: 4px 0;"><strong>⭐ Tipo:</strong> {'VIP (Comité)' if user_info.get('is_vip', False) else 'Regular'}</p>
                                 <p style="margin: 4px 0;"><strong>📅 Registrado:</strong> {user_info['created_at'][:10]}</p>
                                 <p style="margin: 4px 0;"><strong>🎾 Total reservas:</strong> {user['reservations']}</p>
                             </div>
@@ -490,10 +691,8 @@ def show_dashboard_tab():
                     else:
                         row[f"{day_name}\n{date.strftime('%d/%m')}"] = f"🔧 {maintenance.get('reason', 'Mantenimiento')}"
                 elif reservation:
-                    # Mostrar nombre (truncado si es muy largo)
+                    # Mostrar nombre completo del usuario
                     name = reservation['name']
-                    if len(name) > 12:
-                        name = name[:9] + "..."
                     row[f"{day_name}\n{date.strftime('%d/%m')}"] = f"🎾 {name}"
                 else:
                     row[f"{day_name}\n{date.strftime('%d/%m')}"] = "⚪ Libre"
@@ -547,22 +746,6 @@ def show_dashboard_tab():
 
     else:
         st.error("❌ Error cargando datos del calendario")
-
-def mostrar_feedback_reserva(reservation_id):
-    """Mostrar feedback de actualización de reserva"""
-    feedback_key = f'actualizado_recientemente_{reservation_id}'
-    if feedback_key in st.session_state:
-        feedback = st.session_state[feedback_key]
-        tiempo_transcurrido = (get_colombia_now() - feedback['timestamp']).total_seconds()
-
-        if tiempo_transcurrido < 15:  # Mostrar por 15 segundos
-            if feedback['accion'] == 'cancelada':
-                st.success("✅ Reserva cancelada exitosamente y usuario notificado")
-            return True
-        else:
-            # Limpiar feedback expirado
-            del st.session_state[feedback_key]
-    return False
 
 def show_reservations_management_tab():
     """Gestión de reservas por usuario"""
@@ -661,7 +844,7 @@ def show_reservations_management_tab():
                             with st.spinner("🔄 Cancelando reserva..."):
                                 success = admin_db_manager.cancel_reservation_with_notification(
                                     reservation['id'],
-                                    reservation['email'],
+                                    user['email'],  # Use selected user's email
                                     cancellation_reason.strip() if cancellation_reason else "",
                                     admin_user.get('username', 'admin')
                                 )
@@ -788,15 +971,6 @@ def show_reservations_management_tab():
     else:
         st.info(
             f"📅 No hay cancelaciones registradas {'en el período seleccionado' if not show_all_cancellations else ''}")
-
-def mantener_expander_abierto_admin(item_id, accion='actualizacion', duracion=15):
-    """Mantener expander abierto después de una acción administrativa"""
-    key = f"expander_admin_{item_id}"
-    st.session_state[key] = {
-        'timestamp': get_colombia_now(),
-        'accion': accion,
-        'duracion': duracion
-    }
 
 def verificar_expander_abierto_admin(item_id):
     """Verificar si un expander debe mantenerse abierto"""
@@ -1407,21 +1581,18 @@ def show_config_tab():
 
             new_access_code = st.text_input(
                 "Nuevo código de acceso",
-                placeholder="Ingresa 6 caracteres (ej: ABC123)",
-                max_chars=6,
-                help="El código debe ser exactamente 6 caracteres (letras y números)",
+                placeholder="Ingresa el código de acceso (ej: ABC123XYZ)",
+                max_chars=20,
+                help="El código puede tener hasta 20 caracteres (letras y números)",
                 label_visibility="collapsed"
             )
 
             # Validación en tiempo real
             if new_access_code:
-                if len(new_access_code) == 6:
-                    st.success("✅ Formato válido")
+                if len(new_access_code) >= 4:
+                    st.success(f"✅ Formato válido ({len(new_access_code)} caracteres)")
                 else:
-                    if len(new_access_code) < 6:
-                        st.warning(f"⚠️ Faltan {6 - len(new_access_code)} caracter(es)")
-                    else:
-                        st.error("❌ Máximo 6 caracteres")
+                    st.warning(f"⚠️ Mínimo 4 caracteres (tienes {len(new_access_code)})")
 
             st.markdown("<br>", unsafe_allow_html=True)
 
@@ -1436,8 +1607,10 @@ def show_config_tab():
             if submit_button:
                 if not new_access_code:
                     st.error("❌ Por favor ingresa un código")
-                elif len(new_access_code) != 6:
-                    st.error("❌ El código debe tener exactamente 6 caracteres")
+                elif len(new_access_code) < 4:
+                    st.error("❌ El código debe tener al menos 4 caracteres")
+                elif len(new_access_code) > 20:
+                    st.error("❌ El código no puede exceder 20 caracteres")
                 else:
                     admin_user = st.session_state.get('admin_user', {})
 
@@ -1606,6 +1779,47 @@ def show_maintenance_tab():
     st.subheader("🔧 Gestión de Mantenimiento de Cancha")
 
     # ========================================
+    # CHECK FOR SUCCESS MESSAGE FIRST
+    # ========================================
+    if 'maintenance_success' in st.session_state:
+        success_info = st.session_state.maintenance_success
+
+        st.markdown(f"""
+        <div style="
+            background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%);
+            border: 3px solid #28a745;
+            border-radius: 20px;
+            padding: 40px;
+            margin: 50px auto;
+            max-width: 800px;
+            text-align: center;
+            box-shadow: 0 8px 16px rgba(40, 167, 69, 0.2);
+        ">
+            <h2 style="margin: 0; color: #155724; font-size: 2.5em;">✅ Mantenimiento Programado Exitosamente</h2>
+            <p style="margin: 20px 0; color: #155724; font-size: 1.3em;">{success_info['message']}</p>
+            <div style="
+                background: rgba(255, 255, 255, 0.8);
+                border-radius: 12px;
+                padding: 20px;
+                margin: 30px auto;
+                max-width: 500px;
+            ">
+                <p style="margin: 8px 0; color: #155724; font-size: 1.1em;"><strong>📅 Fecha:</strong> {success_info['date']}</p>
+                <p style="margin: 8px 0; color: #155724; font-size: 1.1em;"><strong>⏰ Horario:</strong> {success_info['start_hour']:02d}:00 - {success_info['end_hour']:02d}:00</p>
+                <p style="margin: 8px 0; color: #155724; font-size: 1.1em;"><strong>📝 Motivo:</strong> {success_info['reason']}</p>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col2:
+            if st.button("➕ Programar Otro Mantenimiento", type="primary", use_container_width=True, key="program_another"):
+                del st.session_state.maintenance_success
+                st.rerun()
+
+        return  # Don't show the form after success
+
+    # ========================================
     # MAINTENANCE SECTION
     # ========================================
     st.markdown("""
@@ -1662,15 +1876,7 @@ def show_maintenance_tab():
                         format_func=lambda x: f"{x:02d}:00",
                         help="Hora de fin del mantenimiento (no incluida)"
                     )
-
-                # Mostrar resumen del rango
-                if start_hour < end_hour:
-                    hours_count = end_hour - start_hour
-                    st.info(f"📊 Se bloquearán {hours_count} hora(s): {start_hour}:00 - {end_hour}:00")
-                else:
-                    st.warning("⚠️ La hora de inicio debe ser menor que la hora de fin")
             else:
-                st.info("📊 Se bloquearán 16 horas: 6:00 - 22:00 (día completo)")
                 start_hour = 6
                 end_hour = 22
 
@@ -1707,10 +1913,14 @@ def show_maintenance_tab():
                     )
 
                     if success:
-                        st.success(f"✅ {message}")
-                        st.balloons()
-                        import time
-                        time.sleep(1)
+                        # Store success info in session state
+                        st.session_state.maintenance_success = {
+                            'message': message,
+                            'date': maintenance_date.strftime('%Y-%m-%d'),
+                            'start_hour': start_hour,
+                            'end_hour': end_hour,
+                            'reason': maintenance_reason.strip() if maintenance_reason else "Mantenimiento programado"
+                        }
                         st.rerun()
                     else:
                         st.error(f"❌ {message}")

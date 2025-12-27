@@ -26,10 +26,10 @@ export async function DELETE(
   // Get the reservation ID from params
   const { id } = await context.params
 
-  // Get the reservation to verify ownership
+  // Get the reservation to verify ownership and get details for logging
   const { data: reservation, error: fetchError } = await supabase
     .from('reservations')
-    .select('id, user_id')
+    .select('id, user_id, date, hour')
     .eq('id', id)
     .single()
 
@@ -77,8 +77,10 @@ export async function DELETE(
 
   // Refund credit (unless VIP)
   let newCredits = profile.credits
+  let creditRefunded = false
   if (!profile.is_vip) {
     newCredits = profile.credits + 1
+    creditRefunded = true
     await supabase
       .from('users')
       .update({ credits: newCredits })

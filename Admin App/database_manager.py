@@ -5,7 +5,6 @@ import streamlit as st
 from supabase import create_client, Client
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Tuple
-import contextlib
 from timezone_utils import get_colombia_now
 
 
@@ -33,26 +32,6 @@ class SupabaseManager:
         except Exception:
             st.error("Tablas no encontradas. Por favor ejecuta el SQL de configuración en el dashboard de Supabase.")
             return False
-
-    def set_session_context(self, session_token: str):
-        """Set session token for RLS context"""
-        self._current_session_token = session_token
-        if session_token:
-            try:
-                # Set session token in PostgreSQL session
-                self.client.rpc('set_session_token', {'token': session_token}).execute()
-            except Exception as e:
-                print(f"Failed to set session context: {e}")
-        else:
-            try:
-                self.client.rpc('set_session_token', {'token': None}).execute()
-            except Exception:
-                pass
-
-    def clear_session_context(self):
-        """Clear session context"""
-        self.set_session_context(None)
-        self._current_session_token = None
 
     def is_vip_user(self, email: str) -> bool:
         """Verificar si un usuario es VIP (tiene horario extendido)"""
@@ -154,8 +133,7 @@ class SupabaseManager:
                     'user_id': user['id'],
                     'amount': -credits_needed,
                     'transaction_type': 'reservation_use',
-                    'description': f'Reserva {date} {hour}:00',
-                    'created_at': datetime.now().isoformat()
+                    'description': f'Reserva {date} {hour}:00'
                 }).execute()
                 return True
 
@@ -165,7 +143,10 @@ class SupabaseManager:
             return False
 
     def save_reservation(self, date: datetime.date, hour: int, name: str, email: str) -> bool:
-        """Guardar nueva reserva - NOTE: Now requires user_id instead of name/email"""
+        """
+        Guardar nueva reserva - NOTE: Now requires user_id instead of name/email
+        Valida contra reservas existentes, mantenimiento y escuela de tenis
+        """
         try:
             # Get user_id from email
             user_result = self.client.table('users').select('id').eq('email', email.strip().lower()).execute()
@@ -175,29 +156,107 @@ class SupabaseManager:
 
             user_id = user_result.data[0]['id']
 
+            # Check if the slot is actually available
+            slot_status = self.get_slot_status(date, hour)
+
+            if not slot_status['available']:
+                # Provide specific error message based on the reason
+                if slot_status['reason'] == 'reserved':
+                    st.error(f"❌ Esta hora ya está reservada. {slot_status['details']}")
+                elif slot_status['reason'] == 'tennis_school':
+                    st.error(f"❌ No se puede reservar: {slot_status['details']}")
+                elif slot_status['reason'] == 'maintenance':
+                    st.error(f"❌ No se puede reservar: {slot_status['details']}")
+                else:
+                    st.error(f"❌ Esta hora no está disponible: {slot_status['details']}")
+                return False
+
+            # Slot is available, proceed with reservation
             result = self.client.table('reservations').insert({
                 'date': date.strftime('%Y-%m-%d'),
                 'hour': hour,
-                'user_id': user_id,
-                'created_at': get_colombia_now().replace(tzinfo=None).isoformat()
+                'user_id': user_id
             }).execute()
             return len(result.data) > 0
         except Exception as e:
             # Verificar si es error de clave duplicada
             if 'duplicate' in str(e).lower() or 'unique' in str(e).lower():
+                st.error("❌ Esta hora ya está reservada")
                 return False
-            st.error(f"Error de base de datos: {e}")
+            st.error(f"❌ Error de base de datos: {e}")
             return False
 
-    def is_hour_available(self, date: datetime.date, hour: int) -> bool:
-        """Verificar si una hora está disponible"""
+    def get_slot_status(self, date: datetime.date, hour: int) -> Dict[str, any]:
+        """
+        Obtener el estado detallado de un slot
+        Retorna información sobre si está disponible y por qué no lo está
+
+        Returns:
+            dict: {
+                'available': bool,
+                'reason': str,  # 'available', 'reserved', 'maintenance', 'tennis_school'
+                'details': str  # Mensaje descriptivo
+            }
+        """
         try:
-            result = self.client.table('reservations').select('id').eq(
+            # Check if there's already a reservation
+            reservation_result = self.client.table('reservations').select(
+                'id, users(full_name)'
+            ).eq('date', date.strftime('%Y-%m-%d')).eq('hour', hour).execute()
+
+            if reservation_result.data:
+                user_name = reservation_result.data[0].get('users', {}).get('full_name', 'Usuario')
+                return {
+                    'available': False,
+                    'reason': 'reserved',
+                    'details': f'Ya reservado por {user_name}'
+                }
+
+            # Check if the slot is blocked
+            blocked_result = self.client.table('blocked_slots').select('id, type, reason').eq(
                 'date', date.strftime('%Y-%m-%d')
             ).eq('hour', hour).execute()
-            return len(result.data) == 0
-        except Exception:
-            return False
+
+            if blocked_result.data:
+                block = blocked_result.data[0]
+                block_type = block.get('type', 'maintenance')
+
+                if block_type == 'tennis_school':
+                    return {
+                        'available': False,
+                        'reason': 'tennis_school',
+                        'details': 'Escuela de Tenis (Sábados y Domingos 8:00-12:00)'
+                    }
+                else:
+                    return {
+                        'available': False,
+                        'reason': 'maintenance',
+                        'details': 'Cancha en mantenimiento'
+                    }
+
+            return {
+                'available': True,
+                'reason': 'available',
+                'details': 'Disponible'
+            }
+        except Exception as e:
+            print(f"Error getting slot status: {e}")
+            return {
+                'available': False,
+                'reason': 'error',
+                'details': 'Error al verificar disponibilidad'
+            }
+
+    def is_hour_available(self, date: datetime.date, hour: int) -> bool:
+        """
+        Verificar si una hora está disponible
+        Chequea:
+        1. Reservas normales de usuarios
+        2. Slots bloqueados por mantenimiento
+        3. Slots bloqueados por escuela de tenis
+        """
+        status = self.get_slot_status(date, hour)
+        return status['available']
 
     def get_reservations_for_date(self, date: datetime.date) -> List[int]:
         """Obtener horas reservadas para una fecha específica"""
@@ -391,45 +450,6 @@ class SupabaseManager:
         except Exception as e:
             print(f"⚠️ Failed to log operation: {e}")
 
-    def create_atomic_reservation(self, date, hour, name, email):
-        """Crear reserva usando stored procedure atómica"""
-        try:
-            result = self.client.rpc('atomic_reservation_request', {
-                'p_date': date.strftime('%Y-%m-%d'),
-                'p_hour': hour,
-                'p_user_email': email,
-                'p_user_name': name
-            }).execute()
-
-            if result.data and len(result.data) > 0:
-                response = result.data[0]
-                return response['success'], response['message']
-            else:
-                return False, "Sin respuesta de la base de datos"
-
-        except Exception as e:
-            return False, f"Error: {str(e)}"
-
-    def create_atomic_double_reservation(self, date, hour1, hour2, name, email):
-        """Crear reserva de 2 horas usando stored procedure atómica"""
-        try:
-            result = self.client.rpc('atomic_double_reservation_request', {
-                'p_date': date.strftime('%Y-%m-%d'),
-                'p_hour1': hour1,
-                'p_hour2': hour2,
-                'p_user_email': email,
-                'p_user_name': name
-            }).execute()
-
-            if result.data and len(result.data) > 0:
-                response = result.data[0]
-                return response['success'], response['message']
-            else:
-                return False, "Sin respuesta de la base de datos"
-
-        except Exception as e:
-            return False, f"Error: {str(e)}"
-
     def get_blocked_slots_for_date(self, date: datetime.date) -> List[int]:
         """Obtener horarios de mantenimiento para una fecha"""
         try:
@@ -440,6 +460,127 @@ class SupabaseManager:
         except Exception:
             return []
 
+    def log_activity(self, user_id: str, activity_type: str, description: str = "",
+                     metadata: dict = None) -> bool:
+        """
+        Log user activity for analytics (simplified - reservations only)
+
+        Args:
+            user_id: User's UUID
+            activity_type: Type of activity (reservation_create)
+            description: Human-readable description
+            metadata: Additional context as dict
+        """
+        try:
+            self.client.table('user_activity_logs').insert({
+                'user_id': user_id,
+                'activity_type': activity_type,
+                'activity_description': description,
+                'metadata': metadata or {}
+            }).execute()
+            return True
+        except Exception as e:
+            print(f"Error logging activity: {e}")
+            return False
+
+    def get_activity_timeline_data(self, start_date: str = None, end_date: str = None,
+                                   granularity: str = 'hour') -> List[Dict]:
+        """
+        Get activity data for timeline visualization
+
+        Args:
+            start_date: Start date (YYYY-MM-DD)
+            end_date: End date (YYYY-MM-DD)
+            granularity: 'hour', 'day', or 'month'
+        """
+        try:
+            from datetime import datetime, timedelta
+
+            # Default to last 7 days if no dates provided
+            if not end_date:
+                end_date = get_colombia_today().strftime('%Y-%m-%d')
+            if not start_date:
+                start_dt = datetime.strptime(end_date, '%Y-%m-%d') - timedelta(days=7)
+                start_date = start_dt.strftime('%Y-%m-%d')
+
+            # Build query with explicit timezone
+            start_filter = f"{start_date}T00:00:00+00:00"
+            end_filter = f"{end_date}T23:59:59+00:00"
+
+            print(f"[DEBUG] Querying activity_logs:")
+            print(f"  Start: {start_filter}")
+            print(f"  End:   {end_filter}")
+
+            # First, check if we can get ANY records at all (no filters)
+            test_result = self.client.table('user_activity_logs').select('id, created_at').limit(5).execute()
+            print(f"  Test query (no filters): {len(test_result.data)} records")
+            if test_result.data:
+                for rec in test_result.data:
+                    print(f"    - ID {rec['id']}: {rec['created_at']}")
+
+            # Query activity logs with user info
+            result = self.client.table('user_activity_logs').select(
+                'id, user_id, activity_type, activity_description, created_at, users(full_name, email)'
+            ).gte('created_at', start_filter).lte(
+                'created_at', end_filter
+            ).order('created_at').execute()
+
+            print(f"  Filtered query: {len(result.data)} records")
+            if result.data:
+                print(f"  Sample timestamp: {result.data[0]['created_at']}")
+
+            return result.data
+        except Exception as e:
+            print(f"Error getting timeline data: {e}")
+            import traceback
+            traceback.print_exc()
+            return []
+
+    def get_activity_stats(self, start_date: str = None, end_date: str = None) -> Dict:
+        """Get aggregated activity statistics"""
+        try:
+            from datetime import datetime, timedelta
+
+            if not end_date:
+                end_date = get_colombia_today().strftime('%Y-%m-%d')
+            if not start_date:
+                start_dt = datetime.strptime(end_date, '%Y-%m-%d') - timedelta(days=30)
+                start_date = start_dt.strftime('%Y-%m-%d')
+
+            # Build query with explicit timezone
+            start_filter = f"{start_date}T00:00:00+00:00"
+            end_filter = f"{end_date}T23:59:59+00:00"
+
+            # Get all activities in date range
+            result = self.client.table('user_activity_logs').select(
+                'id, user_id, activity_type, created_at'
+            ).gte('created_at', start_filter).lte(
+                'created_at', end_filter
+            ).execute()
+
+            data = result.data
+
+            # Calculate statistics
+            total_activities = len(data)
+            unique_users = len(set(item['user_id'] for item in data if item.get('user_id')))
+            unique_sessions = 0  # Sessions not tracked in simplified version
+
+            # Activity type breakdown
+            activity_breakdown = {}
+            for item in data:
+                act_type = item.get('activity_type', 'unknown')
+                activity_breakdown[act_type] = activity_breakdown.get(act_type, 0) + 1
+
+            return {
+                'total_activities': total_activities,
+                'unique_users': unique_users,
+                'unique_sessions': unique_sessions,
+                'activity_breakdown': activity_breakdown,
+                'date_range': {'start': start_date, 'end': end_date}
+            }
+        except Exception as e:
+            print(f"Error getting activity stats: {e}")
+            return {}
 
 
 # Instancia global

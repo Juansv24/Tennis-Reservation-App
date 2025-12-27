@@ -554,7 +554,7 @@ class EmailManager:
 
         return self.send_email(user_email, subject, html_body, text_body)
 
-    def send_reservation_cancelled_notification(self, user_email: str, user_name: str, date: str, hour: int, cancelled_by: str = "user") -> bool:
+    def send_reservation_cancelled_notification(self, user_email: str, user_name: str, date: str, hour: int, cancelled_by: str = "user", reason: str = "") -> bool:
         """
         Send notification when a reservation is cancelled
 
@@ -564,6 +564,7 @@ class EmailManager:
             date: Reservation date (YYYY-MM-DD)
             hour: Reservation hour (0-23)
             cancelled_by: Who cancelled ('user' or 'admin')
+            reason: Cancellation reason (optional)
         """
         from timezone_utils import format_date_display
 
@@ -572,6 +573,23 @@ class EmailManager:
         hour_display = f"{hour:02d}:00"
 
         cancellation_reason = "Has cancelado tu reserva" if cancelled_by == "user" else "Tu reserva ha sido cancelada por el administrador"
+
+        # Build reason section
+        if reason and reason.strip():
+            reason_html = f"""
+            <div class="info-box" style="background: #fff3cd; border-left: 4px solid #ffc107;">
+                <p style="margin: 5px 0;"><strong>📋 Motivo de la cancelación:</strong></p>
+                <p style="margin: 5px 0;">{reason}</p>
+            </div>
+            """
+            reason_text = f"\n📋 Motivo de la cancelación: {reason}\n"
+        else:
+            reason_html = """
+            <div class="info-box" style="background: #e3f2fd; border-left: 4px solid #2478CC;">
+                <p style="margin: 5px 0;">Para más información sobre la cancelación, por favor contacta al administrador del sistema.</p>
+            </div>
+            """
+            reason_text = "\nPara más información sobre la cancelación, por favor contacta al administrador del sistema.\n"
 
         html_body = f"""
         <!DOCTYPE html>
@@ -605,6 +623,7 @@ class EmailManager:
                         <p style="margin: 5px 0;"><strong>📅 Fecha:</strong> {formatted_date}</p>
                         <p style="margin: 5px 0;"><strong>🕐 Hora:</strong> {hour_display}</p>
                     </div>
+                    {reason_html}
                     <p>La cancelación se ha procesado exitosamente. El crédito utilizado para esta reserva ha sido devuelto a tu cuenta.</p>
                     <p>Puedes hacer una nueva reserva cuando lo desees ingresando a la aplicación.</p>
                     <p>¡Gracias por usar nuestro sistema!</p>
@@ -625,7 +644,7 @@ class EmailManager:
         Detalles de la reserva cancelada:
         📅 Fecha: {formatted_date}
         🕐 Hora: {hour_display}
-
+        {reason_text}
         La cancelación se ha procesado exitosamente. El crédito utilizado para esta reserva ha sido devuelto a tu cuenta.
 
         Puedes hacer una nueva reserva cuando lo desees ingresando a la aplicación.

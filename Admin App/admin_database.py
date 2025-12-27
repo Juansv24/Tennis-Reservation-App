@@ -358,13 +358,14 @@ class AdminDatabaseManager:
 
                 user_name = user_result.data[0]['full_name'] if user_result.data else 'Usuario'
 
-                # Send cancellation email using the new template
+                # Send cancellation email using the new template with reason
                 email_manager.send_reservation_cancelled_notification(
                     user_email=user_email,
                     user_name=user_name,
                     date=reservation['date'],
                     hour=reservation['hour'],
-                    cancelled_by='admin'  # Admin cancelled
+                    cancelled_by='admin',  # Admin cancelled
+                    reason=reason  # Include the cancellation reason
                 )
         except Exception as e:
             print(f"Error sending cancellation email: {e}")
@@ -411,9 +412,6 @@ class AdminDatabaseManager:
             }
         except Exception:
             return {'total_reservations': 0, 'active_reservations': 0, 'last_reservation': None}
-
-    # NOTE: User status toggle feature removed - is_active column doesn't exist in new schema
-    # All users in the users table are considered active. To deactivate a user, delete their account.
 
     def get_user_reservation_statistics(self) -> List[Dict]:
         """Obtener estadísticas de reservas por usuario - Now uses JOIN"""
@@ -551,8 +549,7 @@ class AdminDatabaseManager:
                         'amount': 1,
                         'transaction_type': 'reservation_refund',
                         'description': f'Reembolso por cancelación admin - {reservation["date"]} {reservation["hour"]}:00',
-                        'admin_user': 'admin',
-                        'created_at': datetime.now().isoformat()
+                        'admin_user': 'admin'
                     }).execute()
 
                 return True
@@ -623,8 +620,7 @@ class AdminDatabaseManager:
                     'amount': credits_amount,
                     'transaction_type': 'admin_grant',
                     'description': reason,
-                    'admin_user': admin_username,
-                    'created_at': datetime.now().isoformat()
+                    'admin_user': admin_username
                 }).execute()
 
                 return True
@@ -664,8 +660,7 @@ class AdminDatabaseManager:
                     'amount': -credits_amount,
                     'transaction_type': 'admin_deduct',
                     'description': reason,
-                    'admin_user': admin_username,
-                    'created_at': datetime.now().isoformat()
+                    'admin_user': admin_username
                 }).execute()
 
                 return True
@@ -793,8 +788,7 @@ class AdminDatabaseManager:
                     'user_id': user['id'],
                     'amount': -1,
                     'transaction_type': 'reservation_use',
-                    'description': f'Uso de crédito para reserva - {date} {hour}:00',
-                    'created_at': datetime.now().isoformat()
+                    'description': f'Uso de crédito para reserva - {date} {hour}:00'
                 }).execute()
 
                 return True
@@ -1058,10 +1052,10 @@ class AdminDatabaseManager:
         """Actualizar contraseña del candado y notificar a usuarios con reservas activas"""
         try:
             # Insertar nueva contraseña (mantiene historial)
+            # Database handles created_at automatically
             result = self.client.table('lock_code').insert({
                 'code': new_code,
-                'admin_user': admin_username,
-                'created_at': datetime.now().isoformat()
+                'admin_user': admin_username  # Audit trail - not a timestamp
             }).execute()
 
             # Verificar que se insertó correctamente
@@ -1154,9 +1148,9 @@ class AdminDatabaseManager:
         """Actualizar código de acceso"""
         try:
             result = self.client.table('access_codes').insert({
-                'code': new_code,
-                'admin_user': admin_username,
-                'created_at': datetime.now().isoformat()
+                'code': new_code
+                # Database handles created_at automatically
+                # Note: admin_user column doesn't exist in access_codes table schema
             }).execute()
 
             if result.data and len(result.data) > 0:
@@ -1367,8 +1361,8 @@ class AdminDatabaseManager:
                 'reservation_hour': reservation_data.get('hour'),
                 'cancellation_reason': reason,
                 'cancelled_by': admin_username,
-                'cancelled_at': datetime.now().isoformat(),
                 'credits_refunded': 1
+                # Database handles cancelled_at automatically with Colombian timezone
             }).execute()
 
             return len(result.data) > 0
@@ -1515,8 +1509,7 @@ class AdminDatabaseManager:
                     'end_hour': end_hour,
                     'maintenance_type': maintenance_type,
                     'reason': reason or 'Mantenimiento programado',
-                    'created_by': admin_username,
-                    'created_at': datetime.now().isoformat()
+                    'created_by': admin_username
                 }).execute()
 
             hours_count = len(hours_to_block)
