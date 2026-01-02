@@ -1466,7 +1466,7 @@ def show_config_tab():
                     admin_user = st.session_state.get('admin_user', {})
 
                     with st.spinner("🔄 Actualizando contraseña..."):
-                        success = admin_db_manager.update_lock_code(
+                        success, error_msg = admin_db_manager.update_lock_code(
                             new_lock_code,
                             admin_user.get('username', 'admin')
                         )
@@ -1479,7 +1479,8 @@ def show_config_tab():
                         st.cache_data.clear()
                         st.rerun()
                     else:
-                        st.error("❌ Error al actualizar la contraseña. Intenta de nuevo.")
+                        st.error(f"❌ Error al actualizar la contraseña: {error_msg}")
+                        st.warning("⚠️ Por favor revisa los logs en la terminal para más detalles.")
 
         # Información adicional
         with st.expander("ℹ️ Información sobre la contraseña del candado", expanded=False):
