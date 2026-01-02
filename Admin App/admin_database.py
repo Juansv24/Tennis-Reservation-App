@@ -1051,9 +1051,20 @@ class AdminDatabaseManager:
     def update_lock_code(self, new_code: str, admin_username: str) -> bool:
         """Actualizar contraseña del candado y notificar a usuarios con reservas activas"""
         try:
+            print(f"========== LOCK CODE DEBUG ==========")
+            print(f"About to insert: {new_code}")
+            print(f"Client type: {type(self.client)}")
+            print(f"Client: {self.client}")
+
             result = self.client.table('lock_code').insert({
                 'code': new_code
             }).execute()
+
+            print(f"Result type: {type(result)}")
+            print(f"Result: {result}")
+            print(f"Result.data: {result.data}")
+            print(f"Result.data length: {len(result.data) if result.data else 0}")
+            print(f"=====================================")
 
             if result.data and len(result.data) > 0:
                 print(f"Lock code updated successfully: {new_code}")
@@ -1142,11 +1153,22 @@ class AdminDatabaseManager:
     def update_access_code(self, new_code: str, admin_username: str) -> bool:
         """Actualizar código de acceso"""
         try:
+            print(f"========== ACCESS CODE DEBUG ==========")
+            print(f"About to insert: {new_code}")
+            print(f"Client type: {type(self.client)}")
+            print(f"Client: {self.client}")
+
             result = self.client.table('access_codes').insert({
                 'code': new_code
                 # Database handles created_at automatically
                 # Note: admin_user column doesn't exist in access_codes table schema
             }).execute()
+
+            print(f"Result type: {type(result)}")
+            print(f"Result: {result}")
+            print(f"Result.data: {result.data}")
+            print(f"Result.data length: {len(result.data) if result.data else 0}")
+            print(f"=====================================")
 
             if result.data and len(result.data) > 0:
                 print(f"Access code updated successfully: {new_code}")
