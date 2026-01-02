@@ -1053,9 +1053,10 @@ class AdminDatabaseManager:
         try:
             # Insertar nueva contraseña (mantiene historial)
             # Database handles created_at automatically
+            # TODO: Add admin_user column to lock_code table for audit trail
             result = self.client.table('lock_code').insert({
-                'code': new_code,
-                'admin_user': admin_username  # Audit trail - not a timestamp
+                'code': new_code
+                # 'admin_user': admin_username  # Commented out: column doesn't exist in schema
             }).execute()
 
             # Verificar que se insertó correctamente
