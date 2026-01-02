@@ -1466,10 +1466,14 @@ def show_config_tab():
                     admin_user = st.session_state.get('admin_user', {})
 
                     with st.spinner("🔄 Actualizando contraseña..."):
-                        success = admin_db_manager.update_lock_code(
+                        success, debug_info = admin_db_manager.update_lock_code(
                             new_lock_code,
                             admin_user.get('username', 'admin')
                         )
+
+                    # Mostrar debug info
+                    with st.expander("🔬 DEBUG INFO - LOCK CODE", expanded=True):
+                        st.json(debug_info)
 
                     if success:
                         st.success("✅ Contraseña actualizada exitosamente")
@@ -1613,10 +1617,14 @@ def show_config_tab():
                     admin_user = st.session_state.get('admin_user', {})
 
                     with st.spinner("🔄 Actualizando código..."):
-                        success = admin_db_manager.update_access_code(
+                        success, debug_info = admin_db_manager.update_access_code(
                             new_access_code.upper(),
                             admin_user.get('username', 'admin')
                         )
+
+                    # Mostrar debug info
+                    with st.expander("🔬 DEBUG INFO - ACCESS CODE", expanded=True):
+                        st.json(debug_info)
 
                     if success:
                         st.success("✅ Código de acceso actualizado exitosamente")

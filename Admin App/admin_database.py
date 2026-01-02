@@ -1048,23 +1048,29 @@ class AdminDatabaseManager:
             print(f"Error sending lock code change notification: {e}")
             return False
 
-    def update_lock_code(self, new_code: str, admin_username: str) -> bool:
-        """Actualizar contraseña del candado y notificar a usuarios con reservas activas"""
-        try:
-            print(f"========== LOCK CODE DEBUG ==========")
-            print(f"About to insert: {new_code}")
-            print(f"Client type: {type(self.client)}")
-            print(f"Client: {self.client}")
+    def update_lock_code(self, new_code: str, admin_username: str) -> tuple:
+        """Actualizar contraseña del candado y notificar a usuarios con reservas activas
 
+        Returns:
+            tuple: (success: bool, debug_info: dict)
+        """
+        debug_info = {
+            'function': 'update_lock_code',
+            'table': 'lock_code',
+            'code_to_insert': new_code,
+            'client_type': str(type(self.client)),
+            'result_data': None,
+            'result_data_length': 0,
+            'error': None
+        }
+
+        try:
             result = self.client.table('lock_code').insert({
                 'code': new_code
             }).execute()
 
-            print(f"Result type: {type(result)}")
-            print(f"Result: {result}")
-            print(f"Result.data: {result.data}")
-            print(f"Result.data length: {len(result.data) if result.data else 0}")
-            print(f"=====================================")
+            debug_info['result_data'] = str(result.data)
+            debug_info['result_data_length'] = len(result.data) if result.data else 0
 
             if result.data and len(result.data) > 0:
                 print(f"Lock code updated successfully: {new_code}")
@@ -1088,14 +1094,16 @@ class AdminDatabaseManager:
                 else:
                     print("No users with active reservations to notify")
 
-                return True
+                return True, debug_info
             else:
                 print("Failed to insert lock code")
-                return False
+                debug_info['error'] = 'No data returned from insert'
+                return False, debug_info
 
         except Exception as e:
             print(f"Error updating lock code: {e}")
-            return False
+            debug_info['error'] = str(e)
+            return False, debug_info
 
     def get_vip_users(self) -> List[Dict]:
         """Obtener lista de usuarios VIP - Now uses users.is_vip column"""
@@ -1150,36 +1158,44 @@ class AdminDatabaseManager:
             print(f"Error getting access code: {e}")
             return None
 
-    def update_access_code(self, new_code: str, admin_username: str) -> bool:
-        """Actualizar código de acceso"""
-        try:
-            print(f"========== ACCESS CODE DEBUG ==========")
-            print(f"About to insert: {new_code}")
-            print(f"Client type: {type(self.client)}")
-            print(f"Client: {self.client}")
+    def update_access_code(self, new_code: str, admin_username: str) -> tuple:
+        """Actualizar código de acceso
 
+        Returns:
+            tuple: (success: bool, debug_info: dict)
+        """
+        debug_info = {
+            'function': 'update_access_code',
+            'table': 'access_codes',
+            'code_to_insert': new_code,
+            'client_type': str(type(self.client)),
+            'result_data': None,
+            'result_data_length': 0,
+            'error': None
+        }
+
+        try:
             result = self.client.table('access_codes').insert({
                 'code': new_code
                 # Database handles created_at automatically
                 # Note: admin_user column doesn't exist in access_codes table schema
             }).execute()
 
-            print(f"Result type: {type(result)}")
-            print(f"Result: {result}")
-            print(f"Result.data: {result.data}")
-            print(f"Result.data length: {len(result.data) if result.data else 0}")
-            print(f"=====================================")
+            debug_info['result_data'] = str(result.data)
+            debug_info['result_data_length'] = len(result.data) if result.data else 0
 
             if result.data and len(result.data) > 0:
                 print(f"Access code updated successfully: {new_code}")
-                return True
+                return True, debug_info
             else:
                 print("Failed to insert access code")
-                return False
+                debug_info['error'] = 'No data returned from insert'
+                return False, debug_info
 
         except Exception as e:
             print(f"Error updating access code: {e}")
-            return False
+            debug_info['error'] = str(e)
+            return False, debug_info
 
     def verify_access_code(self, code: str) -> bool:
         """Verificar código de acceso"""
