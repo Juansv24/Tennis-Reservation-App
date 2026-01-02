@@ -1048,67 +1048,43 @@ class AdminDatabaseManager:
             print(f"Error sending lock code change notification: {e}")
             return False
 
-    def update_lock_code(self, new_code: str, admin_username: str) -> tuple[bool, str]:
-        """Actualizar contraseña del candado y notificar a usuarios con reservas activas
-
-        Returns:
-            tuple[bool, str]: (success, error_message)
-        """
+    def update_lock_code(self, new_code: str, admin_username: str) -> bool:
+        """Actualizar contraseña del candado y notificar a usuarios con reservas activas"""
         try:
-            print(f"[DEBUG] Starting lock code update...")
-            print(f"[DEBUG] New code: {new_code}")
-            print(f"[DEBUG] Admin username: {admin_username}")
-
-            # Insertar nueva contraseña (mantiene historial)
-            # Database handles created_at automatically
-            # TODO: Add admin_user column to lock_code table for audit trail
-            print(f"[DEBUG] Attempting database insert...")
             result = self.client.table('lock_code').insert({
                 'code': new_code
-                # 'admin_user': admin_username  # Commented out: column doesn't exist in schema
             }).execute()
 
-            print(f"[DEBUG] Database result: {result}")
-            print(f"[DEBUG] Result data: {result.data}")
-
-            # Verificar que se insertó correctamente
             if result.data and len(result.data) > 0:
-                print(f"✅ Lock code updated successfully: {new_code}")
+                print(f"Lock code updated successfully: {new_code}")
 
                 # Obtener usuarios con reservas activas y enviar notificaciones
                 users_with_active_reservations = self.get_users_with_active_reservations()
 
                 if users_with_active_reservations:
-                    print(f"📧 Notifying {len(users_with_active_reservations)} users about lock code change")
+                    print(f"Notifying {len(users_with_active_reservations)} users about lock code change")
 
                     for user in users_with_active_reservations:
-                        # Enviar email a cada usuario
                         success = self._send_lock_code_change_notification(
                             user['email'],
                             user['name'],
                             new_code
                         )
                         if success:
-                            print(f"✅ Lock code change notification sent to {user['email']}")
+                            print(f"Lock code change notification sent to {user['email']}")
                         else:
-                            print(f"❌ Failed to send notification to {user['email']}")
+                            print(f"Failed to send notification to {user['email']}")
                 else:
-                    print("ℹ️ No users with active reservations to notify")
+                    print("No users with active reservations to notify")
 
-                return True, ""
+                return True
             else:
-                error_msg = "Failed to insert lock code - no data returned from database"
-                print(f"❌ {error_msg}")
-                print(f"[DEBUG] Full result object: {result}")
-                return False, error_msg
+                print("Failed to insert lock code")
+                return False
 
         except Exception as e:
-            import traceback
-            error_msg = f"Error updating lock code: {str(e)}"
-            print(f"❌ {error_msg}")
-            print(f"[DEBUG] Full traceback:")
-            traceback.print_exc()
-            return False, error_msg
+            print(f"Error updating lock code: {e}")
+            return False
 
     def get_vip_users(self) -> List[Dict]:
         """Obtener lista de usuarios VIP - Now uses users.is_vip column"""
