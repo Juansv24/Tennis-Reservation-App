@@ -15,14 +15,27 @@ export async function GET() {
   }
 
   // Query lock_code table for the most recent code
-  const { data: lockCodeData } = await supabase
+  const { data, error } = await supabase
     .from('lock_code')
     .select('code')
     .order('created_at', { ascending: false })
     .limit(1)
     .single()
 
-  const lockCode = lockCodeData?.code || ''
+  if (error) {
+    console.error('Error fetching lock code:', error)
+    return NextResponse.json(
+      { error: 'Error al obtener el código del candado' },
+      { status: 500 }
+    )
+  }
 
-  return NextResponse.json({ lock_code: lockCode })
+  if (!data) {
+    return NextResponse.json(
+      { error: 'No se encontró código del candado' },
+      { status: 404 }
+    )
+  }
+
+  return NextResponse.json({ lock_code: data.code })
 }
