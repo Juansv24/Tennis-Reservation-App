@@ -1053,34 +1053,38 @@ class AdminDatabaseManager:
         try:
             # Insertar nueva contraseña (mantiene historial)
             # Database handles created_at automatically
-            self.client.table('lock_code').insert({
-                'code': new_code,
-                'admin_user': admin_username  # Audit trail - not a timestamp
+            result = self.client.table('lock_code').insert({
+                'code': new_code
+                # Note: admin_user column doesn't exist in lock_code table schema
             }).execute()
 
-            print(f"Lock code updated successfully: {new_code}")
+            if result.data and len(result.data) > 0:
+                print(f"Lock code updated successfully: {new_code}")
 
-            # Obtener usuarios con reservas activas y enviar notificaciones
-            users_with_active_reservations = self.get_users_with_active_reservations()
+                # Obtener usuarios con reservas activas y enviar notificaciones
+                users_with_active_reservations = self.get_users_with_active_reservations()
 
-            if users_with_active_reservations:
-                print(f"Notifying {len(users_with_active_reservations)} users about lock code change")
+                if users_with_active_reservations:
+                    print(f"Notifying {len(users_with_active_reservations)} users about lock code change")
 
-                for user in users_with_active_reservations:
-                    # Enviar email a cada usuario
-                    success = self._send_lock_code_change_notification(
-                        user['email'],
-                        user['name'],
-                        new_code
-                    )
-                    if success:
-                        print(f"Lock code change notification sent to {user['email']}")
-                    else:
-                        print(f"Failed to send notification to {user['email']}")
+                    for user in users_with_active_reservations:
+                        # Enviar email a cada usuario
+                        success = self._send_lock_code_change_notification(
+                            user['email'],
+                            user['name'],
+                            new_code
+                        )
+                        if success:
+                            print(f"Lock code change notification sent to {user['email']}")
+                        else:
+                            print(f"Failed to send notification to {user['email']}")
+                else:
+                    print("No users with active reservations to notify")
+
+                return True
             else:
-                print("No users with active reservations to notify")
-
-            return True
+                print("Failed to insert lock code")
+                return False
 
         except Exception as e:
             print(f"Error updating lock code: {e}")
