@@ -1054,11 +1054,10 @@ class AdminDatabaseManager:
             # Insertar nueva contraseña (mantiene historial)
             # Database handles created_at automatically
             result = self.client.table('lock_code').insert({
-                'code': new_code,
-                'admin_user': admin_username  # Audit trail - not a timestamp
+                'code': new_code
+                # Note: admin_user column doesn't exist in lock_code table schema
             }).execute()
 
-            # Verificar que se insertó correctamente
             if result.data and len(result.data) > 0:
                 print(f"Lock code updated successfully: {new_code}")
 
