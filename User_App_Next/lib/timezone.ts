@@ -29,6 +29,13 @@ export function getColombiaHour(): number {
 }
 
 /**
+ * Get current minute in Colombian timezone (0-59)
+ */
+export function getColombiaMinute(): number {
+  return getColombiaTime().getMinutes()
+}
+
+/**
  * Get today's date in Colombian timezone (YYYY-MM-DD format)
  */
 export function getColombiaToday(): string {
@@ -55,21 +62,25 @@ export function getColombiaTomorrow(): string {
 
 /**
  * Check if current time in Colombia is within reservation hours
- * @param isVip - Whether user is VIP (VIP: 8-20, Regular: 8-16)
+ * @param isVip - Whether user is VIP (VIP: 7:55AM-8PM, Regular: 8AM-5PM)
  * @returns [canReserve, errorMessage]
  */
 export function canMakeReservationNow(isVip: boolean): [boolean, string] {
   const currentHour = getColombiaHour()
+  const currentMinute = getColombiaMinute()
 
   if (isVip) {
-    // VIP users: 8 AM - 11 PM (23:00)
-    if (currentHour >= 8 && currentHour <= 23) {
+    // VIP users: 7:55 AM - 8:00 PM (20:00)
+    const isAfterStart = currentHour > 7 || (currentHour === 7 && currentMinute >= 55)
+    const isBeforeEnd = currentHour < 20 || (currentHour === 20 && currentMinute === 0)
+
+    if (isAfterStart && isBeforeEnd) {
       return [true, '']
     } else {
-      if (currentHour < 8) {
-        return [false, 'Las reservas están disponibles a partir de las 8:00 AM']
+      if (!isAfterStart) {
+        return [false, 'Las reservas están disponibles a partir de las 7:55 AM']
       } else {
-        return [false, 'Las reservas están disponibles hasta las 11:00 PM']
+        return [false, 'Las reservas están disponibles hasta las 8:00 PM']
       }
     }
   } else {
