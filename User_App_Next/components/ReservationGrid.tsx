@@ -52,30 +52,59 @@ export default function ReservationGrid({
     }
 
     const scheduleNextCheck = () => {
-      const currentHour = getColombiaHour()
-      const maxHour = user.is_vip ? 23 : 16
+      const now = getColombiaTime()
+      const currentHour = now.getHours()
+      const currentMinute = now.getMinutes()
 
       let msUntilChange: number
 
-      if (currentHour < 8) {
-        // Before 8 AM - wait until 8 AM
-        const now = getColombiaTime()
-        const next8AM = new Date(now)
-        next8AM.setHours(8, 0, 0, 0)
-        msUntilChange = next8AM.getTime() - now.getTime()
-      } else if (currentHour <= maxHour) {
-        // During allowed hours - wait until restriction time
-        const now = getColombiaTime()
-        const nextRestriction = new Date(now)
-        nextRestriction.setHours(maxHour + 1, 0, 0, 0)
-        msUntilChange = nextRestriction.getTime() - now.getTime()
+      if (user.is_vip) {
+        // VIP: 7:55 AM - 8:00 PM
+        const isBeforeStart = currentHour < 7 || (currentHour === 7 && currentMinute < 55)
+        const isAfterEnd = currentHour >= 20
+
+        if (isBeforeStart) {
+          // Before 7:55 AM - wait until 7:55 AM
+          const next755AM = new Date(now)
+          next755AM.setHours(7, 55, 0, 0)
+          if (next755AM <= now) {
+            next755AM.setDate(next755AM.getDate() + 1)
+          }
+          msUntilChange = next755AM.getTime() - now.getTime()
+        } else if (isAfterEnd) {
+          // After 8 PM - wait until 7:55 AM tomorrow
+          const next755AM = new Date(now)
+          next755AM.setDate(next755AM.getDate() + 1)
+          next755AM.setHours(7, 55, 0, 0)
+          msUntilChange = next755AM.getTime() - now.getTime()
+        } else {
+          // During allowed hours - wait until 8:00 PM
+          const next8PM = new Date(now)
+          next8PM.setHours(20, 0, 0, 0)
+          if (next8PM <= now) {
+            next8PM.setDate(next8PM.getDate() + 1)
+          }
+          msUntilChange = next8PM.getTime() - now.getTime()
+        }
       } else {
-        // After hours - wait until 8 AM tomorrow
-        const now = getColombiaTime()
-        const next8AM = new Date(now)
-        next8AM.setDate(next8AM.getDate() + 1)
-        next8AM.setHours(8, 0, 0, 0)
-        msUntilChange = next8AM.getTime() - now.getTime()
+        // Regular users: 8 AM - 5 PM
+        if (currentHour < 8) {
+          // Before 8 AM - wait until 8 AM
+          const next8AM = new Date(now)
+          next8AM.setHours(8, 0, 0, 0)
+          msUntilChange = next8AM.getTime() - now.getTime()
+        } else if (currentHour <= 16) {
+          // During allowed hours - wait until 5 PM
+          const next5PM = new Date(now)
+          next5PM.setHours(17, 0, 0, 0)
+          msUntilChange = next5PM.getTime() - now.getTime()
+        } else {
+          // After hours - wait until 8 AM tomorrow
+          const next8AM = new Date(now)
+          next8AM.setDate(next8AM.getDate() + 1)
+          next8AM.setHours(8, 0, 0, 0)
+          msUntilChange = next8AM.getTime() - now.getTime()
+        }
       }
 
       // Set timeout for the exact moment the state changes
