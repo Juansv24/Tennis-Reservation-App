@@ -56,19 +56,24 @@ class SupabaseManager:
         try:
             from timezone_utils import get_colombia_now
 
-            # Obtener hora actual en Colombia
-            current_hour = get_colombia_now().hour
+            # Obtener hora y minuto actual en Colombia
+            colombia_time = get_colombia_now()
+            current_hour = colombia_time.hour
+            current_minute = colombia_time.minute
 
             # Verificar si es usuario VIP
             is_vip = self.is_vip_user(email)
 
             if is_vip:
-                # Usuarios VIP: pueden reservar de 8 AM - 8 PM (20:00)
-                if 8 <= current_hour <= 20:
+                # Usuarios VIP: pueden reservar de 7:55 AM - 8:00 PM (20:00)
+                is_after_start = current_hour > 7 or (current_hour == 7 and current_minute >= 55)
+                is_before_end = current_hour < 20 or (current_hour == 20 and current_minute == 0)
+
+                if is_after_start and is_before_end:
                     return True, ""
                 else:
-                    if current_hour < 8:
-                        return False, "Las reservas están disponibles a partir de las 8:00 AM"
+                    if not is_after_start:
+                        return False, "Las reservas están disponibles a partir de las 7:55 AM"
                     else:
                         return False, "Las reservas están disponibles hasta las 8:00 PM"
             else:

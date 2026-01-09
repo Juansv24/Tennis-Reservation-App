@@ -13,7 +13,7 @@ export default function CollapsibleSections({ user }: CollapsibleSectionsProps) 
   const [cancelOpen, setCancelOpen] = useState(false)
 
   // Determine reservation hours based on user type
-  const reservationHours = user.is_vip ? '8:00 AM - 11:00 PM' : '8:00 AM - 5:00 PM'
+  const reservationHours = user.is_vip ? '7:55 AM - 8:00 PM' : '8:00 AM - 5:00 PM'
 
   return (
     <div className="space-y-4">
