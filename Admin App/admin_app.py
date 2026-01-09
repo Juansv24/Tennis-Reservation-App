@@ -1730,7 +1730,7 @@ def show_config_tab():
             text-align: center;
         ">
             <h3 style="margin: 0; color: #495057;">⭐ Gestión de usuarios que pertenecen al comité</h3>
-            <p style="margin: 10px 0 0 0; color: #6c757d;">Los usuarios del comité pueden reservar de 8:00 AM a 8:00 PM</p>
+            <p style="margin: 10px 0 0 0; color: #6c757d;">Los usuarios del comité pueden reservar de 7:55 AM a 8:00 PM</p>
         </div>
         """, unsafe_allow_html=True)
 
