@@ -824,7 +824,7 @@ class AdminDatabaseManager:
                     'Nombre Completo': user['full_name'],
                     'Email': user['email'],
                     'Créditos': user['credits'] or 0,
-                    'Estado VIP': 'Sí' if user.get('is_vip', False) else 'No',
+                    'Pertenece al Comité': 'Sí' if user.get('is_vip', False) else 'No',
                     'Primer Login Completado': 'Sí' if user.get('first_login_completed', False) else 'No',
                     'Fecha Registro': self._format_colombia_datetime(user['created_at'])
                 })
