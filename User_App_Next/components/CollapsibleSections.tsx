@@ -84,14 +84,14 @@ export default function CollapsibleSections({ user }: CollapsibleSectionsProps) 
               <p className="font-semibold text-gray-900 mb-1">📞 Contacto para Recargar:</p>
               <p className="ml-4"><strong>Orlando Rios</strong></p>
               <p className="ml-4">
-                <strong>WhatsApp:</strong>{' '}
+                <strong>Telegram:</strong>{' '}
                 <a
-                  href="https://wa.me/573193368749"
+                  href="https://t.me/3001127455"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-us-open-light-blue hover:underline"
                 >
-                  3193368749
+                  300 1127455
                 </a>
               </p>
             </div>
