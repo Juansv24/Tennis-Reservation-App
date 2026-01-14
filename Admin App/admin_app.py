@@ -315,7 +315,7 @@ def show_dashboard_tab():
         st.markdown(f"""
         <div class="stat-card">
             <div class="stat-number">{stats['vip_users']}</div>
-            <div class="stat-label">Usuarios VIP</div>
+            <div class="stat-label">Usuarios del Comité</div>
         </div>
         """, unsafe_allow_html=True)
 
@@ -606,7 +606,7 @@ def show_dashboard_tab():
                                 <p style="margin: 4px 0;"><strong>💰 Créditos:</strong> {user_info.get('credits', 0)}</p>
                             </div>
                             <div>
-                                <p style="margin: 4px 0;"><strong>⭐ Tipo:</strong> {'VIP (Comité)' if user_info.get('is_vip', False) else 'Regular'}</p>
+                                <p style="margin: 4px 0;"><strong>⭐ Tipo:</strong> {'Del Comité' if user_info.get('is_vip', False) else 'Regular'}</p>
                                 <p style="margin: 4px 0;"><strong>📅 Registrado:</strong> {user_info['created_at'][:10]}</p>
                                 <p style="margin: 4px 0;"><strong>🎾 Total reservas:</strong> {user['reservations']}</p>
                             </div>
@@ -999,7 +999,7 @@ def show_user_detailed_info(user):
         - **Email:** {user['email']}
         - **Créditos:** {user['credits'] or 0}
         - **Estado:** {'✅ Activo' if user.get('is_active', True) else '🚫 Bloqueado'}
-        - **Estado VIP:** {'⭐ VIP' if user.get('is_vip', False) else '👤 Regular'}
+        - **Pertenece al Comité:** {'⭐ Sí' if user.get('is_vip', False) else '👤 No'}
         - **Primer login completado:** {'✅ Sí' if user.get('first_login_completed', False) else '⏳ Pendiente'}
         - **Registrado:** {user['created_at'][:10] if 'created_at' in user and user['created_at'] else 'N/A'}
         """)
@@ -1749,7 +1749,7 @@ def show_config_tab():
                         st.success(f"Usuario removido del Comité: {user['email']}")
                         st.rerun()
                     else:
-                        st.error("Error removiendo usuario VIP")
+                        st.error("Error removiendo usuario del comité")
 
     # Formulario para agregar nuevo usuario al comité
     with st.form("add_vip_user_form", clear_on_submit=True):
