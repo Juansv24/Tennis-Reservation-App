@@ -206,24 +206,25 @@ class AdminDatabaseManager:
             query = self.client.table('reservations').select('*').eq('user_id', user_id)
 
             # Apply date filters
-            today = get_colombia_today()
+            today = get_colombia_today()  # Returns datetime.date object
+            today_str = today.strftime('%Y-%m-%d')  # Convert to string for queries
 
             if filter_type == 'upcoming':
-                query = query.gte('date', today)
+                query = query.gte('date', today_str)
             elif filter_type == 'past':
-                query = query.lt('date', today)
+                query = query.lt('date', today_str)
             elif filter_type == 'this_week':
-                # Get date 7 days from now
-                week_end = (datetime.strptime(today, '%Y-%m-%d') + timedelta(days=7)).strftime('%Y-%m-%d')
-                query = query.gte('date', today).lte('date', week_end)
+                # Get date 7 days from now (work with date object directly)
+                week_end = today + timedelta(days=7)
+                week_end_str = week_end.strftime('%Y-%m-%d')
+                query = query.gte('date', today_str).lte('date', week_end_str)
             elif filter_type == 'this_month':
-                # Get end of current month
-                today_dt = datetime.strptime(today, '%Y-%m-%d')
-                if today_dt.month == 12:
-                    month_end = f"{today_dt.year + 1}-01-01"
+                # Get end of current month (work with date object directly)
+                if today.month == 12:
+                    month_end = f"{today.year + 1}-01-01"
                 else:
-                    month_end = f"{today_dt.year}-{today_dt.month + 1:02d}-01"
-                query = query.gte('date', today).lt('date', month_end)
+                    month_end = f"{today.year}-{today.month + 1:02d}-01"
+                query = query.gte('date', today_str).lt('date', month_end)
 
             # Order by date desc (most recent first), then by hour
             result = query.order('date', desc=True).order('hour').execute()
