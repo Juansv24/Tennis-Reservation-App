@@ -666,8 +666,8 @@ def show_dashboard_tab():
         # Nombres de los días
         day_names = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo']
 
-        # Horarios de la cancha (6 AM a 9 PM)
-        court_hours = list(range(6, 22))
+        # Horarios de la cancha (6 AM a 8 PM)
+        court_hours = list(range(6, 21))
 
         # Crear DataFrame para el calendario
         # Preparar datos para la tabla
@@ -800,66 +800,96 @@ def show_reservations_management_tab():
         st.markdown(f"### 📋 Reservas de {user['name']}")
         st.info(f"**Email:** {user['email']}")
 
-        # Obtener reservas del usuario
-        user_reservations = admin_db_manager.get_user_reservations_history(user['email'])
+        # Filtros de reservas
+        col1, col2 = st.columns([2, 2])
 
-        for i, reservation in enumerate(user_reservations):
-            # Formatear fecha más legible
+        with col1:
+            filter_type = st.selectbox(
+                "📅 Filtrar reservas:",
+                options=['upcoming', 'all', 'past', 'this_week', 'this_month'],
+                format_func=lambda x: {
+                    'all': 'Todas las reservas',
+                    'upcoming': 'Próximas (hoy y futuro)',
+                    'past': 'Pasadas',
+                    'this_week': 'Esta semana',
+                    'this_month': 'Este mes'
+                }[x],
+                index=0,  # Default: upcoming (most recent first)
+                key='reservation_filter'
+            )
+
+        # Obtener reservas del usuario con filtro
+        user_reservations = admin_db_manager.get_user_reservations_history(user['email'], filter_type)
+
+        if not user_reservations:
+            st.warning("No hay reservas para el filtro seleccionado")
+        else:
+            # Group reservations by date
+            from collections import defaultdict
             from timezone_utils import format_date_display
-            fecha_display = format_date_display(reservation['date'])
 
-            # Crear título del expander más claro
-            titulo_expander = f"📅 {fecha_display} • 🕐 {reservation['hour']}:00"
+            reservations_by_date = defaultdict(list)
+            for reservation in user_reservations:
+                reservations_by_date[reservation['date']].append(reservation)
 
-            with st.expander(titulo_expander, expanded=False):
-                # Info organizada en columnas
-                col1, col2 = st.columns(2)
+            # Display grouped reservations
+            for date, reservations in reservations_by_date.items():
+                fecha_display = format_date_display(date)
 
-                with col1:
-                    st.markdown(f"""
-                    **📅 Fecha:** {fecha_display}  
-                    **🕐 Hora:** {reservation['hour']}:00 - {reservation['hour'] + 1}:00  
-                    **📝 Creada:** {reservation['created_at'][:10]}
-                    """)
+                # Create collapsible section for each date
+                with st.expander(f"📅 {fecha_display} ({len(reservations)} reserva{'s' if len(reservations) > 1 else ''})", expanded=True):
+                    for i, reservation in enumerate(reservations):
+                        # Display reservation with cancel option
+                        col1, col2 = st.columns([2, 1])
 
-                with col2:
-                    # Formulario para cancelación con motivo
-                    with st.form(f"cancel_form_{reservation['id']}", clear_on_submit=True):
-                        cancellation_reason = st.text_area(
-                            "Motivo de cancelación (opcional):",
-                            placeholder="Ej: Mantenimiento de cancha, lluvia, etc.",
-                            max_chars=200,
-                            key=f"reason_{reservation['id']}"
-                        )
+                        with col1:
+                            st.markdown(f"""
+                            **🕐 Hora:** {reservation['hour']}:00 - {reservation['hour'] + 1}:00
+                            **📝 Creada:** {reservation['created_at'][:10]}
+                            """)
 
-                        cancel_submitted = st.form_submit_button(
-                            "❌ Cancelar Reserva",
-                            type="secondary",
-                            use_container_width=True
-                        )
-
-                        if cancel_submitted:
-                            admin_user = st.session_state.get('admin_user', {})
-
-                            with st.spinner("🔄 Cancelando reserva..."):
-                                success = admin_db_manager.cancel_reservation_with_notification(
-                                    reservation['id'],
-                                    user['email'],  # Use selected user's email
-                                    cancellation_reason.strip() if cancellation_reason else "",
-                                    admin_user.get('username', 'admin')
+                        with col2:
+                            # Formulario para cancelación con motivo
+                            with st.form(f"cancel_form_{reservation['id']}", clear_on_submit=True):
+                                cancellation_reason = st.text_input(
+                                    "Motivo (opcional):",
+                                    placeholder="Ej: Lluvia",
+                                    max_chars=100,
+                                    key=f"reason_{reservation['id']}"
                                 )
 
-                                if success:
-                                    st.success("✅ Reserva cancelada exitosamente y usuario notificado")
-                                    # Limpiar selección
-                                    if 'selected_user_for_reservations' in st.session_state:
-                                        del st.session_state['selected_user_for_reservations']
+                                cancel_submitted = st.form_submit_button(
+                                    "❌ Cancelar",
+                                    type="secondary",
+                                    use_container_width=True
+                                )
 
-                                    import time
-                                    time.sleep(2)
-                                    st.rerun()
-                                else:
-                                    st.error("❌ Error al cancelar reserva")
+                                if cancel_submitted:
+                                    admin_user = st.session_state.get('admin_user', {})
+
+                                    with st.spinner("🔄 Cancelando reserva..."):
+                                        success = admin_db_manager.cancel_reservation_with_notification(
+                                            reservation['id'],
+                                            user['email'],
+                                            cancellation_reason.strip() if cancellation_reason else "",
+                                            admin_user.get('username', 'admin')
+                                        )
+
+                                        if success:
+                                            st.success("✅ Reserva cancelada exitosamente y usuario notificado")
+                                            # Limpiar selección
+                                            if 'selected_user_for_reservations' in st.session_state:
+                                                del st.session_state['selected_user_for_reservations']
+
+                                            import time
+                                            time.sleep(2)
+                                            st.rerun()
+                                        else:
+                                            st.error("❌ Error al cancelar reserva")
+
+                        # Add separator between reservations
+                        if i < len(reservations) - 1:
+                            st.markdown("---")
 
     st.divider()
 
