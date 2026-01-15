@@ -184,9 +184,17 @@ class AdminDatabaseManager:
         except Exception:
             return []
 
-    def get_user_reservations_history(self, user_email: str) -> List[Dict]:
-        """Obtener historial completo de reservas de un usuario - Now uses user_id"""
+    def get_user_reservations_history(self, user_email: str, filter_type: str = 'all') -> List[Dict]:
+        """Obtener historial completo de reservas de un usuario con filtros - Now uses user_id
+
+        Args:
+            user_email: Email del usuario
+            filter_type: 'all', 'upcoming', 'past', 'this_week', 'this_month'
+        """
         try:
+            from timezone_utils import get_colombia_today
+            from datetime import datetime, timedelta
+
             # Get user_id from email
             user_result = self.client.table('users').select('id').eq('email', user_email).execute()
             if not user_result.data:
@@ -194,9 +202,31 @@ class AdminDatabaseManager:
 
             user_id = user_result.data[0]['id']
 
-            result = self.client.table('reservations').select('*').eq(
-                'user_id', user_id
-            ).order('date', desc=True).order('hour').execute()
+            # Base query
+            query = self.client.table('reservations').select('*').eq('user_id', user_id)
+
+            # Apply date filters
+            today = get_colombia_today()
+
+            if filter_type == 'upcoming':
+                query = query.gte('date', today)
+            elif filter_type == 'past':
+                query = query.lt('date', today)
+            elif filter_type == 'this_week':
+                # Get date 7 days from now
+                week_end = (datetime.strptime(today, '%Y-%m-%d') + timedelta(days=7)).strftime('%Y-%m-%d')
+                query = query.gte('date', today).lte('date', week_end)
+            elif filter_type == 'this_month':
+                # Get end of current month
+                today_dt = datetime.strptime(today, '%Y-%m-%d')
+                if today_dt.month == 12:
+                    month_end = f"{today_dt.year + 1}-01-01"
+                else:
+                    month_end = f"{today_dt.year}-{today_dt.month + 1:02d}-01"
+                query = query.gte('date', today).lt('date', month_end)
+
+            # Order by date desc (most recent first), then by hour
+            result = query.order('date', desc=True).order('hour').execute()
 
             # Formatear fechas de creación
             for reservation in result.data:
@@ -204,7 +234,8 @@ class AdminDatabaseManager:
                     reservation['created_at'] = self._format_colombia_datetime(reservation['created_at'])
 
             return result.data
-        except Exception:
+        except Exception as e:
+            print(f"Error getting user reservations: {e}")
             return []
 
     def get_users_detailed_statistics(self) -> List[Dict]:

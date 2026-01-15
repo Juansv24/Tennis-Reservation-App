@@ -10,8 +10,8 @@ export const COLORS = {
   maintenanceOrange: '#FF9800',
 } as const
 
-// Court hours (6 AM - 9 PM)
-export const COURT_HOURS = Array.from({ length: 16 }, (_, i) => i + 6)
+// Court hours (6 AM - 8 PM)
+export const COURT_HOURS = Array.from({ length: 15 }, (_, i) => i + 6)
 
 // Format hour for display (e.g., 14 -> "14:00")
 export function formatHour(hour: number): string {
