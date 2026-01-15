@@ -7,12 +7,14 @@ import streamlit as st
 from admin_auth import admin_auth_manager, require_admin_auth
 from admin_database import admin_db_manager
 from database_manager import SupabaseManager
-from timezone_utils import get_colombia_now, get_colombia_today
+from timezone_utils import get_colombia_now, get_colombia_today, format_date_display
 from email_config import email_manager
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime, timedelta
+from collections import defaultdict
+import time
 
 
 # Colores US Open
@@ -585,8 +587,10 @@ def show_dashboard_tab():
 
             with st.expander(expander_title, expanded=False):
                 # Obtener datos detallados del usuario
-                user_detail = admin_db_manager.search_users_detailed(user['email'])
-                if user_detail:
+                user_detail, error = admin_db_manager.search_users_detailed(user['email'])
+                if error:
+                    st.error(f"❌ {error}")
+                elif user_detail:
                     user_info = user_detail[0]
 
                     # Card con información organizada
@@ -766,9 +770,13 @@ def show_reservations_management_tab():
 
     if search_term and search_button:
         # Buscar usuarios que coincidan
-        matching_users = admin_db_manager.search_users_for_reservations(search_term)
+        matching_users, error = admin_db_manager.search_users_for_reservations(search_term)
 
-        if matching_users:
+        if error:
+            # Mostrar error de base de datos
+            st.error(f"❌ {error}")
+            st.session_state.matching_users_list = None
+        elif matching_users:
             if len(matching_users) == 1:
                 st.session_state.selected_user_for_reservations = matching_users[0]
                 st.session_state.matching_users_list = None  # Limpiar lista
@@ -825,9 +833,6 @@ def show_reservations_management_tab():
             st.warning("No hay reservas para el filtro seleccionado")
         else:
             # Group reservations by date
-            from collections import defaultdict
-            from timezone_utils import format_date_display
-
             reservations_by_date = defaultdict(list)
             for reservation in user_reservations:
                 reservations_by_date[reservation['date']].append(reservation)
@@ -866,26 +871,29 @@ def show_reservations_management_tab():
 
                                 if cancel_submitted:
                                     admin_user = st.session_state.get('admin_user', {})
+                                    admin_username = admin_user.get('username')
 
-                                    with st.spinner("🔄 Cancelando reserva..."):
-                                        success = admin_db_manager.cancel_reservation_with_notification(
-                                            reservation['id'],
-                                            user['email'],
-                                            cancellation_reason.strip() if cancellation_reason else "",
-                                            admin_user.get('username', 'admin')
-                                        )
+                                    # Validar que tenemos el username del admin
+                                    if not admin_username:
+                                        st.error("❌ Error: No se pudo identificar al usuario administrador. Por favor, vuelve a iniciar sesión.")
+                                    else:
+                                        with st.spinner("🔄 Cancelando reserva..."):
+                                            success = admin_db_manager.cancel_reservation_with_notification(
+                                                reservation['id'],
+                                                user['email'],
+                                                cancellation_reason.strip() if cancellation_reason else "",
+                                                admin_username
+                                            )
 
-                                        if success:
-                                            st.success("✅ Reserva cancelada exitosamente y usuario notificado")
-                                            # Limpiar selección
-                                            if 'selected_user_for_reservations' in st.session_state:
-                                                del st.session_state['selected_user_for_reservations']
+                                            if success:
+                                                st.success("✅ Reserva cancelada exitosamente y usuario notificado")
+                                                # Mantener usuario seleccionado para ver reservas actualizadas
+                                                # (No eliminamos selected_user_for_reservations)
 
-                                            import time
-                                            time.sleep(2)
-                                            st.rerun()
-                                        else:
-                                            st.error("❌ Error al cancelar reserva")
+                                                time.sleep(1.5)
+                                                st.rerun()
+                                            else:
+                                                st.error("❌ Error al cancelar reserva. No se completaron todas las operaciones requeridas.")
 
                         # Add separator between reservations
                         if i < len(reservations) - 1:
@@ -1092,11 +1100,15 @@ def show_users_management_tab():
     with col2:
         if st.button("🔍 Buscar Usuario", type="primary"):
             if search_user:
-                found_users = admin_db_manager.search_users_detailed(search_user)
-                if found_users:
+                found_users, error = admin_db_manager.search_users_detailed(search_user)
+                if error:
+                    st.error(f"❌ {error}")
+                    st.session_state.found_users = []
+                elif found_users:
                     st.session_state.found_users = found_users
                 else:
                     st.warning("No se encontraron usuarios")
+                    st.session_state.found_users = []
 
     # Mostrar usuarios encontrados (si hay búsqueda)
     if 'found_users' in st.session_state and st.session_state.found_users:
