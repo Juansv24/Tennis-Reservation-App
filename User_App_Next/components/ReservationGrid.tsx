@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { COURT_HOURS, getTodayDate, getTomorrowDate, formatDateFull, formatDateShort } from '@/lib/constants'
 import { canMakeReservationNow, getColombiaTime, getColombiaHour } from '@/lib/timezone'
+import { generateTennisSchoolSlots } from '@/lib/tennis-school'
 import TimeSlot from './TimeSlot'
 import ConfirmationModal from './ConfirmationModal'
 import SuccessModal from './SuccessModal'
@@ -14,6 +15,7 @@ interface ReservationGridProps {
   initialMaintenance: MaintenanceSlot[]
   user: User
   initialDate: string
+  tennisSchoolEnabled: boolean
 }
 
 export default function ReservationGrid({
@@ -21,9 +23,11 @@ export default function ReservationGrid({
   initialMaintenance,
   user,
   initialDate,
+  tennisSchoolEnabled,
 }: ReservationGridProps) {
   const [reservations, setReservations] = useState(initialReservations)
   const [maintenance, setMaintenance] = useState(initialMaintenance)
+  const [isTennisSchoolEnabled, setIsTennisSchoolEnabled] = useState(tennisSchoolEnabled)
   const [loading, setLoading] = useState(false)
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [isConfirming, setIsConfirming] = useState(false)
@@ -128,17 +132,32 @@ export default function ReservationGrid({
     async function fetchAllData() {
       setLoading(true)
 
-      const [todayResData, tomorrowResData, todayMainData, tomorrowMainData] = await Promise.all([
+      const [todayResData, tomorrowResData, todayMainData, tomorrowMainData, systemSettings] = await Promise.all([
         supabase.from('reservations').select('*, users(full_name)').eq('date', today).order('hour'),
         supabase.from('reservations').select('*, users(full_name)').eq('date', tomorrow).order('hour'),
         supabase.from('blocked_slots').select('*').eq('date', today),
         supabase.from('blocked_slots').select('*').eq('date', tomorrow),
+        supabase.from('system_settings').select('tennis_school_enabled').single(),
       ])
 
       if (todayResData.data) setTodayReservations(todayResData.data)
       if (tomorrowResData.data) setTomorrowReservations(tomorrowResData.data)
-      if (todayMainData.data) setTodayMaintenance(todayMainData.data)
-      if (tomorrowMainData.data) setTomorrowMaintenance(tomorrowMainData.data)
+
+      // Update tennis school enabled state
+      const tennisEnabled = systemSettings.data?.tennis_school_enabled || false
+      setIsTennisSchoolEnabled(tennisEnabled)
+
+      // Add tennis school slots if enabled
+      let todaySlots = todayMainData.data || []
+      let tomorrowSlots = tomorrowMainData.data || []
+
+      if (tennisEnabled) {
+        todaySlots = [...todaySlots, ...generateTennisSchoolSlots(today)]
+        tomorrowSlots = [...tomorrowSlots, ...generateTennisSchoolSlots(tomorrow)]
+      }
+
+      setTodayMaintenance(todaySlots)
+      setTomorrowMaintenance(tomorrowSlots)
 
       setLoading(false)
     }
@@ -271,9 +290,13 @@ export default function ReservationGrid({
       return { status: 'selected' }
     }
 
-    // Check if in maintenance
-    const inMaintenance = maintenanceList.some((m) => m.hour === hour)
-    if (inMaintenance) {
+    // Check if in maintenance or tennis school
+    const blockedSlot = maintenanceList.find((m) => m.hour === hour)
+    if (blockedSlot) {
+      // Check if it's tennis school
+      if (blockedSlot.type === 'tennis_school') {
+        return { status: 'tennis-school' }
+      }
       return { status: 'maintenance' }
     }
 
