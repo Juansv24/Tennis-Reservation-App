@@ -4,9 +4,10 @@ VERSIÓN ACTUALIZADA con formateo de fechas y horas en zona horaria de Colombia
 """
 
 from database_manager import db_manager
-from timezone_utils import get_colombia_today, COLOMBIA_TZ
+from timezone_utils import get_colombia_today, get_colombia_now, format_date_display, COLOMBIA_TZ
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional, Tuple
+from email_config import email_manager
 import pytz
 
 class AdminDatabaseManager:
@@ -172,17 +173,27 @@ class AdminDatabaseManager:
             print(f"Error getting day of week stats: {e}")
             return {'days': [], 'counts': [], 'percentages': []}
 
-    def search_users_for_reservations(self, search_term: str) -> List[Dict]:
-        """Buscar usuarios por nombre o email para gestión de reservas"""
+    def search_users_for_reservations(self, search_term: str) -> tuple[List[Dict], str]:
+        """
+        Buscar usuarios por nombre o email para gestión de reservas
+
+        Returns:
+            tuple: (list of users, error_message)
+                   - Si tiene éxito: ([users], None)
+                   - Si falla: ([], "error message")
+        """
         try:
             # Buscar por email o nombre
             result = self.client.table('users').select('id, email, full_name').or_(
                 f'email.ilike.%{search_term}%,full_name.ilike.%{search_term}%'
             ).execute()
 
-            return [{'id': u['id'], 'email': u['email'], 'name': u['full_name']} for u in result.data]
-        except Exception:
-            return []
+            users = [{'id': u['id'], 'email': u['email'], 'name': u['full_name']} for u in result.data]
+            return (users, None)
+        except Exception as e:
+            error_msg = f"Error de base de datos al buscar usuarios: {str(e)}"
+            print(f"[Search] ERROR: {error_msg}")
+            return ([], error_msg)
 
     def get_user_reservations_history(self, user_email: str, filter_type: str = 'all') -> List[Dict]:
         """Obtener historial completo de reservas de un usuario con filtros - Now uses user_id
@@ -192,9 +203,6 @@ class AdminDatabaseManager:
             filter_type: 'all', 'upcoming', 'past', 'this_week', 'this_month'
         """
         try:
-            from timezone_utils import get_colombia_today
-            from datetime import datetime, timedelta
-
             # Get user_id from email
             user_result = self.client.table('users').select('id').eq('email', user_email).execute()
             if not user_result.data:
@@ -348,40 +356,175 @@ class AdminDatabaseManager:
 
     def cancel_reservation_with_notification(self, reservation_id: int, user_email: str,
                                              cancellation_reason: str = "", admin_username: str = "admin") -> bool:
-        """Cancelar reserva, enviar notificación y guardar historial"""
+        """
+        Cancelar reserva con proceso atómico completo
+
+        IMPORTANTE: Solo retorna True si TODAS las operaciones se completan exitosamente:
+        1. Reembolso de crédito
+        2. Eliminación de reserva
+        3. Envío de email de notificación
+        4. Guardado de registro de cancelación
+
+        Si cualquier operación falla, se hace rollback de las operaciones previas.
+        """
+        # Variables para tracking de rollback
+        credit_refunded = False
+        reservation_deleted = False
+        reservation_backup = None
+        user_id = None
+        previous_credits = None
+
         try:
-            # Obtener datos de la reserva ANTES de cancelar
+            # PASO 1: Obtener y validar todos los datos necesarios
+            print(f"[Cancellation] Step 1: Fetching reservation data for ID {reservation_id}")
             reservation_result = self.client.table('reservations').select('*').eq('id', reservation_id).execute()
             if not reservation_result.data:
+                print(f"[Cancellation] ERROR: Reservation {reservation_id} not found")
                 return False
 
             reservation = reservation_result.data[0]
+            reservation_backup = reservation.copy()  # Backup for potential rollback
+            user_id = reservation['user_id']
 
-            # Cancelar reserva (reutilizar función existente)
-            success = self.cancel_reservation(reservation_id)
+            # Obtener datos del usuario
+            print(f"[Cancellation] Step 2: Fetching user data for user_id {user_id}")
+            user_result = self.client.table('users').select('id, email, full_name, credits').eq('id', user_id).execute()
+            if not user_result.data:
+                print(f"[Cancellation] ERROR: User {user_id} not found")
+                return False
 
-            if success:
-                # Guardar en historial de cancelaciones
-                self.save_cancellation_record(
+            user = user_result.data[0]
+            previous_credits = user['credits'] or 0
+            user_name = user['full_name']
+
+            # Validar que email manager esté configurado
+            if not email_manager.is_configured():
+                print("[Cancellation] ERROR: Email manager not configured")
+                return False
+
+            print("[Cancellation] All validations passed, proceeding with cancellation")
+
+            # PASO 2: Reembolsar crédito (operación reversible)
+            print(f"[Cancellation] Step 3: Refunding credit to user (current: {previous_credits})")
+            try:
+                new_credits = previous_credits + 1
+                self.client.table('users').update({
+                    'credits': new_credits
+                }).eq('id', user_id).execute()
+
+                # Registrar transacción de reembolso
+                self.client.table('credit_transactions').insert({
+                    'user_id': user_id,
+                    'amount': 1,
+                    'transaction_type': 'reservation_refund',
+                    'description': f'Reembolso por cancelación admin - {reservation["date"]} {reservation["hour"]}:00',
+                    'admin_user': admin_username
+                }).execute()
+
+                credit_refunded = True
+                print(f"[Cancellation] ✓ Credit refunded successfully (new balance: {new_credits})")
+            except Exception as e:
+                print(f"[Cancellation] ERROR: Failed to refund credit: {e}")
+                return False
+
+            # PASO 3: Eliminar reserva (reversible mediante reinserción)
+            print(f"[Cancellation] Step 4: Deleting reservation {reservation_id}")
+            try:
+                delete_result = self.client.table('reservations').delete().eq('id', reservation_id).execute()
+                if not delete_result.data:
+                    raise Exception("Delete operation returned no data")
+
+                reservation_deleted = True
+                print("[Cancellation] ✓ Reservation deleted successfully")
+            except Exception as e:
+                print(f"[Cancellation] ERROR: Failed to delete reservation: {e}")
+                # ROLLBACK: Restar el crédito que agregamos
+                if credit_refunded:
+                    print("[Cancellation] ROLLBACK: Removing refunded credit")
+                    self.client.table('users').update({
+                        'credits': previous_credits
+                    }).eq('id', user_id).execute()
+                return False
+
+            # PASO 4: Enviar email de notificación
+            print(f"[Cancellation] Step 5: Sending email notification to {user_email}")
+            try:
+                email_manager.send_reservation_cancelled_notification(
+                    user_email=user_email,
+                    user_name=user_name,
+                    date=reservation['date'],
+                    hour=reservation['hour'],
+                    cancelled_by='admin',
+                    reason=cancellation_reason or "Sin motivo especificado"
+                )
+                print("[Cancellation] ✓ Email sent successfully")
+            except Exception as e:
+                print(f"[Cancellation] ERROR: Failed to send email: {e}")
+                # ROLLBACK: Restaurar reserva y crédito
+                if reservation_deleted:
+                    print("[Cancellation] ROLLBACK: Restoring reservation")
+                    try:
+                        self.client.table('reservations').insert({
+                            'id': reservation_backup['id'],
+                            'user_id': reservation_backup['user_id'],
+                            'date': reservation_backup['date'],
+                            'hour': reservation_backup['hour'],
+                            'created_at': reservation_backup['created_at']
+                        }).execute()
+                    except Exception as restore_error:
+                        print(f"[Cancellation] CRITICAL ERROR: Could not restore reservation: {restore_error}")
+
+                if credit_refunded:
+                    print("[Cancellation] ROLLBACK: Removing refunded credit")
+                    self.client.table('users').update({
+                        'credits': previous_credits
+                    }).eq('id', user_id).execute()
+
+                return False
+
+            # PASO 5: Guardar registro de cancelación (no crítico, pero se intenta)
+            print("[Cancellation] Step 6: Saving cancellation record")
+            try:
+                cancellation_saved = self.save_cancellation_record(
                     reservation_id,
-                    reservation,
+                    {
+                        'user_id': user_id,
+                        'email': user_email,
+                        'name': user_name,
+                        'date': reservation['date'],
+                        'hour': reservation['hour']
+                    },
                     cancellation_reason or "Sin motivo especificado",
                     admin_username
                 )
+                if cancellation_saved:
+                    print("[Cancellation] ✓ Cancellation record saved successfully")
+                else:
+                    print("[Cancellation] WARNING: Cancellation record not saved, but main operation succeeded")
+            except Exception as e:
+                # No revertimos si falla esto, ya que las operaciones críticas tuvieron éxito
+                print(f"[Cancellation] WARNING: Failed to save cancellation record: {e}")
 
-                # Enviar email de notificación con motivo
-                self._send_cancellation_notification(user_email, reservation, cancellation_reason)
+            print("[Cancellation] ✓✓✓ ALL OPERATIONS COMPLETED SUCCESSFULLY ✓✓✓")
+            return True
 
-            return success
         except Exception as e:
-            print(f"Error in cancel_reservation_with_notification: {e}")
+            print(f"[Cancellation] UNEXPECTED ERROR: {e}")
+            # Intentar rollback de cualquier operación completada
+            if credit_refunded and user_id and previous_credits is not None:
+                try:
+                    print("[Cancellation] ROLLBACK: Removing refunded credit")
+                    self.client.table('users').update({
+                        'credits': previous_credits
+                    }).eq('id', user_id).execute()
+                except Exception as rollback_error:
+                    print(f"[Cancellation] ERROR during rollback: {rollback_error}")
+
             return False
 
     def _send_cancellation_notification(self, user_email: str, reservation: Dict, reason: str = ""):
         """Enviar notificación de cancelación con motivo"""
         try:
-            from email_config import email_manager
-
             if email_manager.is_configured():
                 # Get user's full name
                 user_result = self.client.table('users').select('full_name').eq(
@@ -402,8 +545,15 @@ class AdminDatabaseManager:
         except Exception as e:
             print(f"Error sending cancellation email: {e}")
 
-    def search_users_detailed(self, search_term: str) -> List[Dict]:
-        """Búsqueda detallada de usuarios"""
+    def search_users_detailed(self, search_term: str) -> tuple[List[Dict], str]:
+        """
+        Búsqueda detallada de usuarios
+
+        Returns:
+            tuple: (list of users, error_message)
+                   - Si tiene éxito: ([users], None)
+                   - Si falla: ([], "error message")
+        """
         try:
             result = self.client.table('users').select('*').or_(
                 f'email.ilike.%{search_term}%,full_name.ilike.%{search_term}%'
@@ -414,9 +564,11 @@ class AdminDatabaseManager:
                 if 'created_at' in user:
                     user['created_at'] = self._format_colombia_datetime(user['created_at'])
 
-            return result.data
-        except Exception:
-            return []
+            return (result.data, None)
+        except Exception as e:
+            error_msg = f"Error de base de datos al buscar usuarios: {str(e)}"
+            print(f"[Search Detailed] ERROR: {error_msg}")
+            return ([], error_msg)
 
     def get_user_stats(self, user_id: int) -> Dict:
         """Obtener estadísticas de un usuario específico - Now uses user_id"""
@@ -1361,27 +1513,25 @@ class AdminDatabaseManager:
 
     def save_cancellation_record(self, reservation_id: int, reservation_data: Dict,
                                  reason: str, admin_username: str) -> bool:
-        """Guardar registro de cancelación - Now includes user_id"""
-        try:
-            # Get user info from reservation_data
-            user_id = reservation_data.get('user_id')
+        """
+        Guardar registro de cancelación
 
-            # If we don't have user info in reservation_data, fetch from users table
-            if not reservation_data.get('email') or not reservation_data.get('name'):
-                if user_id:
-                    user_result = self.client.table('users').select('email, full_name').eq('id', user_id).execute()
-                    if user_result.data:
-                        user_email = user_result.data[0]['email']
-                        user_name = user_result.data[0]['full_name']
-                    else:
-                        user_email = 'Unknown'
-                        user_name = 'Unknown'
-                else:
-                    user_email = 'Unknown'
-                    user_name = 'Unknown'
-            else:
-                user_email = reservation_data.get('email')
-                user_name = reservation_data.get('name')
+        Args:
+            reservation_id: UUID de la reserva cancelada
+            reservation_data: Debe incluir: user_id, email, name, date, hour
+            reason: Motivo de cancelación
+            admin_username: Usuario admin que canceló
+        """
+        try:
+            # Obtener datos del diccionario (ahora siempre vienen completos)
+            user_id = reservation_data.get('user_id')
+            user_email = reservation_data.get('email')
+            user_name = reservation_data.get('name')
+
+            # Validar que tenemos todos los datos necesarios
+            if not user_id or not user_email or not user_name:
+                print(f"[Save Cancellation] ERROR: Missing required data in reservation_data")
+                return False
 
             result = self.client.table('reservation_cancellations').insert({
                 'original_reservation_id': reservation_id,
@@ -1398,20 +1548,29 @@ class AdminDatabaseManager:
 
             return len(result.data) > 0
         except Exception as e:
-            print(f"Error saving cancellation record: {e}")
+            print(f"[Save Cancellation] ERROR: {e}")
             return False
 
-    def get_cancellation_history(self, days_back: int = None) -> List[Dict]:
-        """Obtener historial de cancelaciones"""
+    def get_cancellation_history(self, days_back: int = None, limit: int = 1000) -> List[Dict]:
+        """
+        Obtener historial de cancelaciones
+
+        Args:
+            days_back: Número de días hacia atrás para filtrar (None = todos)
+            limit: Máximo número de registros a retornar (default: 1000)
+        """
         try:
             query = self.client.table('reservation_cancellations').select('*')
 
             # Filtrar por días si se especifica
             if days_back:
-                start_date = (get_colombia_today() - timedelta(days=days_back)).strftime('%Y-%m-%d')
-                query = query.gte('cancelled_at', start_date)
+                # cancelled_at es un timestamp, usar datetime para comparación correcta
+                start_datetime = get_colombia_now() - timedelta(days=days_back)
+                start_datetime_str = start_datetime.isoformat()
+                query = query.gte('cancelled_at', start_datetime_str)
 
-            result = query.order('cancelled_at', desc=True).execute()
+            # Ordenar por fecha de cancelación (más recientes primero) y limitar resultados
+            result = query.order('cancelled_at', desc=True).limit(limit).execute()
 
             # Formatear datos para display
             formatted_cancellations = []
@@ -1420,7 +1579,6 @@ class AdminDatabaseManager:
                 hour_display = f"{cancellation['reservation_hour']:02d}:00"
 
                 # Formatear fecha de reserva
-                from timezone_utils import format_date_display
                 reservation_date_display = format_date_display(cancellation['reservation_date'])
 
                 formatted_cancellations.append({

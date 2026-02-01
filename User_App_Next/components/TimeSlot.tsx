@@ -20,15 +20,17 @@ export default function TimeSlot({ hour, status, onClick, ownerName }: TimeSlotP
     taken: 'bg-blue-50 border-2 border-blue-200 text-gray-600',
     past: 'bg-gray-100 border border-gray-200 text-gray-400 cursor-not-allowed opacity-60',
     maintenance: 'bg-orange-100 border-2 border-orange-400 text-orange-700',
+    'tennis-school': 'bg-green-100 border-2 border-green-500 text-green-800',
   }
 
   const statusLabels = {
     available: 'Disponible',
     selected: 'Seleccionado',
     'my-reservation': 'Tu Reserva',
-    taken: ownerName ? ownerName : 'Escuela de Tenis',
+    taken: ownerName || 'Reservado',
     past: 'Pasado',
     maintenance: 'Mantenimiento',
+    'tennis-school': 'Escuela de Tenis',
   }
 
   return (

@@ -37,7 +37,15 @@ export interface MaintenanceSlot {
   date: string
   hour: number
   reason: string | null
+  type?: string | null
   created_at: string
+}
+
+export interface SystemSettings {
+  id: string
+  tennis_school_enabled: boolean
+  updated_at?: string
+  updated_by?: string
 }
 
 export type SlotStatus =
@@ -46,4 +54,5 @@ export type SlotStatus =
   | 'taken'
   | 'past'
   | 'maintenance'
+  | 'tennis-school'
   | 'selected'
