@@ -7,12 +7,14 @@ import streamlit as st
 from admin_auth import admin_auth_manager, require_admin_auth
 from admin_database import admin_db_manager
 from database_manager import SupabaseManager
-from timezone_utils import get_colombia_now, get_colombia_today
+from timezone_utils import get_colombia_now, get_colombia_today, format_date_display
 from email_config import email_manager
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime, timedelta
+from collections import defaultdict
+import time
 
 
 # Colores US Open
@@ -315,7 +317,7 @@ def show_dashboard_tab():
         st.markdown(f"""
         <div class="stat-card">
             <div class="stat-number">{stats['vip_users']}</div>
-            <div class="stat-label">Usuarios VIP</div>
+            <div class="stat-label">Usuarios del Comité</div>
         </div>
         """, unsafe_allow_html=True)
 
@@ -573,8 +575,10 @@ def show_dashboard_tab():
 
             with st.expander(expander_title, expanded=False):
                 # Obtener datos detallados del usuario
-                user_detail = admin_db_manager.search_users_detailed(user['email'])
-                if user_detail:
+                user_detail, error = admin_db_manager.search_users_detailed(user['email'])
+                if error:
+                    st.error(f"❌ {error}")
+                elif user_detail:
                     user_info = user_detail[0]
 
                     # Card con información organizada
@@ -594,7 +598,7 @@ def show_dashboard_tab():
                                 <p style="margin: 4px 0;"><strong>💰 Créditos:</strong> {user_info.get('credits', 0)}</p>
                             </div>
                             <div>
-                                <p style="margin: 4px 0;"><strong>⭐ Tipo:</strong> {'VIP (Comité)' if user_info.get('is_vip', False) else 'Regular'}</p>
+                                <p style="margin: 4px 0;"><strong>⭐ Tipo:</strong> {'Del Comité' if user_info.get('is_vip', False) else 'Regular'}</p>
                                 <p style="margin: 4px 0;"><strong>📅 Registrado:</strong> {user_info['created_at'][:10]}</p>
                                 <p style="margin: 4px 0;"><strong>🎾 Total reservas:</strong> {user['reservations']}</p>
                             </div>
@@ -654,8 +658,8 @@ def show_dashboard_tab():
         # Nombres de los días
         day_names = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo']
 
-        # Horarios de la cancha (6 AM a 9 PM)
-        court_hours = list(range(6, 22))
+        # Horarios de la cancha (6 AM a 8 PM)
+        court_hours = list(range(6, 21))
 
         # Crear DataFrame para el calendario
         # Preparar datos para la tabla
@@ -754,9 +758,13 @@ def show_reservations_management_tab():
 
     if search_term and search_button:
         # Buscar usuarios que coincidan
-        matching_users = admin_db_manager.search_users_for_reservations(search_term)
+        matching_users, error = admin_db_manager.search_users_for_reservations(search_term)
 
-        if matching_users:
+        if error:
+            # Mostrar error de base de datos
+            st.error(f"❌ {error}")
+            st.session_state.matching_users_list = None
+        elif matching_users:
             if len(matching_users) == 1:
                 st.session_state.selected_user_for_reservations = matching_users[0]
                 st.session_state.matching_users_list = None  # Limpiar lista
@@ -788,66 +796,96 @@ def show_reservations_management_tab():
         st.markdown(f"### 📋 Reservas de {user['name']}")
         st.info(f"**Email:** {user['email']}")
 
-        # Obtener reservas del usuario
-        user_reservations = admin_db_manager.get_user_reservations_history(user['email'])
+        # Filtros de reservas
+        col1, col2 = st.columns([2, 2])
 
-        for i, reservation in enumerate(user_reservations):
-            # Formatear fecha más legible
-            from timezone_utils import format_date_display
-            fecha_display = format_date_display(reservation['date'])
+        with col1:
+            filter_type = st.selectbox(
+                "📅 Filtrar reservas:",
+                options=['upcoming', 'all', 'past', 'this_week', 'this_month'],
+                format_func=lambda x: {
+                    'all': 'Todas las reservas',
+                    'upcoming': 'Próximas (hoy y futuro)',
+                    'past': 'Pasadas',
+                    'this_week': 'Esta semana',
+                    'this_month': 'Este mes'
+                }[x],
+                index=0,  # Default: upcoming (most recent first)
+                key='reservation_filter'
+            )
 
-            # Crear título del expander más claro
-            titulo_expander = f"📅 {fecha_display} • 🕐 {reservation['hour']}:00"
+        # Obtener reservas del usuario con filtro
+        user_reservations = admin_db_manager.get_user_reservations_history(user['email'], filter_type)
 
-            with st.expander(titulo_expander, expanded=False):
-                # Info organizada en columnas
-                col1, col2 = st.columns(2)
+        if not user_reservations:
+            st.warning("No hay reservas para el filtro seleccionado")
+        else:
+            # Group reservations by date
+            reservations_by_date = defaultdict(list)
+            for reservation in user_reservations:
+                reservations_by_date[reservation['date']].append(reservation)
 
-                with col1:
-                    st.markdown(f"""
-                    **📅 Fecha:** {fecha_display}  
-                    **🕐 Hora:** {reservation['hour']}:00 - {reservation['hour'] + 1}:00  
-                    **📝 Creada:** {reservation['created_at'][:10]}
-                    """)
+            # Display grouped reservations
+            for date, reservations in reservations_by_date.items():
+                fecha_display = format_date_display(date)
 
-                with col2:
-                    # Formulario para cancelación con motivo
-                    with st.form(f"cancel_form_{reservation['id']}", clear_on_submit=True):
-                        cancellation_reason = st.text_area(
-                            "Motivo de cancelación (opcional):",
-                            placeholder="Ej: Mantenimiento de cancha, lluvia, etc.",
-                            max_chars=200,
-                            key=f"reason_{reservation['id']}"
-                        )
+                # Create collapsible section for each date
+                with st.expander(f"📅 {fecha_display} ({len(reservations)} reserva{'s' if len(reservations) > 1 else ''})", expanded=True):
+                    for i, reservation in enumerate(reservations):
+                        # Display reservation with cancel option
+                        col1, col2 = st.columns([2, 1])
 
-                        cancel_submitted = st.form_submit_button(
-                            "❌ Cancelar Reserva",
-                            type="secondary",
-                            use_container_width=True
-                        )
+                        with col1:
+                            st.markdown(f"""
+                            **🕐 Hora:** {reservation['hour']}:00 - {reservation['hour'] + 1}:00
+                            **📝 Creada:** {reservation['created_at'][:10]}
+                            """)
 
-                        if cancel_submitted:
-                            admin_user = st.session_state.get('admin_user', {})
-
-                            with st.spinner("🔄 Cancelando reserva..."):
-                                success = admin_db_manager.cancel_reservation_with_notification(
-                                    reservation['id'],
-                                    user['email'],  # Use selected user's email
-                                    cancellation_reason.strip() if cancellation_reason else "",
-                                    admin_user.get('username', 'admin')
+                        with col2:
+                            # Formulario para cancelación con motivo
+                            with st.form(f"cancel_form_{reservation['id']}", clear_on_submit=True):
+                                cancellation_reason = st.text_input(
+                                    "Motivo (opcional):",
+                                    placeholder="Ej: Lluvia",
+                                    max_chars=100,
+                                    key=f"reason_{reservation['id']}"
                                 )
 
-                                if success:
-                                    st.success("✅ Reserva cancelada exitosamente y usuario notificado")
-                                    # Limpiar selección
-                                    if 'selected_user_for_reservations' in st.session_state:
-                                        del st.session_state['selected_user_for_reservations']
+                                cancel_submitted = st.form_submit_button(
+                                    "❌ Cancelar",
+                                    type="secondary",
+                                    use_container_width=True
+                                )
 
-                                    import time
-                                    time.sleep(2)
-                                    st.rerun()
-                                else:
-                                    st.error("❌ Error al cancelar reserva")
+                                if cancel_submitted:
+                                    admin_user = st.session_state.get('admin_user', {})
+                                    admin_username = admin_user.get('username')
+
+                                    # Validar que tenemos el username del admin
+                                    if not admin_username:
+                                        st.error("❌ Error: No se pudo identificar al usuario administrador. Por favor, vuelve a iniciar sesión.")
+                                    else:
+                                        with st.spinner("🔄 Cancelando reserva..."):
+                                            success = admin_db_manager.cancel_reservation_with_notification(
+                                                reservation['id'],
+                                                user['email'],
+                                                cancellation_reason.strip() if cancellation_reason else "",
+                                                admin_username
+                                            )
+
+                                            if success:
+                                                st.success("✅ Reserva cancelada exitosamente y usuario notificado")
+                                                # Mantener usuario seleccionado para ver reservas actualizadas
+                                                # (No eliminamos selected_user_for_reservations)
+
+                                                time.sleep(1.5)
+                                                st.rerun()
+                                            else:
+                                                st.error("❌ Error al cancelar reserva. No se completaron todas las operaciones requeridas.")
+
+                        # Add separator between reservations
+                        if i < len(reservations) - 1:
+                            st.markdown("---")
 
     st.divider()
 
@@ -971,7 +1009,7 @@ def show_user_detailed_info(user):
         - **Email:** {user['email']}
         - **Créditos:** {user['credits'] or 0}
         - **Estado:** {'✅ Activo' if user.get('is_active', True) else '🚫 Bloqueado'}
-        - **Estado VIP:** {'⭐ VIP' if user.get('is_vip', False) else '👤 Regular'}
+        - **Pertenece al Comité:** {'⭐ Sí' if user.get('is_vip', False) else '👤 No'}
         - **Primer login completado:** {'✅ Sí' if user.get('first_login_completed', False) else '⏳ Pendiente'}
         - **Registrado:** {user['created_at'][:10] if 'created_at' in user and user['created_at'] else 'N/A'}
         """)
@@ -1034,11 +1072,15 @@ def show_users_management_tab():
     with col2:
         if st.button("🔍 Buscar Usuario", type="primary"):
             if search_user:
-                found_users = admin_db_manager.search_users_detailed(search_user)
-                if found_users:
+                found_users, error = admin_db_manager.search_users_detailed(search_user)
+                if error:
+                    st.error(f"❌ {error}")
+                    st.session_state.found_users = []
+                elif found_users:
                     st.session_state.found_users = found_users
                 else:
                     st.warning("No se encontraron usuarios")
+                    st.session_state.found_users = []
 
     # Mostrar usuarios encontrados (si hay búsqueda)
     if 'found_users' in st.session_state and st.session_state.found_users:
@@ -1685,7 +1727,7 @@ def show_config_tab():
             text-align: center;
         ">
             <h3 style="margin: 0; color: #495057;">⭐ Gestión de usuarios que pertenecen al comité</h3>
-            <p style="margin: 10px 0 0 0; color: #6c757d;">Los usuarios del comité pueden reservar de 8:00 AM a 8:00 PM</p>
+            <p style="margin: 10px 0 0 0; color: #6c757d;">Los usuarios del comité pueden reservar de 7:55 AM a 8:00 PM</p>
         </div>
         """, unsafe_allow_html=True)
 
@@ -1704,7 +1746,7 @@ def show_config_tab():
                         st.success(f"Usuario removido del Comité: {user['email']}")
                         st.rerun()
                     else:
-                        st.error("Error removiendo usuario VIP")
+                        st.error("Error removiendo usuario del comité")
 
     # Formulario para agregar nuevo usuario al comité
     with st.form("add_vip_user_form", clear_on_submit=True):

@@ -13,7 +13,7 @@ export default function CollapsibleSections({ user }: CollapsibleSectionsProps) 
   const [cancelOpen, setCancelOpen] = useState(false)
 
   // Determine reservation hours based on user type
-  const reservationHours = user.is_vip ? '8:00 AM - 11:00 PM' : '8:00 AM - 5:00 PM'
+  const reservationHours = user.is_vip ? '7:55 AM - 8:00 PM' : '8:00 AM - 5:00 PM'
 
   return (
     <div className="space-y-4">
@@ -84,14 +84,14 @@ export default function CollapsibleSections({ user }: CollapsibleSectionsProps) 
               <p className="font-semibold text-gray-900 mb-1">📞 Contacto para Recargar:</p>
               <p className="ml-4"><strong>Orlando Rios</strong></p>
               <p className="ml-4">
-                <strong>WhatsApp:</strong>{' '}
+                <strong>Telegram:</strong>{' '}
                 <a
-                  href="https://wa.me/573193368749"
+                  href="https://t.me/3001127455"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-us-open-light-blue hover:underline"
                 >
-                  3193368749
+                  300 1127455
                 </a>
               </p>
             </div>

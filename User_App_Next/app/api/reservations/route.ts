@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
-import { getColombiaHour, getColombiaToday, getColombiaTomorrow } from '@/lib/timezone'
+import { getColombiaHour, getColombiaMinute, getColombiaToday, getColombiaTomorrow } from '@/lib/timezone'
 import { logActivity } from '@/lib/activity-logger'
 
 // GET /api/reservations?date=YYYY-MM-DD
@@ -86,21 +86,41 @@ export async function POST(request: NextRequest) {
 
   // Check time-based reservation restrictions (Colombian timezone)
   const currentHour = getColombiaHour()
-  const maxHour = profile.is_vip ? 23 : 16 // VIP: 11 PM, Regular: 4 PM
+  const currentMinute = getColombiaMinute()
 
-  if (currentHour < 8) {
-    return NextResponse.json(
-      { error: 'Las reservas están disponibles a partir de las 8:00 AM' },
-      { status: 400 }
-    )
-  }
+  if (profile.is_vip) {
+    // VIP: 7:55 AM - 8:00 PM
+    const isAfterStart = currentHour > 7 || (currentHour === 7 && currentMinute >= 55)
+    const isBeforeEnd = currentHour < 20 || (currentHour === 20 && currentMinute === 0)
 
-  if (currentHour > maxHour) {
-    const maxTime = profile.is_vip ? '11:00 PM' : '5:00 PM'
-    return NextResponse.json(
-      { error: `Las reservas están disponibles hasta las ${maxTime}` },
-      { status: 400 }
-    )
+    if (!isAfterStart) {
+      return NextResponse.json(
+        { error: 'Las reservas están disponibles a partir de las 7:55 AM' },
+        { status: 400 }
+      )
+    }
+
+    if (!isBeforeEnd) {
+      return NextResponse.json(
+        { error: 'Las reservas están disponibles hasta las 8:00 PM' },
+        { status: 400 }
+      )
+    }
+  } else {
+    // Regular: 8 AM - 5 PM
+    if (currentHour < 8) {
+      return NextResponse.json(
+        { error: 'Las reservas están disponibles a partir de las 8:00 AM' },
+        { status: 400 }
+      )
+    }
+
+    if (currentHour > 16) {
+      return NextResponse.json(
+        { error: 'Las reservas están disponibles hasta las 5:00 PM' },
+        { status: 400 }
+      )
+    }
   }
 
   // Get today and tomorrow dates for validation (Colombian timezone)
