@@ -5,8 +5,6 @@ Configuración y Utilidades de Email para Sistema de Reservas de Cancha de Tenis
 import pytz
 import smtplib
 import ssl
-import secrets
-import string
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from datetime import datetime
@@ -69,63 +67,9 @@ class EmailManager:
             print(f"❌ Error loading email configuration: {type(e).__name__}")
             st.error("❌ Error loading email configuration")
 
-    def generate_verification_code(self) -> str:
-        """Generar código de verificación de 6 caracteres"""
-        return ''.join(secrets.choice(string.ascii_uppercase + string.digits) for _ in range(6))
-
     def is_configured(self) -> bool:
         """Verificar si el email está configurado correctamente"""
         return self._configured
-
-    def get_configuration_status(self) -> dict:
-        """Get detailed configuration status for admin debugging"""
-        if not self._configured:
-            try:
-                # Check what's missing without exposing values
-                address_exists = "address" in st.secrets.get("email", {})
-                password_exists = "password" in st.secrets.get("email", {})
-
-                return {
-                    "configured": False,
-                    "address_present": address_exists,
-                    "password_present": password_exists,
-                    "smtp_server": self.smtp_server,
-                    "smtp_port": self.smtp_port
-                }
-            except Exception:
-                return {"configured": False, "error": "Cannot access secrets"}
-        else:
-            return {
-                "configured": True,
-                "email": f"{self.email_address[:3]}***@{self.email_address.split('@')[1]}",
-                "smtp_server": self.smtp_server,
-                "smtp_port": self.smtp_port
-            }
-
-    def validate_email_security(self) -> bool:
-        """Validate email configuration security"""
-        if not self._configured:
-            st.warning("⚠️ Email service not configured")
-            return False
-
-        # Check for common security issues
-        warnings = []
-
-        # Check if using a secure app password (not regular password)
-        if " " not in self.email_password:
-            warnings.append("Consider using an App Password instead of regular password")
-
-        # Check email provider security
-        email_domain = self.email_address.split('@')[1].lower()
-        if email_domain not in ['gmail.com', 'outlook.com', 'hotmail.com']:
-            warnings.append(f"Using {email_domain} - ensure 2FA is enabled")
-
-        # Display warnings to admin
-        if warnings:
-            for warning in warnings:
-                st.info(f"💡 Email Security: {warning}")
-
-        return True
 
     def send_email(self, to_email: str, subject: str, body_html: str, body_text: str = None) -> Tuple[bool, str]:
         """Enviar email con HTML y texto alternativo opcional"""
@@ -183,68 +127,6 @@ class EmailManager:
             print(f"❌ {error_msg}")
             # Don't expose the full error message to avoid information leakage
             return False, "Email sending failed due to system error"
-
-    def send_verification_email(self, to_email: str, verification_code: str, user_name: str) -> Tuple[bool, str]:
-        """Enviar código de verificación por email"""
-        subject = "🎾 Verifica tu Cuenta del Sistema de Reservas"
-
-        html_body = f"""
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <style>
-                body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
-                .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
-                .header {{ background: linear-gradient(135deg, #001854 0%, #2478CC 100%); color: white; padding: 30px; text-align: center; border-radius: 10px; }}
-                .content {{ background: #f9f9f9; padding: 30px; border-radius: 10px; margin: 20px 0; }}
-                .code {{ background: #FFD400; color: #FFFFFF; font-size: 36px; font-weight: bold; padding: 20px; text-align: center; border-radius: 8px; letter-spacing: 8px; }}
-                .footer {{ text-align: center; color: #666; font-size: 14px; }}
-            </style>
-        </head>
-        <body>
-            <div class="container">
-                <div class="header">
-                    <h1>🎾 Reservas de Cancha de Tenis</h1>
-                    <p>¡Bienvenido a la cancha pública de Colina Campestre!</p>
-                </div>
-
-                <div class="content">
-                    <h2>¡Hola {user_name}!</h2>
-                    <p>Gracias por crear tu cuenta para reservar la cancha ubicada en la 148 con 56a. Para completar tu registro, por favor usa este código de verificación:</p>
-
-                    <div class="code">{verification_code}</div>
-
-                    <p>Este código expirará en 10 minutos por razones de seguridad.</p>
-
-                    <p>Si no creaste esta cuenta, por favor ignora este email.</p>
-                </div>
-
-                <div class="footer">
-                    <p>Sistema de Reservas de Cancha de Tenis - Colina Campestre</p>
-                    <p>Este es un mensaje automatizado, por favor no respondas a este email.</p>
-                </div>
-            </div>
-        </body>
-        </html>
-        """
-
-        text_body = f"""
-        Sistema de Reservas de Cancha de Tenis - Verificación de Email
-
-        ¡Hola {user_name}!
-
-        Gracias por crear tu cuenta. Por favor usa este código de verificación para completar tu registro:
-
-        {verification_code}
-
-        Este código expira en 10 minutos.
-
-        Si no creaste esta cuenta, por favor ignora este email.
-
-        Sistema de Reservas de Cancha de Tenis - Colina Campestre
-        """
-
-        return self.send_email(to_email, subject, html_body, text_body)
 
     def send_reservation_confirmation(self, to_email: str, user_name: str, date: datetime, hours: list,
                                       reservation_details: dict) -> Tuple[bool, str]:
@@ -343,87 +225,6 @@ class EmailManager:
         - Ubicación: Cancha de Tenis Colina Campestre
 
         Agregar a Google Calendar: {calendar_link}
-
-        Sistema de Reservas de Cancha de Tenis - Colina Campestre
-        """
-
-        return self.send_email(to_email, subject, html_body, text_body)
-
-    def send_password_reset_email(self, to_email: str, reset_token: str, user_name: str) -> Tuple[bool, str]:
-        """Enviar email de recuperación de contraseña"""
-        subject = "🔒 Recuperación de Contraseña - Sistema de Reservas"
-
-        # Crear enlace de recuperación (ajusta la URL según tu despliegue)
-        reset_link = f"https://reservas-cancha-tenis-colina.streamlit.app/?reset_token={reset_token}"
-
-        html_body = f"""
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <style>
-                body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
-                .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
-                .header {{ background: linear-gradient(135deg, #001854 0%, #2478CC 100%); color: white; padding: 30px; text-align: center; border-radius: 10px; }}
-                .content {{ background: #f9f9f9; padding: 30px; border-radius: 10px; margin: 20px 0; }}
-                .reset-button {{ background: #DC143C; color: white; padding: 15px 30px; text-decoration: none; border-radius: 8px; display: inline-block; margin: 20px 0; font-weight: bold; }}
-                .warning {{ background: #FFF3CD; border: 1px solid #FFEAA7; padding: 15px; border-radius: 5px; color: #856404; }}
-                .footer {{ text-align: center; color: #666; font-size: 14px; }}
-            </style>
-        </head>
-        <body>
-            <div class="container">
-                <div class="header">
-                    <h1>🔒 Recuperación de Contraseña</h1>
-                    <p>Sistema de Reservas de Cancha de Tenis</p>
-                </div>
-
-                <div class="content">
-                    <h2>Hola {user_name},</h2>
-                    <p>Recibimos una solicitud para restablecer la contraseña de tu cuenta.</p>
-
-                    <p>Haz clic en el siguiente botón para crear una nueva contraseña:</p>
-
-                    <p style="text-align: center;">
-                        <a href="{reset_link}" class="reset-button">
-                            🔒 Restablecer Contraseña
-                        </a>
-                    </p>
-
-                    <div class="warning">
-                        <strong>⚠️ Importante:</strong>
-                        <ul>
-                            <li>Este enlace expira en 30 minutos</li>
-                            <li>Solo se puede usar una vez</li>
-                            <li>Si no solicitaste este cambio, ignora este email</li>
-                        </ul>
-                    </div>
-
-                    <p><small>Si tienes problemas con el botón, copia este enlace: {reset_link}</small></p>
-                </div>
-
-                <div class="footer">
-                    <p>Sistema de Reservas de Cancha de Tenis - Colina Campestre</p>
-                    <p>Este es un mensaje automatizado, por favor no respondas.</p>
-                </div>
-            </div>
-        </body>
-        </html>
-        """
-
-        text_body = f"""
-        Recuperación de Contraseña - Sistema de Reservas
-
-        Hola {user_name},
-
-        Recibimos una solicitud para restablecer tu contraseña.
-
-        Usa este enlace para crear una nueva contraseña:
-        {reset_link}
-
-        IMPORTANTE:
-        - Este enlace expira en 30 minutos
-        - Solo se puede usar una vez
-        - Si no solicitaste este cambio, ignora este email
 
         Sistema de Reservas de Cancha de Tenis - Colina Campestre
         """

@@ -380,14 +380,10 @@ def show_dashboard_tab():
     # Validate and fetch data
     if start_date <= end_date:
         try:
-            # Debug info
-            st.caption(f"📊 Consultando datos desde {start_date.strftime('%Y-%m-%d')} hasta {end_date.strftime('%Y-%m-%d')}")
-
             # Get activity timeline data
             timeline_data = db_manager.get_activity_timeline_data(
                 start_date=start_date.strftime('%Y-%m-%d'),
-                end_date=end_date.strftime('%Y-%m-%d'),
-                granularity=selected_granularity
+                end_date=end_date.strftime('%Y-%m-%d')
             )
 
             # Get activity statistics
@@ -395,9 +391,6 @@ def show_dashboard_tab():
                 start_date=start_date.strftime('%Y-%m-%d'),
                 end_date=end_date.strftime('%Y-%m-%d')
             )
-
-            # Debug: Show what was returned
-            st.caption(f"✓ Registros encontrados: {len(timeline_data) if timeline_data else 0}")
 
             if timeline_data and len(timeline_data) > 0:
                 # Display activity summary
@@ -446,9 +439,6 @@ def show_dashboard_tab():
 
                 with col_timeline:
                     st.markdown("**📈 Timeline de Actividad**")
-
-                    # Import plotly for charts
-                    import plotly.graph_objects as go
 
                     # Create timeline plot
                     fig_timeline = go.Figure()
@@ -542,8 +532,6 @@ def show_dashboard_tab():
         day_stats = admin_db_manager.get_reservations_by_day_of_week()
 
         if day_stats['counts'] and sum(day_stats['counts']) > 0:
-            import plotly.graph_objects as go
-
             fig = go.Figure(data=[go.Pie(
                 labels=day_stats['days'],
                 values=day_stats['counts'],
@@ -624,7 +612,7 @@ def show_dashboard_tab():
     st.subheader("📅 Calendario de Reservas Semanal")
 
     # Controles de navegación
-    col1, col2, col3, col4, col5 = st.columns([1, 1, 2, 1, 1])
+    col1, col2, col3, col4 = st.columns([1, 1, 2, 1])
 
     # Inicializar week_offset si no existe
     if 'calendar_week_offset' not in st.session_state:
@@ -972,24 +960,8 @@ def show_reservations_management_tab():
         st.info(
             f"📅 No hay cancelaciones registradas {'en el período seleccionado' if not show_all_cancellations else ''}")
 
-def verificar_expander_abierto_admin(item_id):
-    """Verificar si un expander debe mantenerse abierto"""
-    key = f"expander_admin_{item_id}"
-    if key in st.session_state:
-        estado = st.session_state[key]
-        tiempo_transcurrido = (get_colombia_now() - estado['timestamp']).total_seconds()
-        if tiempo_transcurrido < estado['duracion']:
-            return True
-        else:
-            del st.session_state[key]
-    return False
-
 def show_user_detailed_info(user):
     """Mostrar información detallada del usuario con feedback mejorado"""
-
-    # Mostrar feedback si existe
-    mostrar_feedback_usuario(user['id'])
-
     col1, col2 = st.columns(2)
 
     with col1:
@@ -1073,9 +1045,7 @@ def show_users_management_tab():
         st.markdown("### 🔍 Resultados de Búsqueda")
 
         for user in st.session_state.found_users:
-            expandido = verificar_expander_abierto_admin(user['id'])
-
-            with st.expander(f"👤 {user['full_name']} ({user['email']})", expanded=expandido):
+            with st.expander(f"👤 {user['full_name']} ({user['email']})", expanded=False):
                 show_user_detailed_info(user)
 
         st.divider()
@@ -1321,21 +1291,6 @@ def show_credits_management_tab():
     else:
         st.info("No hay transacciones de créditos")
 
-
-def mostrar_feedback_usuario(user_id):
-    """Mostrar feedback de actualización de usuario"""
-    feedback_key = f'usuario_actualizado_recientemente_{user_id}'
-    if feedback_key in st.session_state:
-        feedback = st.session_state[feedback_key]
-        tiempo_transcurrido = (get_colombia_now() - feedback['timestamp']).total_seconds()
-
-        if tiempo_transcurrido < 15:  # Mostrar por 15 segundos
-            st.success(f"✅ {feedback['mensaje']}")
-            return True
-        else:
-            # Limpiar feedback expirado
-            del st.session_state[feedback_key]
-    return False
 
 def show_config_tab():
     """Mostrar pestaña de configuración del sistema"""
