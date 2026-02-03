@@ -485,29 +485,6 @@ class AdminDatabaseManager:
 
             return False
 
-    def _send_cancellation_notification(self, user_email: str, reservation: Dict, reason: str = ""):
-        """Enviar notificación de cancelación con motivo"""
-        try:
-            if email_manager.is_configured():
-                # Get user's full name
-                user_result = self.client.table('users').select('full_name').eq(
-                    'email', user_email.strip().lower()
-                ).execute()
-
-                user_name = user_result.data[0]['full_name'] if user_result.data else 'Usuario'
-
-                # Send cancellation email using the new template with reason
-                email_manager.send_reservation_cancelled_notification(
-                    user_email=user_email,
-                    user_name=user_name,
-                    date=reservation['date'],
-                    hour=reservation['hour'],
-                    cancelled_by='admin',  # Admin cancelled
-                    reason=reason  # Include the cancellation reason
-                )
-        except Exception as e:
-            print(f"Error sending cancellation email: {e}")
-
     def search_users_detailed(self, search_term: str) -> tuple[List[Dict], str]:
         """
         Búsqueda detallada de usuarios
@@ -605,50 +582,6 @@ class AdminDatabaseManager:
             return [{'hour': hour, 'count': count} for hour, count in sorted(hour_counts.items())]
         except Exception:
             return []
-
-    def cancel_reservation(self, reservation_id: int) -> bool:
-        """Cancelar una reserva específica - Now uses user_id"""
-        try:
-            # Obtener datos de la reserva antes de cancelar (now uses user_id)
-            reservation_result = self.client.table('reservations').select('user_id, date, hour').eq('id',
-                                                                                                  reservation_id).execute()
-
-            if not reservation_result.data:
-                return False
-
-            reservation = reservation_result.data[0]
-            user_id = reservation['user_id']
-
-            # Eliminar la reserva
-            delete_result = self.client.table('reservations').delete().eq('id', reservation_id).execute()
-
-            if delete_result.data:
-                # Obtener usuario para reembolso
-                user_result = self.client.table('users').select('id, credits').eq('id', user_id).execute()
-                if user_result.data:
-                    user = user_result.data[0]
-                    current_credits = user['credits'] or 0
-                    new_credits = current_credits + 1
-
-                    # Actualizar créditos directamente (sin RPC)
-                    self.client.table('users').update({
-                        'credits': new_credits
-                    }).eq('id', user['id']).execute()
-
-                    # Registrar transacción de reembolso
-                    self.client.table('credit_transactions').insert({
-                        'user_id': user['id'],
-                        'amount': 1,
-                        'transaction_type': 'reservation_refund',
-                        'description': f'Reembolso por cancelación admin - {reservation["date"]} {reservation["hour"]}:00',
-                        'admin_user': 'admin'
-                    }).execute()
-
-                return True
-            return False
-        except Exception as e:
-            print(f"Error canceling reservation: {e}")
-            return False
 
     def add_credits_to_user(self, email: str, credits_amount: int, reason: str, admin_username: str) -> bool:
         """Agregar créditos a un usuario"""

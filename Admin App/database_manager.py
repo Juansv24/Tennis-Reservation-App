@@ -5,7 +5,7 @@ import streamlit as st
 from supabase import create_client, Client
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Tuple
-from timezone_utils import get_colombia_now
+from timezone_utils import get_colombia_now, get_colombia_today
 
 
 class SupabaseManager:
