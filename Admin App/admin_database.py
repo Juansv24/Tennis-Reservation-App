@@ -422,28 +422,10 @@ class AdminDatabaseManager:
                 )
                 print("[Cancellation] ✓ Email sent successfully")
             except Exception as e:
-                print(f"[Cancellation] ERROR: Failed to send email: {e}")
-                # ROLLBACK: Restaurar reserva y crédito
-                if reservation_deleted:
-                    print("[Cancellation] ROLLBACK: Restoring reservation")
-                    try:
-                        self.client.table('reservations').insert({
-                            'id': reservation_backup['id'],
-                            'user_id': reservation_backup['user_id'],
-                            'date': reservation_backup['date'],
-                            'hour': reservation_backup['hour'],
-                            'created_at': reservation_backup['created_at']
-                        }).execute()
-                    except Exception as restore_error:
-                        print(f"[Cancellation] CRITICAL ERROR: Could not restore reservation: {restore_error}")
-
-                if credit_refunded:
-                    print("[Cancellation] ROLLBACK: Removing refunded credit")
-                    self.client.table('users').update({
-                        'credits': previous_credits
-                    }).eq('id', user_id).execute()
-
-                return False
+                # Email failure is non-critical - cancellation already succeeded
+                # Do NOT rollback: restoring the reservation could race with another user booking the slot
+                print(f"[Cancellation] WARNING: Email notification failed: {e}")
+                print("[Cancellation] Cancellation completed successfully despite email failure")
 
             # PASO 5: Guardar registro de cancelación (no crítico, pero se intenta)
             print("[Cancellation] Step 6: Saving cancellation record")
