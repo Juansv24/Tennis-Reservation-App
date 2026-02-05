@@ -206,6 +206,15 @@ export async function POST(request: NextRequest) {
     )
   }
 
+  // CHECK FOR PAST HOURS - Cannot book hours that have already passed today
+  if (date === today && hour <= currentHour) {
+    const formattedHour = `${hour.toString().padStart(2, '0')}:00`
+    return NextResponse.json(
+      { error: `No puedes reservar a las ${formattedHour} - esa hora ya pasó` },
+      { status: 400 }
+    )
+  }
+
   // Atomically deduct credit BEFORE creating reservation (prevents race condition)
   const { data: creditResult, error: creditError } = await supabase
     .rpc('deduct_user_credit', { user_id_param: user.id })

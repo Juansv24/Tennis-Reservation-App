@@ -185,6 +185,17 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  // CHECK FOR PAST HOURS - Cannot book hours that have already passed today
+  for (const res of reservations) {
+    if (res.date === today && res.hour <= currentHour) {
+      const formattedHour = `${res.hour.toString().padStart(2, '0')}:00`
+      return NextResponse.json(
+        { error: `No puedes reservar a las ${formattedHour} - esa hora ya pasó` },
+        { status: 400 }
+      )
+    }
+  }
+
   // Validate each reservation
   for (const res of reservations) {
     const { date, hour } = res
