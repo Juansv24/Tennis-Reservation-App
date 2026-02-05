@@ -625,42 +625,98 @@ def show_dashboard_tab():
 
     st.divider()
 
-    # Gráficos y estadísticas detalladas
-    col1, col2 = st.columns(2)
+    # Heatmap de uso por día y hora
+    st.subheader("🔥 Mapa de Calor: Uso por Día y Hora")
 
-    with col1:
-        st.subheader("📊 Distribución por Día de la Semana")
-        day_stats = admin_db_manager.get_reservations_by_day_of_week()
+    # Filter selector
+    col_filter, col_spacer = st.columns([1, 3])
+    with col_filter:
+        heatmap_filter = st.selectbox(
+            "Período",
+            options=[("Últimos 30 días", 30), ("Últimos 90 días", 90), ("Todo el tiempo", None)],
+            format_func=lambda x: x[0],
+            index=0,
+            key="heatmap_filter"
+        )
+        days_filter = heatmap_filter[1]
 
-        if day_stats['counts'] and sum(day_stats['counts']) > 0:
-            fig = go.Figure(data=[go.Pie(
-                labels=day_stats['days'],
-                values=day_stats['counts'],
-                hole=0.4,
-                textinfo='label+percent',
-                textposition='inside',
-                hovertemplate='<b>%{label}</b><br>%{value} reservas<br>%{percent}<extra></extra>',
-                marker=dict(colors=['#001854', '#2478CC', '#FFD400', '#FF6B6B', '#4ECDC4', '#95E1D3', '#F38181'])
-            )])
+    # Get heatmap data
+    heatmap_data = admin_db_manager.get_heatmap_data(days_filter)
 
-            fig.update_layout(
-                showlegend=False,
-                height=400,
-                margin=dict(t=0, b=0, l=0, r=0)
+    if any(sum(row) > 0 for row in heatmap_data):
+        # Create heatmap
+        days_spanish = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo']
+        hours = [f"{h}:00" for h in range(6, 21)]
+
+        fig_heatmap = go.Figure(data=go.Heatmap(
+            z=heatmap_data,
+            x=hours,
+            y=days_spanish,
+            colorscale=[
+                [0, '#f5f5f5'],      # No reservations - light gray
+                [0.25, '#c8e6c9'],   # Low - light green
+                [0.5, '#81c784'],    # Medium - green
+                [0.75, '#43a047'],   # High - darker green
+                [1, '#1b5e20']       # Very high - dark green
+            ],
+            hovertemplate='<b>%{y}</b> a las <b>%{x}</b><br>%{z} reservas<extra></extra>',
+            showscale=True,
+            colorbar=dict(
+                title="Reservas",
+                titleside="right"
             )
+        ))
 
-            st.plotly_chart(fig, use_container_width=True)
-        else:
-            st.info("No hay datos de reservas disponibles")
+        fig_heatmap.update_layout(
+            height=350,
+            margin=dict(l=0, r=0, t=20, b=0),
+            xaxis_title='Hora',
+            yaxis_title='',
+            yaxis=dict(autorange='reversed')  # Monday at top
+        )
 
-    with col2:
-        st.subheader("⏰ Horas Más Populares")
-        hourly_stats = admin_db_manager.get_hourly_reservation_stats()
-        if hourly_stats:
-            df_hourly = pd.DataFrame(hourly_stats)
-            st.bar_chart(df_hourly.set_index('hour')['count'])
-        else:
-            st.info("No hay datos de horarios disponibles")
+        st.plotly_chart(fig_heatmap, use_container_width=True)
+
+        # Summary stats below heatmap
+        # Find busiest and least busy day
+        day_totals = [sum(row) for row in heatmap_data]
+        busiest_day_idx = day_totals.index(max(day_totals))
+        busiest_day = days_spanish[busiest_day_idx]
+        least_busy_day_idx = day_totals.index(min(day_totals))
+        least_busy_day = days_spanish[least_busy_day_idx]
+
+        # Find busiest and least busy hour
+        hour_totals = [sum(heatmap_data[d][h] for d in range(7)) for h in range(15)]
+        busiest_hour_idx = hour_totals.index(max(hour_totals))
+        busiest_hour = f"{busiest_hour_idx + 6}:00"
+        least_busy_hour_idx = hour_totals.index(min(hour_totals))
+        least_busy_hour = f"{least_busy_hour_idx + 6}:00"
+
+        # Total reservations
+        total_reservations = sum(day_totals)
+
+        # Row 1: Busiest metrics
+        col_busiest_day, col_busiest_hour, col_total = st.columns(3)
+
+        with col_busiest_day:
+            st.metric("📅 Día más ocupado", busiest_day, f"{day_totals[busiest_day_idx]} reservas")
+
+        with col_busiest_hour:
+            st.metric("⏰ Hora más popular", busiest_hour, f"{hour_totals[busiest_hour_idx]} reservas")
+
+        with col_total:
+            st.metric("🎾 Total reservas", total_reservations, heatmap_filter[0])
+
+        # Row 2: Least busy metrics
+        col_least_day, col_least_hour, col_spacer = st.columns(3)
+
+        with col_least_day:
+            st.metric("📅 Día menos ocupado", least_busy_day, f"{day_totals[least_busy_day_idx]} reservas")
+
+        with col_least_hour:
+            st.metric("⏰ Hora menos popular", least_busy_hour, f"{hour_totals[least_busy_hour_idx]} reservas")
+    else:
+        st.info("No hay datos de reservas disponibles para el período seleccionado")
 
     st.divider()
 

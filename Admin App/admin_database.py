@@ -616,6 +616,47 @@ class AdminDatabaseManager:
         except Exception:
             return []
 
+    def get_heatmap_data(self, days_filter: int = None) -> List[List[int]]:
+        """
+        Obtener datos para heatmap de día × hora
+
+        Args:
+            days_filter: Número de días hacia atrás (None = todos los datos)
+
+        Returns:
+            Lista de listas: [día_semana][hora] = count
+            Días: 0=Lunes, 6=Domingo
+            Horas: 6-20 (índices 0-14)
+        """
+        try:
+            # Build query
+            query = self.client.table('reservations').select('date, hour')
+
+            # Apply date filter if specified
+            if days_filter:
+                filter_date = (get_colombia_today() - timedelta(days=days_filter)).strftime('%Y-%m-%d')
+                query = query.gte('date', filter_date)
+
+            result = query.execute()
+
+            # Initialize 7x15 matrix (7 days, 15 hours from 6-20)
+            heatmap = [[0 for _ in range(15)] for _ in range(7)]
+
+            for reservation in result.data:
+                date_obj = datetime.strptime(reservation['date'], '%Y-%m-%d').date()
+                day_of_week = date_obj.weekday()  # 0=Monday, 6=Sunday
+                hour = reservation['hour']
+
+                # Map hour 6-20 to index 0-14
+                if 6 <= hour <= 20:
+                    hour_index = hour - 6
+                    heatmap[day_of_week][hour_index] += 1
+
+            return heatmap
+        except Exception as e:
+            print(f"Error getting heatmap data: {e}")
+            return [[0 for _ in range(15)] for _ in range(7)]
+
     def add_credits_to_user(self, email: str, credits_amount: int, reason: str, admin_username: str) -> bool:
         """Agregar créditos a un usuario"""
         try:
