@@ -302,37 +302,10 @@ def show_dashboard_tab():
     # Obtener estadísticas
     stats = admin_db_manager.get_system_statistics()
 
-    # Métricas principales - Primera fila: USUARIOS
+    # Métricas principales - Primera fila: RESERVAS
     col1, col2, col3 = st.columns(3)
 
     with col1:
-        st.markdown(f"""
-        <div class="stat-card">
-            <div class="stat-number">{stats['total_users']}</div>
-            <div class="stat-label">Usuarios Registrados</div>
-        </div>
-        """, unsafe_allow_html=True)
-
-    with col2:
-        st.markdown(f"""
-        <div class="stat-card">
-            <div class="stat-number">{stats['active_users_30d']}</div>
-            <div class="stat-label">Usuarios Activos (30 días)</div>
-        </div>
-        """, unsafe_allow_html=True)
-
-    with col3:
-        st.markdown(f"""
-        <div class="stat-card">
-            <div class="stat-number">{stats['vip_users']}</div>
-            <div class="stat-label">Usuarios del Comité</div>
-        </div>
-        """, unsafe_allow_html=True)
-
-    # Métricas principales - Segunda fila: RESERVAS
-    col4, col5, col6 = st.columns(3)
-
-    with col4:
         st.markdown(f"""
         <div class="stat-card">
             <div class="stat-number">{stats['total_reservations']}</div>
@@ -340,7 +313,7 @@ def show_dashboard_tab():
         </div>
         """, unsafe_allow_html=True)
 
-    with col5:
+    with col2:
         st.markdown(f"""
         <div class="stat-card">
             <div class="stat-number">{stats['week_reservations']}</div>
@@ -348,7 +321,7 @@ def show_dashboard_tab():
         </div>
         """, unsafe_allow_html=True)
 
-    with col6:
+    with col3:
         st.markdown(f"""
         <div class="stat-card">
             <div class="stat-number">{stats['today_reservations']}</div>
@@ -356,10 +329,10 @@ def show_dashboard_tab():
         </div>
         """, unsafe_allow_html=True)
 
-    # Métricas principales - Tercera fila: OCUPACIÓN
-    col7, col8, col9 = st.columns(3)
+    # Métricas principales - Segunda fila: OCUPACIÓN
+    col4, col5, col6 = st.columns(3)
 
-    with col8:
+    with col5:
         # Color de ocupación según porcentaje
         occupancy = stats['today_occupancy_rate']
         occupancy_color = '#2e7d32' if occupancy >= 70 else '#f57c00' if occupancy >= 40 else '#757575'
@@ -1412,6 +1385,39 @@ def show_user_detailed_info(user):
 
 def show_users_management_tab():
     """Gestión mejorada de usuarios con vista de base de datos siempre visible"""
+
+    # Obtener estadísticas
+    stats = admin_db_manager.get_system_statistics()
+
+    # Métricas principales - Usuarios
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        st.markdown(f"""
+        <div class="stat-card">
+            <div class="stat-number">{stats['total_users']}</div>
+            <div class="stat-label">Usuarios Registrados</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col2:
+        st.markdown(f"""
+        <div class="stat-card">
+            <div class="stat-number">{stats['active_users_30d']}</div>
+            <div class="stat-label">Usuarios Activos (30 días)</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col3:
+        st.markdown(f"""
+        <div class="stat-card">
+            <div class="stat-number">{stats['vip_users']}</div>
+            <div class="stat-label">Usuarios del Comité</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    st.divider()
+
     st.subheader("👥 Gestión de Usuarios")
 
     # Buscador en la parte superior
@@ -1443,7 +1449,78 @@ def show_users_management_tab():
             with st.expander(f"👤 {user['full_name']} ({user['email']})", expanded=False):
                 show_user_detailed_info(user)
 
-        st.divider()
+    st.divider()
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # Retención de Usuarios
+    st.markdown("### 📊 Retención de Usuarios")
+
+    retention_data = admin_db_manager.get_user_retention_data()
+
+    # Metrics row
+    col1, col2, col3, col4 = st.columns(4)
+
+    card_style = "background: #f5f5f5; padding: 15px; border-radius: 12px; text-align: center; min-height: 90px; display: flex; flex-direction: column; justify-content: center;"
+
+    with col1:
+        st.markdown(f"""
+        <div style="{card_style}">
+            <span style="font-size: 1.8em; color: #2e7d32; font-weight: bold;">{retention_data['new_users_this_month']}</span>
+            <span style="color: #666; font-size: 0.85em;">Usuarios Nuevos (Este Mes)</span>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col2:
+        st.markdown(f"""
+        <div style="{card_style}">
+            <span style="font-size: 1.8em; color: #1565c0; font-weight: bold;">{retention_data['returning_users']}</span>
+            <span style="color: #666; font-size: 0.85em;">Usuarios Recurrentes</span>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col3:
+        retention_color = '#2e7d32' if retention_data['retention_rate'] >= 50 else '#f57c00' if retention_data['retention_rate'] >= 25 else '#c62828'
+        st.markdown(f"""
+        <div style="{card_style}">
+            <span style="font-size: 1.8em; color: {retention_color}; font-weight: bold;">{retention_data['retention_rate']}%</span>
+            <span style="color: #666; font-size: 0.85em;">Tasa de Retención</span>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col4:
+        st.markdown(f"""
+        <div style="{card_style}">
+            <span style="font-size: 1.8em; color: #6a1b9a; font-weight: bold;">{retention_data['avg_reservations_per_user']}</span>
+            <span style="color: #666; font-size: 0.85em;">Promedio Reservas/Usuario</span>
+        </div>
+        """, unsafe_allow_html=True)
+
+    # Frequency distribution chart
+    st.markdown("**📊 Distribución por Frecuencia de Uso**")
+
+    freq_data = retention_data['frequency_distribution']
+    fig_freq = go.Figure(data=[
+        go.Bar(
+            x=['1 reserva', '2-5 reservas', '6-10 reservas', '10+ reservas'],
+            y=[freq_data['1'], freq_data['2-5'], freq_data['6-10'], freq_data['10+']],
+            marker_color=['#ffcdd2', '#fff9c4', '#c8e6c9', '#1b5e20'],
+            text=[freq_data['1'], freq_data['2-5'], freq_data['6-10'], freq_data['10+']],
+            textposition='auto'
+        )
+    ])
+
+    fig_freq.update_layout(
+        height=250,
+        margin=dict(l=0, r=0, t=20, b=0),
+        xaxis_title='',
+        yaxis_title='Usuarios',
+        showlegend=False
+    )
+
+    st.plotly_chart(fig_freq, use_container_width=True)
+
+    st.divider()
 
     # Base de datos completa
     st.markdown("### 📊 Base de Usuarios Registrados")
@@ -1476,20 +1553,6 @@ def show_users_management_tab():
                 "Reservas Totales": st.column_config.NumberColumn("Reservas Totales", format="%d 🎾"),
             }
         )
-
-        # Summary stats
-        st.markdown("### 📈 Estadísticas Generales")
-        col1, col2, col3, col4 = st.columns(4)
-        with col1:
-            st.metric("Total Usuarios", len(users_stats))
-        with col2:
-            st.metric("Total Créditos Vendidos", sum(u['total_credits_bought'] for u in users_stats))
-        with col3:
-            st.metric("Total Reservas", sum(u['total_reservations'] for u in users_stats))
-        with col4:
-            avg_reservations = sum(u['total_reservations'] for u in users_stats) / len(
-                users_stats) if users_stats else 0
-            st.metric("Promedio Reservas/Usuario", f"{avg_reservations:.1f}")
     else:
         st.info("No hay usuarios registrados")
 

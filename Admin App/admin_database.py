@@ -1075,6 +1075,108 @@ class AdminDatabaseManager:
                 'period_days': days_back
             }
 
+    def get_user_retention_data(self) -> Dict:
+        """
+        Calcular métricas de retención de usuarios
+
+        Returns:
+            Dict con métricas de retención
+        """
+        try:
+            today = get_colombia_today()
+
+            # Current month range
+            current_month_start = today.replace(day=1)
+
+            # Previous month range
+            prev_month_end = current_month_start - timedelta(days=1)
+            prev_month_start = prev_month_end.replace(day=1)
+
+            # Get all reservations with user_id
+            all_reservations = self.client.table('reservations').select('user_id, date').execute()
+
+            if not all_reservations.data:
+                return {
+                    'new_users_this_month': 0,
+                    'returning_users': 0,
+                    'retention_rate': 0,
+                    'total_active_prev_month': 0,
+                    'frequency_distribution': {'1': 0, '2-5': 0, '6-10': 0, '10+': 0},
+                    'avg_reservations_per_user': 0
+                }
+
+            # Group reservations by user
+            user_reservations = {}
+            for r in all_reservations.data:
+                user_id = r['user_id']
+                date = datetime.strptime(r['date'], '%Y-%m-%d').date()
+                if user_id not in user_reservations:
+                    user_reservations[user_id] = []
+                user_reservations[user_id].append(date)
+
+            # Calculate metrics
+            users_current_month = set()
+            users_prev_month = set()
+
+            for user_id, dates in user_reservations.items():
+                for d in dates:
+                    if d >= current_month_start:
+                        users_current_month.add(user_id)
+                    elif prev_month_start <= d <= prev_month_end:
+                        users_prev_month.add(user_id)
+
+            # Returning users (active both months)
+            returning_users = users_current_month.intersection(users_prev_month)
+
+            # New users this month (first reservation ever is this month)
+            new_users = set()
+            for user_id in users_current_month:
+                first_reservation = min(user_reservations[user_id])
+                if first_reservation >= current_month_start:
+                    new_users.add(user_id)
+
+            # Retention rate
+            retention_rate = 0
+            if len(users_prev_month) > 0:
+                retention_rate = round((len(returning_users) / len(users_prev_month)) * 100, 1)
+
+            # Frequency distribution (all time)
+            freq_dist = {'1': 0, '2-5': 0, '6-10': 0, '10+': 0}
+            total_reservations = 0
+            for user_id, dates in user_reservations.items():
+                count = len(dates)
+                total_reservations += count
+                if count == 1:
+                    freq_dist['1'] += 1
+                elif 2 <= count <= 5:
+                    freq_dist['2-5'] += 1
+                elif 6 <= count <= 10:
+                    freq_dist['6-10'] += 1
+                else:
+                    freq_dist['10+'] += 1
+
+            # Average reservations per user
+            avg_per_user = round(total_reservations / len(user_reservations), 1) if user_reservations else 0
+
+            return {
+                'new_users_this_month': len(new_users),
+                'returning_users': len(returning_users),
+                'retention_rate': retention_rate,
+                'total_active_prev_month': len(users_prev_month),
+                'frequency_distribution': freq_dist,
+                'avg_reservations_per_user': avg_per_user
+            }
+        except Exception as e:
+            print(f"Error getting user retention data: {e}")
+            return {
+                'new_users_this_month': 0,
+                'returning_users': 0,
+                'retention_rate': 0,
+                'total_active_prev_month': 0,
+                'frequency_distribution': {'1': 0, '2-5': 0, '6-10': 0, '10+': 0},
+                'avg_reservations_per_user': 0
+            }
+
     def get_credit_transactions(self, limit: int = 50) -> List:
         """Obtener historial de transacciones de créditos"""
         try:
