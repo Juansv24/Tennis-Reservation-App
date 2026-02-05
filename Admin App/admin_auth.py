@@ -3,7 +3,7 @@ Sistema de Autenticación Simple para Administradores
 """
 
 import streamlit as st
-import hashlib
+import bcrypt
 from database_manager import db_manager
 
 
@@ -13,37 +13,39 @@ class AdminAuthManager:
     def __init__(self):
         self.client = db_manager.client
 
-    def _hash_password(self, password: str, salt: str) -> str:
-        """Generar hash de contraseña con salt"""
-        return hashlib.sha256((password + salt).encode()).hexdigest()
+    def _hash_password(self, password: str) -> str:
+        """Generate bcrypt hash for password"""
+        return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+
+    def _verify_password(self, password: str, stored_hash: str) -> bool:
+        """Verify password against bcrypt hash"""
+        return bcrypt.checkpw(password.encode(), stored_hash.encode())
 
     def update_admin_credentials(self):
-        """Update existing admin user with new secure credentials"""
+        """Update existing admin user with new secure credentials (bcrypt)"""
         try:
             # Get new credentials from secrets
             try:
                 new_password = st.secrets["admin"]["default_password"]
-                new_salt = st.secrets["admin"]["salt"]
             except KeyError:
                 st.error("❌ Admin credentials not configured in secrets")
                 return False
 
             # Validate new credentials
-            if len(new_password) < 8 or len(new_salt) < 16:
+            if len(new_password) < 8:
                 st.error("❌ New credentials don't meet security requirements")
                 return False
 
-            # Generate new hash with new credentials
-            new_hash = self._hash_password(new_password, new_salt)
+            # Generate new bcrypt hash (salt is embedded in bcrypt hash)
+            new_hash = self._hash_password(new_password)
 
-            print(f"🔧 Updating admin credentials...")
-            print(f"🔧 New salt: {new_salt[:10]}...")
-            print(f"🔧 New hash: {new_hash[:10]}...")
+            print(f"🔧 Updating admin credentials to bcrypt...")
+            print(f"🔧 New hash format: bcrypt")
 
-            # Update the admin user
+            # Update the admin user (salt field kept for legacy compatibility but not used for bcrypt)
             update_result = self.client.table('admin_users').update({
                 'password_hash': new_hash,
-                'salt': new_salt
+                'salt': 'bcrypt'
             }).eq('username', 'admin').execute()
 
             if update_result.data:
@@ -85,10 +87,9 @@ class AdminAuthManager:
             else:
                 print("🔍 No admin user found, creating new one...")
 
-                # Create new admin user with secure credentials
+                # Create new admin user with secure bcrypt credentials
                 try:
                     admin_password = st.secrets["admin"]["default_password"]
-                    salt = st.secrets["admin"]["salt"]
                 except KeyError:
                     st.error("❌ Credenciales de administrador no configuradas en secretos")
                     st.info("""
@@ -96,25 +97,23 @@ class AdminAuthManager:
 
                     [admin]
                     default_password = "TuContraseñaSeguraAquí"
-                    salt = "TuSaltSeguroAquíAlMenos16Caracteres"
                     """)
                     return False
 
-                if len(admin_password) < 8 or len(salt) < 16:
+                if len(admin_password) < 8:
                     st.error("❌ Las credenciales de administrador no cumplen los requisitos de seguridad")
                     st.info("""
                     Las credenciales de administrador deben cumplir:
                     - default_password: al menos 8 caracteres
-                    - salt: al menos 16 caracteres
                     """)
                     return False
 
-                password_hash = self._hash_password(admin_password, salt)
+                password_hash = self._hash_password(admin_password)
 
                 insert_result = self.client.table('admin_users').insert({
                     'username': 'admin',
                     'password_hash': password_hash,
-                    'salt': salt,
+                    'salt': 'bcrypt',
                     'full_name': 'Administrador del Sistema',
                     'is_active': True
                 }).execute()
@@ -135,7 +134,6 @@ class AdminAuthManager:
         """Validate admin configuration is secure"""
         try:
             admin_password = st.secrets["admin"]["default_password"]
-            salt = st.secrets["admin"]["salt"]
 
             # Check password strength
             if len(admin_password) < 12:
@@ -153,10 +151,6 @@ class AdminAuthManager:
             if not any(c in "!@#$%^&*()_+-=[]{}|;:,.<>?" for c in admin_password):
                 st.warning("⚠️ Admin password should contain special characters")
 
-            # Check salt strength
-            if len(salt) < 32:
-                st.warning("⚠️ Salt should be at least 32 characters for better security")
-
             return True
         except KeyError:
             st.error("❌ Credenciales de administrador no encontradas en secretos")
@@ -165,7 +159,6 @@ class AdminAuthManager:
 
             [admin]
             default_password = "TuContraseñaSeguraAquí"
-            salt = "TuSaltSeguroAquíAlMenos32Caracteres"
             """)
             return False
 
@@ -186,15 +179,11 @@ class AdminAuthManager:
             admin = result.data[0]
             print(f"Found admin: {admin['username']}")
 
-            # Verificar contraseña
-            password_hash = self._hash_password(password, admin['salt'])
-            stored_hash = admin['password_hash']
+            # Verify password with bcrypt
+            is_valid = self._verify_password(password, admin['password_hash'])
+            print(f"Authentication result: {'SUCCESS' if is_valid else 'FAILED'}")
 
-            # NOTE: DO NOT log password hashes for security reasons
-            hashes_match = password_hash == stored_hash
-            print(f"Authentication result: {'SUCCESS' if hashes_match else 'FAILED'}")
-
-            if not hashes_match:
+            if not is_valid:
                 return False
 
             # Guardar sesión de admin
