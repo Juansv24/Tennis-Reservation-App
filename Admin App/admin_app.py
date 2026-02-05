@@ -17,6 +17,85 @@ from collections import defaultdict
 import time
 
 
+# ============================================
+# CACHED DATA FUNCTIONS FOR PERFORMANCE
+# ============================================
+
+@st.cache_data(ttl=60)
+def get_cached_system_statistics():
+    """Cached system statistics - TTL 60 seconds"""
+    return admin_db_manager.get_system_statistics()
+
+@st.cache_data(ttl=300)
+def get_cached_heatmap_data(days_filter):
+    """Cached heatmap data - TTL 5 minutes"""
+    return admin_db_manager.get_heatmap_data(days_filter)
+
+@st.cache_data(ttl=120)
+def get_cached_occupancy_data(scale, offset):
+    """Cached occupancy data - TTL 2 minutes"""
+    return admin_db_manager.get_occupancy_data(scale, offset)
+
+@st.cache_data(ttl=600)
+def get_cached_historic_average_occupancy():
+    """Cached historic average - TTL 10 minutes"""
+    return admin_db_manager.get_historic_average_occupancy()
+
+@st.cache_data(ttl=300)
+def get_cached_user_reservation_statistics():
+    """Cached user stats for leaderboard - TTL 5 minutes"""
+    return admin_db_manager.get_user_reservation_statistics()
+
+@st.cache_data(ttl=120)
+def get_cached_weekly_calendar_data(week_offset):
+    """Cached calendar data - TTL 2 minutes"""
+    return admin_db_manager.get_weekly_calendar_data(week_offset)
+
+@st.cache_data(ttl=120)
+def get_cached_alerts_and_anomalies():
+    """Cached alerts - TTL 2 minutes"""
+    return admin_db_manager.get_alerts_and_anomalies()
+
+@st.cache_data(ttl=120)
+def get_cached_cancellation_statistics(days_back):
+    """Cached cancellation stats - TTL 2 minutes"""
+    return admin_db_manager.get_cancellation_statistics(days_back)
+
+@st.cache_data(ttl=600)
+def get_cached_user_retention_data():
+    """Cached retention data - TTL 10 minutes"""
+    return admin_db_manager.get_user_retention_data()
+
+@st.cache_data(ttl=300)
+def get_cached_credit_statistics():
+    """Cached credit statistics - TTL 5 minutes"""
+    return admin_db_manager.get_credit_statistics()
+
+@st.cache_data(ttl=120)
+def get_cached_credit_economy_data(days_back):
+    """Cached credit economy data - TTL 2 minutes"""
+    return admin_db_manager.get_credit_economy_data(days_back)
+
+@st.cache_data(ttl=300)
+def get_cached_users_detailed_statistics():
+    """Cached users detailed stats - TTL 5 minutes"""
+    return admin_db_manager.get_users_detailed_statistics()
+
+@st.cache_data(ttl=60)
+def get_cached_dashboard_data():
+    """
+    Batch function to get all dashboard data in one call.
+    Returns dict with all data needed for dashboard tab.
+    TTL 60 seconds.
+    """
+    return {
+        'stats': admin_db_manager.get_system_statistics(),
+        'user_stats': admin_db_manager.get_user_reservation_statistics(),
+        'historic_avg': admin_db_manager.get_historic_average_occupancy(),
+        'alerts': admin_db_manager.get_alerts_and_anomalies()
+    }
+
+
 # Colores US Open
 US_OPEN_BLUE = "#001854"
 US_OPEN_LIGHT_BLUE = "#2478CC"
@@ -299,10 +378,10 @@ def show_dashboard_tab():
     """Mostrar estadísticas y dashboard"""
     st.subheader("📊 Dashboard & Estadísticas")
 
-    # Obtener estadísticas
-    stats = admin_db_manager.get_system_statistics()
+    # Obtener estadísticas (cached for performance)
+    stats = get_cached_system_statistics()
 
-    # Métricas principales - Primera fila: RESERVAS
+    # Métricas principales - Una fila: RESERVAS Y OCUPACIÓN
     col1, col2, col3 = st.columns(3)
 
     with col1:
@@ -322,17 +401,6 @@ def show_dashboard_tab():
         """, unsafe_allow_html=True)
 
     with col3:
-        st.markdown(f"""
-        <div class="stat-card">
-            <div class="stat-number">{stats['today_reservations']}</div>
-            <div class="stat-label">Reservas Hoy</div>
-        </div>
-        """, unsafe_allow_html=True)
-
-    # Métricas principales - Segunda fila: OCUPACIÓN
-    col4, col5, col6 = st.columns(3)
-
-    with col5:
         # Color de ocupación según porcentaje
         occupancy = stats['today_occupancy_rate']
         occupancy_color = '#2e7d32' if occupancy >= 70 else '#f57c00' if occupancy >= 40 else '#757575'
@@ -598,7 +666,7 @@ def show_dashboard_tab():
         days_filter = heatmap_filter[1]
 
     # Get heatmap data
-    heatmap_data = admin_db_manager.get_heatmap_data(days_filter)
+    heatmap_data = get_cached_heatmap_data(days_filter)
 
     if any(sum(row) > 0 for row in heatmap_data):
         # Create heatmap
@@ -722,8 +790,8 @@ def show_dashboard_tab():
             st.rerun()
 
     # Get occupancy data
-    occupancy_data = admin_db_manager.get_occupancy_data(scale, st.session_state.occupancy_offset)
-    historic_avg = admin_db_manager.get_historic_average_occupancy()
+    occupancy_data = get_cached_occupancy_data(scale, st.session_state.occupancy_offset)
+    historic_avg = get_cached_historic_average_occupancy()
 
     if occupancy_data['dates']:
         # Period label
@@ -829,7 +897,7 @@ def show_dashboard_tab():
 
     # Estadísticas de usuarios
     st.subheader("🏆 Usuarios Más Activos")
-    user_stats = admin_db_manager.get_user_reservation_statistics()
+    user_stats = get_cached_user_reservation_statistics()
     if user_stats:
         for i, user in enumerate(user_stats[:5], 1):
             medal = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else f"{i}."
@@ -888,7 +956,7 @@ def show_dashboard_tab():
             st.success("✅ Calendario actualizado")
 
     # Obtener datos del calendario
-    calendar_data = admin_db_manager.get_weekly_calendar_data(st.session_state.calendar_week_offset)
+    calendar_data = get_cached_weekly_calendar_data(st.session_state.calendar_week_offset)
 
     if calendar_data['week_dates']:
         # Mostrar información de la semana
@@ -989,7 +1057,7 @@ def show_dashboard_tab():
     # Alertas y Anomalías
     st.subheader("🚨 Alertas y Anomalías")
 
-    alerts = admin_db_manager.get_alerts_and_anomalies()
+    alerts = get_cached_alerts_and_anomalies()
 
     for alert in alerts:
         alert_type = alert['type']
@@ -1020,7 +1088,7 @@ def show_reservations_management_tab():
         )
         cancel_days = cancel_period[1]
 
-    cancel_stats = admin_db_manager.get_cancellation_statistics(cancel_days)
+    cancel_stats = get_cached_cancellation_statistics(cancel_days)
 
     # Card style for consistent sizing
     card_style = "background: #f5f5f5; padding: 15px; border-radius: 12px; text-align: center; min-height: 85px; display: flex; flex-direction: column; justify-content: center;"
@@ -1387,8 +1455,8 @@ def show_user_detailed_info(user):
 def show_users_management_tab():
     """Gestión mejorada de usuarios con vista de base de datos siempre visible"""
 
-    # Obtener estadísticas
-    stats = admin_db_manager.get_system_statistics()
+    # Obtener estadísticas (cached)
+    stats = get_cached_system_statistics()
 
     # Métricas principales - Usuarios
     col1, col2, col3 = st.columns(3)
@@ -1457,7 +1525,7 @@ def show_users_management_tab():
     # Retención de Usuarios
     st.markdown("### 📊 Retención de Usuarios")
 
-    retention_data = admin_db_manager.get_user_retention_data()
+    retention_data = get_cached_user_retention_data()
 
     # Metrics row
     col1, col2, col3, col4 = st.columns(4)
@@ -1527,7 +1595,7 @@ def show_users_management_tab():
     st.markdown("### 📊 Base de Usuarios Registrados")
 
     with st.spinner("Cargando datos de usuarios..."):
-        users_stats = admin_db_manager.get_users_detailed_statistics()
+        users_stats = get_cached_users_detailed_statistics()
 
     if users_stats:
         df = pd.DataFrame(users_stats)
@@ -1562,8 +1630,8 @@ def show_credits_management_tab():
     st.subheader("💰 Gestión de Créditos")
 
     # Estadísticas de créditos (usando stats del sistema)
-    stats = admin_db_manager.get_system_statistics()
-    credit_stats = admin_db_manager.get_credit_statistics()
+    stats = get_cached_system_statistics()
+    credit_stats = get_cached_credit_statistics()
 
     col1, col2, col3 = st.columns(3)
 
@@ -1608,7 +1676,7 @@ def show_credits_management_tab():
         )
         economy_days = economy_period[1]
 
-    economy_data = admin_db_manager.get_credit_economy_data(economy_days)
+    economy_data = get_cached_credit_economy_data(economy_days)
 
     # Metrics cards
     col1, col2, col3, col4, col5 = st.columns(5)
