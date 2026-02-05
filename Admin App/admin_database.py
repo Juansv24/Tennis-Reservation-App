@@ -657,6 +657,212 @@ class AdminDatabaseManager:
             print(f"Error getting heatmap data: {e}")
             return [[0 for _ in range(15)] for _ in range(7)]
 
+    def get_occupancy_data(self, scale: str = 'weekly', offset: int = 0) -> Dict:
+        """
+        Obtener datos de ocupación según la escala seleccionada
+
+        Args:
+            scale: 'weekly', 'monthly', or 'yearly'
+            offset: Desplazamiento (0 = actual, -1 = anterior, 1 = siguiente)
+
+        Returns:
+            Dict con datos de ocupación
+        """
+        try:
+            today = get_colombia_today()
+            days_spanish = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom']
+            months_spanish = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun',
+                            'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
+
+            dates = []
+            occupancy_rates = []
+            reservations_count = []
+            available_slots_list = []
+            period_label = ""
+            current_index = -1  # Index of today in the data
+
+            if scale == 'weekly':
+                # Calculate week start with offset
+                days_since_monday = today.weekday()
+                week_start = today - timedelta(days=days_since_monday) + timedelta(weeks=offset)
+                week_end = week_start + timedelta(days=6)
+                period_label = f"Semana del {week_start.strftime('%d/%m')} al {week_end.strftime('%d/%m/%Y')}"
+
+                for i in range(7):
+                    current_date = week_start + timedelta(days=i)
+                    date_str = current_date.strftime('%Y-%m-%d')
+
+                    if current_date == today:
+                        current_index = i
+
+                    reservations = self.client.table('reservations').select('id').eq('date', date_str).execute()
+                    num_reservations = len(reservations.data)
+
+                    blocked = self.client.table('blocked_slots').select('id').eq('date', date_str).execute()
+                    num_blocked = len(blocked.data)
+
+                    available_slots = max(15 - num_blocked, 1)
+                    occupancy = round((num_reservations / available_slots) * 100, 1)
+
+                    dates.append(f"{days_spanish[i]} {current_date.strftime('%d/%m')}")
+                    occupancy_rates.append(occupancy)
+                    reservations_count.append(num_reservations)
+                    available_slots_list.append(available_slots)
+
+            elif scale == 'monthly':
+                # Calculate month with offset
+                target_month = today.month + offset
+                target_year = today.year
+                while target_month > 12:
+                    target_month -= 12
+                    target_year += 1
+                while target_month < 1:
+                    target_month += 12
+                    target_year -= 1
+
+                period_label = f"{months_spanish[target_month - 1]} {target_year}"
+
+                # Get days in month
+                if target_month == 12:
+                    next_month = datetime(target_year + 1, 1, 1)
+                else:
+                    next_month = datetime(target_year, target_month + 1, 1)
+                days_in_month = (next_month - datetime(target_year, target_month, 1)).days
+
+                # Group by week
+                for week in range(5):  # Max 5 weeks in a month
+                    week_start_day = week * 7 + 1
+                    week_end_day = min((week + 1) * 7, days_in_month)
+
+                    if week_start_day > days_in_month:
+                        break
+
+                    week_reservations = 0
+                    week_blocked = 0
+                    days_counted = 0
+
+                    for day in range(week_start_day, week_end_day + 1):
+                        current_date = datetime(target_year, target_month, day).date()
+                        date_str = current_date.strftime('%Y-%m-%d')
+
+                        if current_date == today:
+                            current_index = week
+
+                        reservations = self.client.table('reservations').select('id').eq('date', date_str).execute()
+                        week_reservations += len(reservations.data)
+
+                        blocked = self.client.table('blocked_slots').select('id').eq('date', date_str).execute()
+                        week_blocked += len(blocked.data)
+                        days_counted += 1
+
+                    available_slots = max((15 * days_counted) - week_blocked, 1)
+                    occupancy = round((week_reservations / available_slots) * 100, 1)
+
+                    dates.append(f"Sem {week + 1}")
+                    occupancy_rates.append(occupancy)
+                    reservations_count.append(week_reservations)
+                    available_slots_list.append(available_slots)
+
+            elif scale == 'yearly':
+                # Calculate year with offset
+                target_year = today.year + offset
+                period_label = f"Año {target_year}"
+
+                for month in range(1, 13):
+                    if month == today.month and target_year == today.year:
+                        current_index = month - 1
+
+                    # Get first and last day of month
+                    first_day = datetime(target_year, month, 1).date()
+                    if month == 12:
+                        last_day = datetime(target_year, 12, 31).date()
+                    else:
+                        last_day = datetime(target_year, month + 1, 1).date() - timedelta(days=1)
+
+                    first_day_str = first_day.strftime('%Y-%m-%d')
+                    last_day_str = last_day.strftime('%Y-%m-%d')
+
+                    reservations = self.client.table('reservations').select('id').gte(
+                        'date', first_day_str
+                    ).lte('date', last_day_str).execute()
+                    month_reservations = len(reservations.data)
+
+                    blocked = self.client.table('blocked_slots').select('id').gte(
+                        'date', first_day_str
+                    ).lte('date', last_day_str).execute()
+                    month_blocked = len(blocked.data)
+
+                    days_in_month = (last_day - first_day).days + 1
+                    available_slots = max((15 * days_in_month) - month_blocked, 1)
+                    occupancy = round((month_reservations / available_slots) * 100, 1)
+
+                    dates.append(months_spanish[month - 1])
+                    occupancy_rates.append(occupancy)
+                    reservations_count.append(month_reservations)
+                    available_slots_list.append(available_slots)
+
+            # Calculate period average (only up to current index for current period)
+            if current_index >= 0 and offset == 0:
+                valid_rates = occupancy_rates[:current_index + 1]
+            else:
+                valid_rates = occupancy_rates
+
+            avg_occupancy = round(sum(valid_rates) / len(valid_rates), 1) if valid_rates else 0
+
+            return {
+                'dates': dates,
+                'occupancy_rates': occupancy_rates,
+                'reservations': reservations_count,
+                'available_slots': available_slots_list,
+                'average_occupancy': avg_occupancy,
+                'current_index': current_index,
+                'period_label': period_label,
+                'scale': scale
+            }
+        except Exception as e:
+            print(f"Error getting occupancy data: {e}")
+            return {
+                'dates': [],
+                'occupancy_rates': [],
+                'reservations': [],
+                'available_slots': [],
+                'average_occupancy': 0,
+                'current_index': -1,
+                'period_label': '',
+                'scale': scale
+            }
+
+    def get_historic_average_occupancy(self) -> float:
+        """Get historic average occupancy rate across all time"""
+        try:
+            # Get all reservations
+            all_reservations = self.client.table('reservations').select('date').execute()
+
+            if not all_reservations.data:
+                return 0.0
+
+            # Get unique dates with reservations
+            dates_with_data = set()
+            reservations_by_date = {}
+
+            for res in all_reservations.data:
+                date = res['date']
+                dates_with_data.add(date)
+                reservations_by_date[date] = reservations_by_date.get(date, 0) + 1
+
+            # Get blocked slots for those dates
+            total_occupancy = 0
+            for date_str in dates_with_data:
+                blocked = self.client.table('blocked_slots').select('id').eq('date', date_str).execute()
+                available = max(15 - len(blocked.data), 1)
+                occupancy = (reservations_by_date[date_str] / available) * 100
+                total_occupancy += occupancy
+
+            return round(total_occupancy / len(dates_with_data), 1) if dates_with_data else 0.0
+        except Exception as e:
+            print(f"Error getting historic average: {e}")
+            return 0.0
+
     def add_credits_to_user(self, email: str, credits_amount: int, reason: str, admin_username: str) -> bool:
         """Agregar créditos a un usuario"""
         try:

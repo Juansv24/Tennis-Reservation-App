@@ -720,6 +720,156 @@ def show_dashboard_tab():
 
     st.divider()
 
+    # Tasa de Ocupación
+    st.subheader("📊 Tasa de Ocupación")
+
+    # Initialize session state for occupancy navigation
+    if 'occupancy_scale' not in st.session_state:
+        st.session_state.occupancy_scale = 'weekly'
+    if 'occupancy_offset' not in st.session_state:
+        st.session_state.occupancy_offset = 0
+
+    # Scale selector and navigation
+    col_scale, col_nav_prev, col_nav_current, col_nav_next = st.columns([2, 1, 1, 1])
+
+    with col_scale:
+        scale_options = {'Semanal': 'weekly', 'Mensual': 'monthly', 'Anual': 'yearly'}
+        selected_scale_label = st.selectbox(
+            "Escala",
+            options=list(scale_options.keys()),
+            index=list(scale_options.values()).index(st.session_state.occupancy_scale),
+            key="occupancy_scale_select"
+        )
+        new_scale = scale_options[selected_scale_label]
+        if new_scale != st.session_state.occupancy_scale:
+            st.session_state.occupancy_scale = new_scale
+            st.session_state.occupancy_offset = 0
+            st.rerun()
+
+    scale = st.session_state.occupancy_scale
+    nav_label = {'weekly': 'Semana', 'monthly': 'Mes', 'yearly': 'Año'}[scale]
+
+    with col_nav_prev:
+        if st.button(f"⬅️ Anterior", key="occ_prev"):
+            st.session_state.occupancy_offset -= 1
+            st.rerun()
+
+    with col_nav_current:
+        if st.button(f"📍 {nav_label} Actual", key="occ_current"):
+            st.session_state.occupancy_offset = 0
+            st.rerun()
+
+    with col_nav_next:
+        if st.button(f"Siguiente ➡️", key="occ_next"):
+            st.session_state.occupancy_offset += 1
+            st.rerun()
+
+    # Get occupancy data
+    occupancy_data = admin_db_manager.get_occupancy_data(scale, st.session_state.occupancy_offset)
+    historic_avg = admin_db_manager.get_historic_average_occupancy()
+
+    if occupancy_data['dates']:
+        # Period label
+        st.markdown(f"**{occupancy_data['period_label']}**")
+
+        # Average occupancy cards
+        col_period_avg, col_historic_avg = st.columns(2)
+
+        with col_period_avg:
+            avg_occ = occupancy_data['average_occupancy']
+            avg_color = '#2e7d32' if avg_occ >= 70 else '#f57c00' if avg_occ >= 40 else '#757575'
+            period_name = {'weekly': 'esta semana', 'monthly': 'este mes', 'yearly': 'este año'}[scale]
+            st.markdown(f"""
+            <div style="background: #f5f5f5; padding: 20px; border-radius: 12px; text-align: center;">
+                <span style="font-size: 2.5em; color: {avg_color}; font-weight: bold;">{avg_occ}%</span>
+                <br><span style="color: #666;">Promedio {period_name}</span>
+            </div>
+            """, unsafe_allow_html=True)
+
+        with col_historic_avg:
+            hist_color = '#2e7d32' if historic_avg >= 70 else '#f57c00' if historic_avg >= 40 else '#757575'
+            st.markdown(f"""
+            <div style="background: #f5f5f5; padding: 20px; border-radius: 12px; text-align: center;">
+                <span style="font-size: 2.5em; color: {hist_color}; font-weight: bold;">{historic_avg}%</span>
+                <br><span style="color: #666;">Promedio histórico</span>
+            </div>
+            """, unsafe_allow_html=True)
+
+        # Bar chart with occupancy rates
+        current_idx = occupancy_data['current_index']
+
+        # Create colors: past/current in blue, future in gray
+        if st.session_state.occupancy_offset == 0 and current_idx >= 0:
+            colors = [US_OPEN_BLUE if i <= current_idx else '#CCCCCC' for i in range(len(occupancy_data['dates']))]
+        elif st.session_state.occupancy_offset < 0:
+            colors = [US_OPEN_BLUE] * len(occupancy_data['dates'])  # All past
+        else:
+            colors = ['#CCCCCC'] * len(occupancy_data['dates'])  # All future
+
+        fig_occupancy = go.Figure(data=[
+            go.Bar(
+                x=occupancy_data['dates'],
+                y=occupancy_data['occupancy_rates'],
+                marker_color=colors,
+                text=[f"{rate}%" for rate in occupancy_data['occupancy_rates']],
+                textposition='outside',
+                hovertemplate='<b>%{x}</b><br>Ocupación: %{y}%<br>Reservas: %{customdata[0]}<br>Slots disponibles: %{customdata[1]}<extra></extra>',
+                customdata=list(zip(occupancy_data['reservations'], occupancy_data['available_slots']))
+            )
+        ])
+
+        fig_occupancy.update_layout(
+            height=300,
+            margin=dict(l=0, r=0, t=20, b=0),
+            xaxis_title='',
+            yaxis_title='Ocupación (%)',
+            yaxis=dict(range=[0, 105]),
+            showlegend=False
+        )
+
+        # Add period average reference line
+        fig_occupancy.add_hline(
+            y=avg_occ,
+            line_dash="dash",
+            line_color=avg_color,
+            annotation_text=f"Promedio {avg_occ}%",
+            annotation_position="right"
+        )
+
+        st.plotly_chart(fig_occupancy, use_container_width=True)
+
+        # Details row with dynamic labels
+        col1, col2, col3 = st.columns(3)
+
+        # Calculate based on current data (up to current index if current period)
+        if st.session_state.occupancy_offset == 0 and current_idx >= 0:
+            valid_rates = occupancy_data['occupancy_rates'][:current_idx + 1]
+            valid_reservations = occupancy_data['reservations'][:current_idx + 1]
+            valid_slots = occupancy_data['available_slots'][:current_idx + 1]
+        else:
+            valid_rates = occupancy_data['occupancy_rates']
+            valid_reservations = occupancy_data['reservations']
+            valid_slots = occupancy_data['available_slots']
+
+        if valid_rates:
+            best_idx = valid_rates.index(max(valid_rates))
+            best_label = occupancy_data['dates'][best_idx]
+
+            with col1:
+                label_prefix = {'weekly': '📅 Mejor día', 'monthly': '📅 Mejor semana', 'yearly': '📅 Mejor mes'}[scale]
+                st.metric(label_prefix, best_label, f"{valid_rates[best_idx]}%")
+
+            with col2:
+                period_label = {'weekly': 'esta semana', 'monthly': 'este mes', 'yearly': 'este año'}[scale]
+                st.metric(f"🎾 Reservas {period_label}", sum(valid_reservations))
+
+            with col3:
+                st.metric("📅 Slots usados", f"{sum(valid_reservations)}/{sum(valid_slots)}")
+    else:
+        st.info("No hay datos de ocupación disponibles")
+
+    st.divider()
+
     # Estadísticas de usuarios
     st.subheader("🏆 Usuarios Más Activos")
     user_stats = admin_db_manager.get_user_reservation_statistics()
