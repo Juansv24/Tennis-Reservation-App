@@ -1219,6 +1219,126 @@ class AdminDatabaseManager:
                 'avg_reservations_per_user': 0
             }
 
+    def get_alerts_and_anomalies(self) -> List[Dict]:
+        """
+        Detectar alertas y anomalías en el sistema
+
+        Returns:
+            Lista de alertas con tipo, mensaje y severidad
+        """
+        alerts = []
+        try:
+            today = get_colombia_today()
+            today_str = today.strftime('%Y-%m-%d')
+
+            # 1. Check today's occupancy
+            stats = self.get_system_statistics()
+            occupancy = stats.get('today_occupancy_rate', 0)
+            if occupancy < 20:
+                alerts.append({
+                    'type': 'warning',
+                    'icon': '📉',
+                    'title': 'Ocupación Baja Hoy',
+                    'message': f'La ocupación de hoy es solo {occupancy}%'
+                })
+            elif occupancy > 90:
+                alerts.append({
+                    'type': 'info',
+                    'icon': '🔥',
+                    'title': 'Alta Demanda Hoy',
+                    'message': f'Ocupación del {occupancy}% - Considerar ampliar horarios'
+                })
+
+            # 2. Check for users with high cancellation rate
+            cancel_stats = self.get_cancellation_statistics(30)
+            if cancel_stats.get('cancellation_rate', 0) > 20:
+                alerts.append({
+                    'type': 'warning',
+                    'icon': '⚠️',
+                    'title': 'Tasa de Cancelación Alta',
+                    'message': f"Tasa de cancelación: {cancel_stats['cancellation_rate']}% en los últimos 30 días"
+                })
+
+            # 3. Check for users with zero credits who have reservations
+            users_result = self.client.table('users').select('id, full_name, credits').eq('credits', 0).execute()
+            zero_credit_users = len(users_result.data) if users_result.data else 0
+            if zero_credit_users > 5:
+                alerts.append({
+                    'type': 'info',
+                    'icon': '💰',
+                    'title': 'Usuarios sin Créditos',
+                    'message': f'{zero_credit_users} usuarios tienen 0 créditos disponibles'
+                })
+
+            # 4. Check week reservations vs previous week
+            week_start = today - timedelta(days=today.weekday())
+            prev_week_start = week_start - timedelta(days=7)
+            prev_week_end = week_start - timedelta(days=1)
+
+            current_week = self.client.table('reservations').select('id').gte(
+                'date', week_start.strftime('%Y-%m-%d')
+            ).lte('date', today_str).execute()
+
+            prev_week = self.client.table('reservations').select('id').gte(
+                'date', prev_week_start.strftime('%Y-%m-%d')
+            ).lte('date', prev_week_end.strftime('%Y-%m-%d')).execute()
+
+            current_count = len(current_week.data) if current_week.data else 0
+            prev_count = len(prev_week.data) if prev_week.data else 0
+
+            if prev_count > 0:
+                change = ((current_count - prev_count) / prev_count) * 100
+                if change < -30:
+                    alerts.append({
+                        'type': 'warning',
+                        'icon': '📊',
+                        'title': 'Caída en Reservas',
+                        'message': f'Reservas esta semana: {current_count} vs {prev_count} semana pasada ({change:.0f}%)'
+                    })
+                elif change > 50:
+                    alerts.append({
+                        'type': 'success',
+                        'icon': '📈',
+                        'title': 'Aumento en Reservas',
+                        'message': f'Reservas esta semana: {current_count} vs {prev_count} semana pasada (+{change:.0f}%)'
+                    })
+
+            # 5. Check for inactive days (no reservations in last 7 days for a weekday)
+            for i in range(7):
+                check_date = today - timedelta(days=i)
+                if check_date.weekday() < 5:  # Weekday only
+                    day_reservations = self.client.table('reservations').select('id').eq(
+                        'date', check_date.strftime('%Y-%m-%d')
+                    ).execute()
+                    if not day_reservations.data or len(day_reservations.data) == 0:
+                        days_spanish = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo']
+                        alerts.append({
+                            'type': 'warning',
+                            'icon': '📅',
+                            'title': 'Día sin Reservas',
+                            'message': f'{days_spanish[check_date.weekday()]} {check_date.strftime("%d/%m")} no tuvo reservas'
+                        })
+                        break  # Only report the most recent one
+
+            # If no alerts, add a success message
+            if not alerts:
+                alerts.append({
+                    'type': 'success',
+                    'icon': '✅',
+                    'title': 'Sistema Funcionando Normal',
+                    'message': 'No se detectaron anomalías en el sistema'
+                })
+
+            return alerts
+        except Exception as e:
+            print(f"Error getting alerts: {e}")
+            return [{
+                'type': 'error',
+                'icon': '❌',
+                'title': 'Error',
+                'message': f'No se pudieron cargar las alertas: {str(e)}'
+            }]
+
     def get_credit_transactions(self, limit: int = 50) -> List:
         """Obtener historial de transacciones de créditos"""
         try:

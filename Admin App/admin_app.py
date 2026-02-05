@@ -984,6 +984,24 @@ def show_dashboard_tab():
     else:
         st.error("❌ Error cargando datos del calendario")
 
+    st.divider()
+
+    # Alertas y Anomalías
+    st.subheader("🚨 Alertas y Anomalías")
+
+    alerts = admin_db_manager.get_alerts_and_anomalies()
+
+    for alert in alerts:
+        alert_type = alert['type']
+        if alert_type == 'warning':
+            st.warning(f"{alert['icon']} **{alert['title']}**: {alert['message']}")
+        elif alert_type == 'error':
+            st.error(f"{alert['icon']} **{alert['title']}**: {alert['message']}")
+        elif alert_type == 'success':
+            st.success(f"{alert['icon']} **{alert['title']}**: {alert['message']}")
+        else:  # info
+            st.info(f"{alert['icon']} **{alert['title']}**: {alert['message']}")
+
 def show_reservations_management_tab():
     """Gestión de reservas por usuario"""
 
