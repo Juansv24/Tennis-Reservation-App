@@ -1339,12 +1339,12 @@ class AdminDatabaseManager:
                 'message': f'No se pudieron cargar las alertas: {str(e)}'
             }]
 
-    def get_credit_transactions(self, limit: int = 50) -> List:
-        """Obtener historial de transacciones de créditos"""
+    def get_credit_transactions(self, limit: int = 50, offset: int = 0) -> List:
+        """Obtener historial de transacciones de créditos con paginación"""
         try:
             result = self.client.table('credit_transactions').select(
                 'users(full_name), amount, transaction_type, description, admin_user, created_at'
-            ).order('created_at', desc=True).limit(limit).execute()
+            ).order('created_at', desc=True).range(offset, offset + limit - 1).execute()
 
             # Formatear datos para mostrar
             formatted_transactions = []
@@ -1363,6 +1363,15 @@ class AdminDatabaseManager:
         except Exception as e:
             print(f"Error getting credit transactions: {e}")
             return []
+
+    def get_credit_transactions_count(self) -> int:
+        """Obtener el total de transacciones de créditos"""
+        try:
+            result = self.client.table('credit_transactions').select('id', count='exact').execute()
+            return result.count if result.count else 0
+        except Exception as e:
+            print(f"Error getting credit transactions count: {e}")
+            return 0
 
     def get_all_users_for_export(self) -> List[Dict]:
         """Obtener todos los usuarios para exportación"""

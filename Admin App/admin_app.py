@@ -1929,14 +1929,62 @@ def show_credits_management_tab():
 
     st.divider()
 
-    # Historial de transacciones (mantener igual)
+    # Historial de transacciones con paginación
     st.subheader("📋 Historial de Transacciones")
 
-    transactions = admin_db_manager.get_credit_transactions()
+    # Pagination settings
+    TRANSACTIONS_PER_PAGE = 10
+
+    # Initialize pagination state
+    if 'transactions_page' not in st.session_state:
+        st.session_state.transactions_page = 0
+
+    # Get total count and calculate pages
+    total_transactions = admin_db_manager.get_credit_transactions_count()
+    total_pages = max(1, (total_transactions + TRANSACTIONS_PER_PAGE - 1) // TRANSACTIONS_PER_PAGE)
+
+    # Ensure current page is valid
+    if st.session_state.transactions_page >= total_pages:
+        st.session_state.transactions_page = total_pages - 1
+    if st.session_state.transactions_page < 0:
+        st.session_state.transactions_page = 0
+
+    current_page = st.session_state.transactions_page
+    offset = current_page * TRANSACTIONS_PER_PAGE
+
+    # Get transactions for current page
+    transactions = admin_db_manager.get_credit_transactions(limit=TRANSACTIONS_PER_PAGE, offset=offset)
+
     if transactions:
         df_transactions = pd.DataFrame(transactions)
         df_transactions.columns = ['Usuario', 'Cantidad', 'Tipo', 'Descripción', 'Admin', 'Fecha y Hora']
-        st.dataframe(df_transactions, use_container_width=True)
+        st.dataframe(df_transactions, use_container_width=True, hide_index=True)
+
+        # Pagination controls
+        col1, col2, col3, col4, col5 = st.columns([1, 1, 2, 1, 1])
+
+        with col1:
+            if st.button("⏮️ Primera", disabled=(current_page == 0), key="trans_first"):
+                st.session_state.transactions_page = 0
+                st.rerun()
+
+        with col2:
+            if st.button("◀️ Anterior", disabled=(current_page == 0), key="trans_prev"):
+                st.session_state.transactions_page -= 1
+                st.rerun()
+
+        with col3:
+            st.markdown(f"<div style='text-align: center; padding: 8px;'>Página **{current_page + 1}** de **{total_pages}** ({total_transactions} transacciones)</div>", unsafe_allow_html=True)
+
+        with col4:
+            if st.button("Siguiente ▶️", disabled=(current_page >= total_pages - 1), key="trans_next"):
+                st.session_state.transactions_page += 1
+                st.rerun()
+
+        with col5:
+            if st.button("Última ⏭️", disabled=(current_page >= total_pages - 1), key="trans_last"):
+                st.session_state.transactions_page = total_pages - 1
+                st.rerun()
     else:
         st.info("No hay transacciones de créditos")
 
