@@ -431,16 +431,26 @@ def show_dashboard_tab():
     # Validate and fetch data
     if start_date <= end_date:
         try:
-            # Get activity timeline data
+            # Calculate period duration for comparison
+            period_days = (end_date - start_date).days + 1
+            prev_end_date = start_date - timedelta(days=1)
+            prev_start_date = prev_end_date - timedelta(days=period_days - 1)
+
+            # Get activity timeline data for current period
             timeline_data = db_manager.get_activity_timeline_data(
                 start_date=start_date.strftime('%Y-%m-%d'),
                 end_date=end_date.strftime('%Y-%m-%d')
             )
 
+            # Get activity timeline data for previous period (for comparison)
+            prev_timeline_data = db_manager.get_activity_timeline_data(
+                start_date=prev_start_date.strftime('%Y-%m-%d'),
+                end_date=prev_end_date.strftime('%Y-%m-%d')
+            )
+
             if timeline_data and len(timeline_data) > 0:
                 # Process data for timeline
                 df_timeline = pd.DataFrame(timeline_data)
-                # Timestamps are already in Colombian timezone, just parse them
                 df_timeline['created_at'] = pd.to_datetime(df_timeline['created_at'])
 
                 # Create time bucket based on granularity
@@ -461,6 +471,40 @@ def show_dashboard_tab():
                 }).reset_index()
                 activity_counts.columns = ['time_bucket', 'total_activities', 'unique_users']
 
+                # Process previous period data for comparison
+                prev_activity_counts = None
+                if prev_timeline_data and len(prev_timeline_data) > 0:
+                    df_prev = pd.DataFrame(prev_timeline_data)
+                    df_prev['created_at'] = pd.to_datetime(df_prev['created_at'])
+
+                    if selected_granularity == 'hour':
+                        df_prev['time_bucket'] = df_prev['created_at'].dt.floor('H')
+                    elif selected_granularity == 'day':
+                        df_prev['time_bucket'] = df_prev['created_at'].dt.floor('D')
+                    else:
+                        df_prev['time_bucket'] = df_prev['created_at'].dt.to_period('M').dt.to_timestamp()
+
+                    prev_activity_counts = df_prev.groupby('time_bucket').agg({
+                        'id': 'count'
+                    }).reset_index()
+                    prev_activity_counts.columns = ['time_bucket', 'total_activities']
+
+                    # Shift previous period dates to align with current period for comparison
+                    prev_activity_counts['time_bucket_shifted'] = prev_activity_counts['time_bucket'] + timedelta(days=period_days)
+
+                # Calculate trend
+                current_total = activity_counts['total_activities'].sum()
+                prev_total = prev_activity_counts['total_activities'].sum() if prev_activity_counts is not None else 0
+
+                if prev_total > 0:
+                    trend_pct = ((current_total - prev_total) / prev_total) * 100
+                    trend_arrow = "▲" if trend_pct > 0 else "▼" if trend_pct < 0 else "="
+                    trend_color = "#2e7d32" if trend_pct > 0 else "#c62828" if trend_pct < 0 else "#757575"
+                else:
+                    trend_pct = 0
+                    trend_arrow = "="
+                    trend_color = "#757575"
+
                 # Timeline and Scatter plot side by side
                 col_timeline, col_scatter = st.columns(2)
 
@@ -470,20 +514,33 @@ def show_dashboard_tab():
                     # Create timeline plot
                     fig_timeline = go.Figure()
 
+                    # Add current period line
                     fig_timeline.add_trace(go.Scatter(
                         x=activity_counts['time_bucket'],
                         y=activity_counts['total_activities'],
                         mode='lines+markers',
-                        name='Reservas',
+                        name='Período actual',
                         line=dict(color=US_OPEN_BLUE, width=2),
                         marker=dict(size=6),
                         hovertemplate='<b>%{x|' + time_format + '}</b><br>Reservas: %{y}<extra></extra>'
                     ))
 
+                    # Add previous period comparison line (if data exists)
+                    if prev_activity_counts is not None and len(prev_activity_counts) > 0:
+                        fig_timeline.add_trace(go.Scatter(
+                            x=prev_activity_counts['time_bucket_shifted'],
+                            y=prev_activity_counts['total_activities'],
+                            mode='lines',
+                            name='Período anterior',
+                            line=dict(color='#CCCCCC', width=2, dash='dash'),
+                            hovertemplate='<b>Período anterior</b><br>Reservas: %{y}<extra></extra>'
+                        ))
+
                     fig_timeline.update_layout(
                         height=400,
-                        showlegend=False,
-                        margin=dict(l=0, r=0, t=20, b=0),
+                        showlegend=True,
+                        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                        margin=dict(l=0, r=0, t=40, b=0),
                         xaxis_title='Tiempo',
                         yaxis_title='Reservas',
                         xaxis=dict(tickformat='%Y-%m-%d %H:%M' if selected_granularity == 'hour' else time_format)
@@ -491,9 +548,26 @@ def show_dashboard_tab():
 
                     st.plotly_chart(fig_timeline, use_container_width=True)
 
-                    # Peak usage info
-                    peak_activity = activity_counts.loc[activity_counts['total_activities'].idxmax()]
-                    st.info(f"📊 **Pico:** {peak_activity['time_bucket'].strftime(time_format)} ({int(peak_activity['total_activities'])} reservas)")
+                    # Trend indicator and peak info
+                    col_trend, col_peak = st.columns(2)
+                    with col_trend:
+                        st.markdown(f"""
+                        <div style="background: #f5f5f5; padding: 10px; border-radius: 8px; text-align: center;">
+                            <span style="font-size: 1.5em; color: {trend_color}; font-weight: bold;">{trend_arrow} {abs(trend_pct):.1f}%</span>
+                            <br><span style="color: #666; font-size: 0.85em;">vs período anterior</span>
+                        </div>
+                        """, unsafe_allow_html=True)
+                    with col_peak:
+                        peak_activity = activity_counts.loc[activity_counts['total_activities'].idxmax()]
+                        days_spanish = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo']
+                        peak_day_name = days_spanish[peak_activity['time_bucket'].weekday()]
+                        st.markdown(f"""
+                        <div style="background: #f5f5f5; padding: 10px; border-radius: 8px; text-align: center;">
+                            <span style="font-size: 1.2em; font-weight: bold;">📊 Pico</span>
+                            <br><span style="color: #666; font-size: 0.85em;">{peak_day_name} {peak_activity['time_bucket'].strftime(time_format)}</span>
+                            <br><span style="font-weight: bold;">{int(peak_activity['total_activities'])} reservas</span>
+                        </div>
+                        """, unsafe_allow_html=True)
 
                 with col_scatter:
                     st.markdown("**👥 Reservas por Usuario**")
