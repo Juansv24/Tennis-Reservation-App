@@ -968,6 +968,113 @@ class AdminDatabaseManager:
                 'credits_used_today': 0
             }
 
+    def get_credit_economy_data(self, days_back: int = 30) -> Dict:
+        """
+        Obtener datos de economía de créditos para visualización
+
+        Args:
+            days_back: Número de días hacia atrás
+
+        Returns:
+            Dict con flujo de créditos y datos para gráficos
+        """
+        try:
+            # Calculate date range
+            end_date = get_colombia_now()
+            start_date = end_date - timedelta(days=days_back)
+            start_date_str = start_date.isoformat()
+            start_date_only = start_date.strftime('%Y-%m-%d')
+
+            # Get all transactions in the period
+            transactions = self.client.table('credit_transactions').select(
+                'amount, transaction_type, created_at'
+            ).gte('created_at', start_date_str).order('created_at').execute()
+
+            # Get reservations in the period (each reservation = 1 credit used)
+            reservations = self.client.table('reservations').select(
+                'date'
+            ).gte('date', start_date_only).execute()
+
+            # Categorize transactions
+            credits_granted = 0  # admin_grant, bonus
+            credits_refunded = 0 # reservation_refund
+            credits_removed = 0  # admin_deduct (negative)
+
+            # Data for timeline chart
+            daily_data = {}
+
+            for t in transactions.data:
+                amount = t['amount']
+                trans_type = t['transaction_type']
+                date_str = t['created_at'][:10]  # Extract YYYY-MM-DD
+
+                # Initialize daily data if needed
+                if date_str not in daily_data:
+                    daily_data[date_str] = {'granted': 0, 'used': 0, 'refunded': 0, 'removed': 0}
+
+                if trans_type in ['admin_grant', 'bonus', 'purchase']:
+                    credits_granted += amount
+                    daily_data[date_str]['granted'] += amount
+                elif trans_type == 'reservation_refund':
+                    credits_refunded += amount
+                    daily_data[date_str]['refunded'] += amount
+                elif trans_type == 'admin_deduct':
+                    credits_removed += abs(amount)
+                    daily_data[date_str]['removed'] += abs(amount)
+
+            # Calculate credits used from reservations (1 credit per reservation)
+            credits_used = len(reservations.data)
+
+            # Add reservation data to daily_data
+            for r in reservations.data:
+                date_str = r['date']
+                if date_str not in daily_data:
+                    daily_data[date_str] = {'granted': 0, 'used': 0, 'refunded': 0, 'removed': 0}
+                daily_data[date_str]['used'] += 1
+
+            # Calculate net flow
+            net_flow = credits_granted + credits_refunded - credits_used - credits_removed
+
+            # Prepare timeline data
+            dates = sorted(daily_data.keys())
+            timeline = {
+                'dates': dates,
+                'granted': [daily_data[d]['granted'] for d in dates],
+                'used': [daily_data[d]['used'] for d in dates],
+                'refunded': [daily_data[d]['refunded'] for d in dates],
+                'net': [daily_data[d]['granted'] + daily_data[d]['refunded'] - daily_data[d]['used'] - daily_data[d]['removed'] for d in dates]
+            }
+
+            # Calculate cumulative balance over time
+            cumulative = []
+            running_total = 0
+            for d in dates:
+                running_total += (daily_data[d]['granted'] + daily_data[d]['refunded'] -
+                                 daily_data[d]['used'] - daily_data[d]['removed'])
+                cumulative.append(running_total)
+            timeline['cumulative'] = cumulative
+
+            return {
+                'credits_granted': credits_granted,
+                'credits_used': credits_used,
+                'credits_refunded': credits_refunded,
+                'credits_removed': credits_removed,
+                'net_flow': net_flow,
+                'timeline': timeline,
+                'period_days': days_back
+            }
+        except Exception as e:
+            print(f"Error getting credit economy data: {e}")
+            return {
+                'credits_granted': 0,
+                'credits_used': 0,
+                'credits_refunded': 0,
+                'credits_removed': 0,
+                'net_flow': 0,
+                'timeline': {'dates': [], 'granted': [], 'used': [], 'refunded': [], 'net': [], 'cumulative': []},
+                'period_days': days_back
+            }
+
     def get_credit_transactions(self, limit: int = 50) -> List:
         """Obtener historial de transacciones de créditos"""
         try:
