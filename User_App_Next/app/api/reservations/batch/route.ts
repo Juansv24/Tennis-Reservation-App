@@ -155,29 +155,31 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  // CHECK FOR BLOCKED SLOTS (maintenance) - BEFORE ALL OTHER VALIDATIONS
+  // CHECK FOR BLOCKED SLOTS (maintenance) - BATCHED QUERY
+  const uniqueDatesForBlocked = [...new Set(reservations.map(r => r.date))]
+  const uniqueHoursForBlocked = [...new Set(reservations.map(r => r.hour))]
+
+  const { data: blockedSlots, error: blockedError } = await supabase
+    .from('blocked_slots')
+    .select('date, hour, maintenance_type, reason')
+    .in('date', uniqueDatesForBlocked)
+    .in('hour', uniqueHoursForBlocked)
+
+  if (blockedError) {
+    console.error('Error checking blocked slots:', blockedError)
+    return NextResponse.json(
+      { error: `Error verificando disponibilidad: ${blockedError.message}` },
+      { status: 500 }
+    )
+  }
+
+  // Check each reservation against blocked slots
   for (const res of reservations) {
-    const { date, hour } = res
-
-    const { data: blockedSlot, error: blockedError } = await supabase
-      .from('blocked_slots')
-      .select('id, maintenance_type, reason')
-      .eq('date', date)
-      .eq('hour', hour)
-      .maybeSingle()
-
-    // If there's an error checking blocked slots, fail the request
-    if (blockedError) {
-      console.error('Error checking blocked slots:', blockedError)
-      return NextResponse.json(
-        { error: `Error verificando disponibilidad: ${blockedError.message}` },
-        { status: 500 }
-      )
-    }
-
-    // If slot is blocked by maintenance, reject immediately (before deducting credits)
+    const blockedSlot = blockedSlots?.find(
+      b => b.date === res.date && b.hour === res.hour
+    )
     if (blockedSlot) {
-      const formattedHour = `${hour.toString().padStart(2, '0')}:00`
+      const formattedHour = `${res.hour.toString().padStart(2, '0')}:00`
       return NextResponse.json(
         { error: `No se puede reservar a las ${formattedHour}: Cancha en mantenimiento. Recargue su navegador para ver la información más actualizada.` },
         { status: 400 }
