@@ -333,7 +333,7 @@ def show_dashboard_tab():
         st.markdown(f"""
         <div class="stat-card">
             <div class="stat-number">{stats['total_credits_issued']}</div>
-            <div class="stat-label">Créditos Emitidos</div>
+            <div class="stat-label">Créditos Totales Emitidos</div>
         </div>
         """, unsafe_allow_html=True)
 
@@ -342,7 +342,7 @@ def show_dashboard_tab():
     # ========================================
     # ANALYTICS SECTION
     # ========================================
-    st.markdown("### 📈 Actividad de Usuarios")
+    st.markdown("### 📈 Reservas de Usuarios")
 
     # Initialize database manager for analytics
     db_manager = SupabaseManager()
@@ -396,18 +396,15 @@ def show_dashboard_tab():
 
             if timeline_data and len(timeline_data) > 0:
                 # Display activity summary
-                col1, col2, col3, col4 = st.columns(4)
+                col1, col2, col3 = st.columns(3)
 
                 with col1:
-                    st.metric("🎯 Total Actividades", activity_stats.get('total_activities', 0))
+                    st.metric("🎯 Total Reservas", activity_stats.get('total_activities', 0))
 
                 with col2:
-                    st.metric("👥 Usuarios Únicos", activity_stats.get('unique_users', 0))
+                    st.metric("👥 Usuarios Activos", activity_stats.get('unique_users', 0))
 
                 with col3:
-                    st.metric("📱 Sesiones", activity_stats.get('unique_sessions', 0))
-
-                with col4:
                     avg_activities = activity_stats.get('total_activities', 0) / max(activity_stats.get('unique_users', 1), 1)
                     st.metric("📊 Promedio/Usuario", f"{avg_activities:.1f}")
 
@@ -440,7 +437,7 @@ def show_dashboard_tab():
                 col_timeline, col_scatter = st.columns(2)
 
                 with col_timeline:
-                    st.markdown("**📈 Timeline de Actividad**")
+                    st.markdown("**📈 Línea de Tiempo de Reservas**")
 
                     # Create timeline plot
                     fig_timeline = go.Figure()
@@ -449,10 +446,10 @@ def show_dashboard_tab():
                         x=activity_counts['time_bucket'],
                         y=activity_counts['total_activities'],
                         mode='lines+markers',
-                        name='Actividades',
+                        name='Reservas',
                         line=dict(color=US_OPEN_BLUE, width=2),
                         marker=dict(size=6),
-                        hovertemplate='<b>%{x|' + time_format + '}</b><br>Actividades: %{y}<extra></extra>'
+                        hovertemplate='<b>%{x|' + time_format + '}</b><br>Reservas: %{y}<extra></extra>'
                     ))
 
                     fig_timeline.update_layout(
@@ -460,7 +457,7 @@ def show_dashboard_tab():
                         showlegend=False,
                         margin=dict(l=0, r=0, t=20, b=0),
                         xaxis_title='Tiempo',
-                        yaxis_title='Actividades',
+                        yaxis_title='Reservas',
                         xaxis=dict(tickformat='%Y-%m-%d %H:%M' if selected_granularity == 'hour' else time_format)
                     )
 
@@ -468,10 +465,10 @@ def show_dashboard_tab():
 
                     # Peak usage info
                     peak_activity = activity_counts.loc[activity_counts['total_activities'].idxmax()]
-                    st.info(f"📊 **Pico:** {peak_activity['time_bucket'].strftime(time_format)} ({int(peak_activity['total_activities'])} actividades)")
+                    st.info(f"📊 **Pico:** {peak_activity['time_bucket'].strftime(time_format)} ({int(peak_activity['total_activities'])} reservas)")
 
                 with col_scatter:
-                    st.markdown("**👥 Actividad por Usuario**")
+                    st.markdown("**👥 Reservas por Usuario**")
 
                     # Prepare scatter plot data
                     df_scatter = pd.DataFrame(timeline_data)
@@ -519,7 +516,7 @@ def show_dashboard_tab():
                         st.info(f"🏆 **Más activo:** {top_user['user_name']} ({int(top_user['count'])} reservas)")
 
             else:
-                st.info("ℹ️ No hay datos de actividad en el período seleccionado. La tabla debe existir y tener datos.")
+                st.info("ℹ️ No hay datos de reservas en el período seleccionado. La tabla debe existir y tener datos.")
 
         except Exception as e:
             st.warning(f"⚠️ Analytics no disponible: {str(e)}")
@@ -1153,7 +1150,7 @@ def show_credits_management_tab():
         st.markdown(f"""
         <div class="stat-card">
             <div class="stat-number">{credit_stats['total_credits']}</div>
-            <div class="stat-label">Créditos Totales en Sistema</div>
+            <div class="stat-label">Créditos en Sistema</div>
         </div>
         """, unsafe_allow_html=True)
 

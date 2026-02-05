@@ -568,7 +568,6 @@ class SupabaseManager:
             # Calculate statistics
             total_activities = len(data)
             unique_users = len(set(item['user_id'] for item in data if item.get('user_id')))
-            unique_sessions = 0  # Sessions not tracked in simplified version
 
             # Activity type breakdown
             activity_breakdown = {}
@@ -579,7 +578,6 @@ class SupabaseManager:
             return {
                 'total_activities': total_activities,
                 'unique_users': unique_users,
-                'unique_sessions': unique_sessions,
                 'activity_breakdown': activity_breakdown,
                 'date_range': {'start': start_date, 'end': end_date}
             }
