@@ -215,60 +215,101 @@ export async function POST(request: NextRequest) {
     )
   }
 
-  // Atomically deduct credit BEFORE creating reservation (prevents race condition)
-  const { data: creditResult, error: creditError } = await supabase
-    .rpc('deduct_user_credit', { user_id_param: user.id })
-    .single() as { data: { new_credits: number; success: boolean } | null; error: any }
+  // Use atomic RPC function for credit deduction + reservation creation
+  // This prevents race condition where credit is deducted but reservation fails
+  const { data: result, error: rpcError } = await supabase
+    .rpc('confirm_batch_reservation', {
+      payload: {
+        user_id: user.id,
+        credits_needed: 1,
+        slots: [{ res_date: date, res_hour: hour }]
+      }
+    })
+    .single() as { data: { success: boolean; error_code?: string; error?: string; new_credits?: number; reservation_ids?: string[] } | null; error: any }
 
-  if (creditError || !creditResult) {
-    console.error('Credit deduction error:', creditError)
+  // Handle RPC errors (system-level failures)
+  if (rpcError) {
+    console.error('RPC error:', rpcError)
     return NextResponse.json(
-      { error: `Error al procesar créditos: ${creditError?.message || 'Función no encontrada'}` },
+      { error: `Error del sistema: ${rpcError.message}` },
       { status: 500 }
     )
   }
 
-  if (!creditResult.success) {
+  if (!result) {
     return NextResponse.json(
-      { error: 'Sin créditos suficientes' },
-      { status: 400 }
+      { error: 'Error del sistema: No response from database' },
+      { status: 500 }
     )
   }
 
-  // Create reservation
-  const { data: reservation, error: reservationError } = await supabase
+  // Handle business logic failures (returned by function)
+  if (!result.success) {
+    switch (result.error_code) {
+      case 'SLOT_ALREADY_TAKEN':
+        return NextResponse.json(
+          { error: 'Slot ya reservado' },
+          { status: 409 }
+        )
+      case 'INSUFFICIENT_CREDITS':
+        return NextResponse.json(
+          { error: 'Sin créditos suficientes' },
+          { status: 400 }
+        )
+      case 'DAILY_LIMIT_EXCEEDED':
+        return NextResponse.json(
+          { error: 'Máximo 2 horas por día' },
+          { status: 400 }
+        )
+      case 'NON_CONSECUTIVE_HOURS':
+        return NextResponse.json(
+          { error: 'Las horas reservadas deben ser consecutivas' },
+          { status: 400 }
+        )
+      case 'CONSECUTIVE_DAY_SAME_HOUR':
+        return NextResponse.json(
+          { error: result.error || 'No puedes reservar el mismo horario en días consecutivos' },
+          { status: 400 }
+        )
+      case 'UNAUTHORIZED':
+        return NextResponse.json(
+          { error: 'No autorizado' },
+          { status: 403 }
+        )
+      case 'USER_NOT_FOUND':
+        return NextResponse.json(
+          { error: 'Usuario no encontrado' },
+          { status: 404 }
+        )
+      default:
+        return NextResponse.json(
+          { error: result.error || 'Error al crear reserva' },
+          { status: 400 }
+        )
+    }
+  }
+
+  // Fetch the created reservation for the response
+  const reservationId = result.reservation_ids?.[0]
+  if (!reservationId) {
+    // This shouldn't happen if success is true, but handle defensively
+    console.error('No reservation ID returned despite success')
+    return NextResponse.json(
+      { error: 'Error del sistema: Reserva creada pero ID no retornado' },
+      { status: 500 }
+    )
+  }
+
+  const { data: reservation, error: fetchError } = await supabase
     .from('reservations')
-    .insert({
-      user_id: user.id,
-      date,
-      hour,
-    })
-    .select()
+    .select('*')
+    .eq('id', reservationId)
     .single()
 
-  // Handle unique constraint violation (slot already taken)
-  if (reservationError?.code === '23505') {
-    // Rollback: refund the credit we just deducted
-    await supabase
-      .from('users')
-      .update({ credits: creditResult.new_credits + 1 })
-      .eq('id', user.id)
-    return NextResponse.json(
-      { error: 'Slot ya reservado' },
-      { status: 409 }
-    )
-  }
-
-  if (reservationError) {
-    // Rollback: refund the credit we just deducted
-    await supabase
-      .from('users')
-      .update({ credits: creditResult.new_credits + 1 })
-      .eq('id', user.id)
-    return NextResponse.json(
-      { error: reservationError.message },
-      { status: 500 }
-    )
+  if (fetchError || !reservation) {
+    // Reservation was created (credit deducted) but fetch failed
+    // Log error but return success since the reservation exists
+    console.error('Failed to fetch created reservation:', fetchError)
   }
 
   // Log activity - reservation created successfully
@@ -280,15 +321,15 @@ export async function POST(request: NextRequest) {
     {
       date,
       hour,
-      reservation_id: reservation.id,
+      reservation_id: reservationId,
       credits_used: 1,
-      new_credits: creditResult.new_credits
+      new_credits: result.new_credits
     }
   )
 
   return NextResponse.json({
     success: true,
     reservation,
-    new_credits: creditResult.new_credits,
+    new_credits: result.new_credits,
   })
 }
