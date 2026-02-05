@@ -1046,6 +1046,70 @@ def show_dashboard_tab():
 
 def show_reservations_management_tab():
     """Gestión de reservas por usuario"""
+
+    # Tasa de Cancelación
+    st.subheader("❌ Tasa de Cancelación")
+
+    # Period selector
+    col_period, col_spacer = st.columns([1, 3])
+    with col_period:
+        cancel_period = st.selectbox(
+            "Período",
+            options=[("Últimos 30 días", 30), ("Últimos 60 días", 60), ("Últimos 90 días", 90)],
+            format_func=lambda x: x[0],
+            index=0,
+            key="cancellation_period"
+        )
+        cancel_days = cancel_period[1]
+
+    cancel_stats = admin_db_manager.get_cancellation_statistics(cancel_days)
+
+    # Card style for consistent sizing
+    card_style = "background: #f5f5f5; padding: 15px; border-radius: 12px; text-align: center; min-height: 85px; display: flex; flex-direction: column; justify-content: center;"
+
+    # Main metrics row
+    col1, col2, col3, col4 = st.columns(4)
+
+    with col1:
+        rate = cancel_stats['cancellation_rate']
+        rate_color = '#2e7d32' if rate <= 5 else '#f57c00' if rate <= 15 else '#c62828'
+        st.markdown(f"""
+        <div style="{card_style}">
+            <span style="font-size: 2em; color: {rate_color}; font-weight: bold;">{rate}%</span>
+            <span style="color: #666; font-size: 0.85em;">Tasa de cancelación</span>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col2:
+        st.markdown(f"""
+        <div style="{card_style}">
+            <span style="font-size: 2em; font-weight: bold;">{cancel_stats['total_cancellations']}</span>
+            <span style="color: #666; font-size: 0.85em;">Cancelaciones</span>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col3:
+        st.markdown(f"""
+        <div style="{card_style}">
+            <span style="font-size: 1.1em; font-weight: bold;">📝 {cancel_stats['main_reason']}</span>
+            <span style="color: #666; font-size: 0.85em;">Motivo principal ({cancel_stats['main_reason_pct']}%)</span>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col4:
+        st.markdown(f"""
+        <div style="{card_style}">
+            <span style="font-size: 1.1em; font-weight: bold;">👤 {cancel_stats['top_user_name']}</span>
+            <span style="color: #666; font-size: 0.85em;">Más cancelaciones ({cancel_stats['top_user_count']})</span>
+        </div>
+        """, unsafe_allow_html=True)
+
+    # Summary info
+    st.caption(f"📊 De {cancel_stats['total_reservations']} reservas realizadas, {cancel_stats['total_cancellations']} fueron canceladas en los últimos {cancel_days} días.")
+
+    st.divider()
+
+    # Gestión de Reservas por Usuario
     st.subheader("📅 Gestión de Reservas por Usuario")
 
     # Buscador de usuario

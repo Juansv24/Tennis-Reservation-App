@@ -1532,6 +1532,95 @@ class AdminDatabaseManager:
             print(f"Error getting cancellation history: {e}")
             return []
 
+    def get_cancellation_statistics(self, days_back: int = 30) -> Dict:
+        """
+        Obtener estadísticas de cancelación
+
+        Args:
+            days_back: Número de días para calcular estadísticas
+
+        Returns:
+            Dict con estadísticas de cancelación
+        """
+        try:
+            # Get date range
+            end_date = get_colombia_today()
+            start_date = end_date - timedelta(days=days_back)
+            start_date_str = start_date.strftime('%Y-%m-%d')
+            end_date_str = end_date.strftime('%Y-%m-%d')
+
+            # Get cancellations in period
+            start_datetime = get_colombia_now() - timedelta(days=days_back)
+            cancellations = self.client.table('reservation_cancellations').select(
+                'user_name, user_email, cancellation_reason, cancelled_at'
+            ).gte('cancelled_at', start_datetime.isoformat()).execute()
+
+            num_cancellations = len(cancellations.data)
+
+            # Get total reservations made in the same period (including cancelled ones)
+            # We count reservations + cancellations as "total bookings attempted"
+            reservations = self.client.table('reservations').select('id').gte(
+                'date', start_date_str
+            ).lte('date', end_date_str).execute()
+            total_reservations = len(reservations.data) + num_cancellations
+
+            # Calculate cancellation rate
+            cancellation_rate = round((num_cancellations / max(total_reservations, 1)) * 100, 1)
+
+            # Find main cancellation reason
+            reason_counts = {}
+            for c in cancellations.data:
+                reason = c.get('cancellation_reason', 'Sin motivo') or 'Sin motivo'
+                # Normalize reasons
+                if reason.lower() in ['sin motivo especificado', 'sin motivo', '']:
+                    reason = 'Sin motivo especificado'
+                reason_counts[reason] = reason_counts.get(reason, 0) + 1
+
+            main_reason = max(reason_counts, key=reason_counts.get) if reason_counts else 'N/A'
+            main_reason_count = reason_counts.get(main_reason, 0)
+            main_reason_pct = round((main_reason_count / max(num_cancellations, 1)) * 100, 1)
+
+            # Find user with most cancellations
+            user_cancellations = {}
+            for c in cancellations.data:
+                email = c.get('user_email', 'Desconocido')
+                name = c.get('user_name', 'Desconocido')
+                key = (email, name)
+                user_cancellations[key] = user_cancellations.get(key, 0) + 1
+
+            if user_cancellations:
+                top_user_key = max(user_cancellations, key=user_cancellations.get)
+                top_user_name = top_user_key[1]
+                top_user_count = user_cancellations[top_user_key]
+            else:
+                top_user_name = 'N/A'
+                top_user_count = 0
+
+            return {
+                'total_cancellations': num_cancellations,
+                'total_reservations': total_reservations,
+                'cancellation_rate': cancellation_rate,
+                'main_reason': main_reason,
+                'main_reason_count': main_reason_count,
+                'main_reason_pct': main_reason_pct,
+                'top_user_name': top_user_name,
+                'top_user_count': top_user_count,
+                'period_days': days_back
+            }
+        except Exception as e:
+            print(f"Error getting cancellation statistics: {e}")
+            return {
+                'total_cancellations': 0,
+                'total_reservations': 0,
+                'cancellation_rate': 0,
+                'main_reason': 'N/A',
+                'main_reason_count': 0,
+                'main_reason_pct': 0,
+                'top_user_name': 'N/A',
+                'top_user_count': 0,
+                'period_days': days_back
+            }
+
     def get_blocked_slots(self, start_date: str = None, end_date: str = None) -> List[Dict]:
         """Obtener horarios de mantenimiento agrupados por rangos"""
         try:
