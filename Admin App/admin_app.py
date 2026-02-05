@@ -832,41 +832,24 @@ def show_dashboard_tab():
     user_stats = admin_db_manager.get_user_reservation_statistics()
     if user_stats:
         for i, user in enumerate(user_stats[:5], 1):
-            # Crear expander con título más prominente y ancho completo
-            expander_title = f"**{i}. {user['name']}** • {user['reservations']} reservas"
+            medal = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else f"{i}."
+            expander_title = f"{medal} **{user['name']}** • {user['reservations']} reservas"
 
             with st.expander(expander_title, expanded=False):
-                # Obtener datos detallados del usuario
                 user_detail, error = admin_db_manager.search_users_detailed(user['email'])
                 if error:
                     st.error(f"❌ {error}")
                 elif user_detail:
                     user_info = user_detail[0]
-
-                    # Card con información organizada
-                    st.markdown(f"""
-                    <div style="
-                        background: white;
-                        border: 1px solid #e0e0e0;
-                        border-radius: 8px;
-                        padding: 16px;
-                        margin: 8px 0;
-                        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-                    ">
-                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
-                            <div>
-                                <p style="margin: 4px 0;"><strong>📧 Email:</strong> {user_info['email']}</p>
-                                <p style="margin: 4px 0;"><strong>🎯 Estado:</strong> {'✅ Activo' if user_info['is_active'] else '❌ Inactivo'}</p>
-                                <p style="margin: 4px 0;"><strong>💰 Créditos:</strong> {user_info.get('credits', 0)}</p>
-                            </div>
-                            <div>
-                                <p style="margin: 4px 0;"><strong>⭐ Tipo:</strong> {'Del Comité' if user_info.get('is_vip', False) else 'Regular'}</p>
-                                <p style="margin: 4px 0;"><strong>📅 Registrado:</strong> {user_info['created_at'][:10]}</p>
-                                <p style="margin: 4px 0;"><strong>🎾 Total reservas:</strong> {user['reservations']}</p>
-                            </div>
-                        </div>
-                    </div>
-                    """, unsafe_allow_html=True)
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.markdown(f"**📧 Email:** {user_info['email']}")
+                        st.markdown(f"**🎯 Estado:** {'✅ Activo' if user_info['is_active'] else '❌ Inactivo'}")
+                        st.markdown(f"**💰 Créditos Usados:** {user['reservations']}")
+                    with col2:
+                        st.markdown(f"**⭐ Tipo:** {'Del Comité' if user_info.get('is_vip', False) else 'Regular'}")
+                        st.markdown(f"**📅 Día Favorito:** {user.get('favorite_day', 'N/A')}")
+                        st.markdown(f"**🕐 Hora Favorita:** {user.get('favorite_hour', 'N/A')}")
                 else:
                     st.warning("⚠️ No se pudieron cargar los detalles del usuario")
     else:

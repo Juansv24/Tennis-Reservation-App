@@ -573,10 +573,12 @@ class AdminDatabaseManager:
     def get_user_reservation_statistics(self) -> List[Dict]:
         """Obtener estadísticas de reservas por usuario - Now uses JOIN"""
         try:
-            result = self.client.table('reservations').select('user_id, users(email, full_name)').execute()
+            result = self.client.table('reservations').select('user_id, date, hour, users(email, full_name)').execute()
 
-            # Contar reservas por usuario
+            # Contar reservas por usuario y tracking de días/horas
             user_counts = {}
+            days_spanish = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo']
+
             for reservation in result.data:
                 if not reservation.get('users'):
                     continue
@@ -584,17 +586,57 @@ class AdminDatabaseManager:
                 user_id = reservation['user_id']
                 email = reservation['users']['email']
                 name = reservation['users']['full_name']
+                hour = reservation.get('hour')
+                date_str = reservation.get('date')
 
                 if user_id in user_counts:
                     user_counts[user_id]['count'] += 1
+                    if hour:
+                        user_counts[user_id]['hours'].append(hour)
+                    if date_str:
+                        user_counts[user_id]['dates'].append(date_str)
                 else:
-                    user_counts[user_id] = {'email': email, 'name': name, 'count': 1}
+                    user_counts[user_id] = {
+                        'email': email,
+                        'name': name,
+                        'count': 1,
+                        'hours': [hour] if hour else [],
+                        'dates': [date_str] if date_str else []
+                    }
 
-            # Convertir a lista y ordenar
-            user_stats = [
-                {'email': data['email'], 'name': data['name'], 'reservations': data['count']}
-                for user_id, data in user_counts.items()
-            ]
+            # Convertir a lista con día/hora favoritos
+            user_stats = []
+            for user_id, data in user_counts.items():
+                # Calculate favorite hour
+                favorite_hour = 'N/A'
+                if data['hours']:
+                    hour_counts = {}
+                    for h in data['hours']:
+                        hour_counts[h] = hour_counts.get(h, 0) + 1
+                    most_common_hour = max(hour_counts, key=hour_counts.get)
+                    favorite_hour = f"{most_common_hour}:00"
+
+                # Calculate favorite day
+                favorite_day = 'N/A'
+                if data['dates']:
+                    day_counts = {}
+                    for d in data['dates']:
+                        try:
+                            weekday = datetime.strptime(d, '%Y-%m-%d').weekday()
+                            day_counts[weekday] = day_counts.get(weekday, 0) + 1
+                        except:
+                            pass
+                    if day_counts:
+                        most_common_day = max(day_counts, key=day_counts.get)
+                        favorite_day = days_spanish[most_common_day]
+
+                user_stats.append({
+                    'email': data['email'],
+                    'name': data['name'],
+                    'reservations': data['count'],
+                    'favorite_day': favorite_day,
+                    'favorite_hour': favorite_hour
+                })
 
             return sorted(user_stats, key=lambda x: x['reservations'], reverse=True)[:10]
         except Exception as e:
