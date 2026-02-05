@@ -79,35 +79,86 @@ class AdminDatabaseManager:
     def get_system_statistics(self) -> Dict:
         """Obtener estadísticas generales del sistema"""
         try:
-            # Usuarios totales - all users in table are active
+            # Usuarios totales y VIP
             users_result = self.client.table('users').select('id, is_vip, credits').execute()
             total_users = len(users_result.data)
             vip_users = len([u for u in users_result.data if u.get('is_vip', False)])
 
-            # Reservas de hoy
-            today = get_colombia_today().strftime('%Y-%m-%d')
-            reservations_today = self.client.table('reservations').select('id').eq('date', today).execute()
+            # Fechas
+            today = get_colombia_today()
+            today_str = today.strftime('%Y-%m-%d')
 
-            # Créditos totales emitidos
+            # Reservas de hoy
+            reservations_today = self.client.table('reservations').select('id').eq('date', today_str).execute()
+            today_reservations_count = len(reservations_today.data)
+
+            # Tasa de ocupación hoy
+            # Slots disponibles = 15 horas (6-20) menos slots bloqueados
+            blocked_today = self.client.table('blocked_slots').select('id').eq('date', today_str).execute()
+            available_slots = 15 - len(blocked_today.data)
+            today_occupancy_rate = round((today_reservations_count / max(available_slots, 1)) * 100, 1)
+
+            # Total reservas (histórico)
+            all_reservations = self.client.table('reservations').select('id, user_id').execute()
+            total_reservations = len(all_reservations.data)
+
+            # Reservas esta semana (Lunes a Domingo)
+            days_since_monday = today.weekday()
+            week_start = today - timedelta(days=days_since_monday)
+            week_end = week_start + timedelta(days=6)
+            week_start_str = week_start.strftime('%Y-%m-%d')
+            week_end_str = week_end.strftime('%Y-%m-%d')
+
+            week_reservations = self.client.table('reservations').select('id').gte(
+                'date', week_start_str
+            ).lte('date', week_end_str).execute()
+            week_reservations_count = len(week_reservations.data)
+
+            # Usuarios activos (últimos 30 días)
+            thirty_days_ago = (today - timedelta(days=30)).strftime('%Y-%m-%d')
+            active_users_ids = set([r['user_id'] for r in all_reservations.data
+                                    if r.get('user_id')])
+            # Filter by date - need to get reservations with dates
+            active_reservations = self.client.table('reservations').select('user_id').gte(
+                'date', thirty_days_ago
+            ).execute()
+            active_users_30d = len(set([r['user_id'] for r in active_reservations.data]))
+
+            # Créditos totales emitidos (histórico)
             try:
-                credits_result = self.client.table('credit_transactions').select('amount').eq('transaction_type', 'admin_grant').execute()
-                total_credits_issued = sum([t['amount'] for t in credits_result.data]) if credits_result.data else 0
+                credits_issued_result = self.client.table('credit_transactions').select('amount').eq(
+                    'transaction_type', 'admin_grant'
+                ).execute()
+                total_credits_issued = sum([t['amount'] for t in credits_issued_result.data]) if credits_issued_result.data else 0
             except Exception:
-                total_credits_issued = 0  # Table may not exist yet
+                total_credits_issued = 0
+
+            # Créditos en sistema (balance actual de usuarios)
+            total_credits_balance = sum([u['credits'] or 0 for u in users_result.data])
 
             return {
                 'total_users': total_users,
                 'vip_users': vip_users,
-                'today_reservations': len(reservations_today.data),
-                'total_credits_issued': total_credits_issued
+                'active_users_30d': active_users_30d,
+                'total_reservations': total_reservations,
+                'week_reservations': week_reservations_count,
+                'today_reservations': today_reservations_count,
+                'today_occupancy_rate': today_occupancy_rate,
+                'total_credits_issued': total_credits_issued,
+                'total_credits_balance': total_credits_balance
             }
         except Exception as e:
             print(f"Error getting system statistics: {e}")
             return {
                 'total_users': 0,
                 'vip_users': 0,
+                'active_users_30d': 0,
+                'total_reservations': 0,
+                'week_reservations': 0,
                 'today_reservations': 0,
-                'total_credits_issued': 0
+                'today_occupancy_rate': 0,
+                'total_credits_issued': 0,
+                'total_credits_balance': 0
             }
 
     def get_reservations_by_day_of_week(self) -> Dict:

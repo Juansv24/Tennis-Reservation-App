@@ -302,8 +302,8 @@ def show_dashboard_tab():
     # Obtener estadísticas
     stats = admin_db_manager.get_system_statistics()
 
-    # Métricas principales
-    col1, col2, col3, col4 = st.columns(4)
+    # Métricas principales - Primera fila: USUARIOS
+    col1, col2, col3 = st.columns(3)
 
     with col1:
         st.markdown(f"""
@@ -316,12 +316,39 @@ def show_dashboard_tab():
     with col2:
         st.markdown(f"""
         <div class="stat-card">
+            <div class="stat-number">{stats['active_users_30d']}</div>
+            <div class="stat-label">Usuarios Activos (30 días)</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col3:
+        st.markdown(f"""
+        <div class="stat-card">
             <div class="stat-number">{stats['vip_users']}</div>
             <div class="stat-label">Usuarios del Comité</div>
         </div>
         """, unsafe_allow_html=True)
 
-    with col3:
+    # Métricas principales - Segunda fila: RESERVAS
+    col4, col5, col6 = st.columns(3)
+
+    with col4:
+        st.markdown(f"""
+        <div class="stat-card">
+            <div class="stat-number">{stats['total_reservations']}</div>
+            <div class="stat-label">Total Reservas</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col5:
+        st.markdown(f"""
+        <div class="stat-card">
+            <div class="stat-number">{stats['week_reservations']}</div>
+            <div class="stat-label">Reservas Esta Semana</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col6:
         st.markdown(f"""
         <div class="stat-card">
             <div class="stat-number">{stats['today_reservations']}</div>
@@ -329,11 +356,33 @@ def show_dashboard_tab():
         </div>
         """, unsafe_allow_html=True)
 
-    with col4:
+    # Métricas principales - Tercera fila: CRÉDITOS Y OCUPACIÓN
+    col7, col8, col9 = st.columns(3)
+
+    with col7:
         st.markdown(f"""
         <div class="stat-card">
             <div class="stat-number">{stats['total_credits_issued']}</div>
             <div class="stat-label">Créditos Totales Emitidos</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col8:
+        st.markdown(f"""
+        <div class="stat-card">
+            <div class="stat-number">{stats['total_credits_balance']}</div>
+            <div class="stat-label">Créditos en Sistema</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col9:
+        # Color de ocupación según porcentaje
+        occupancy = stats['today_occupancy_rate']
+        occupancy_color = '#2e7d32' if occupancy >= 70 else '#f57c00' if occupancy >= 40 else '#757575'
+        st.markdown(f"""
+        <div class="stat-card">
+            <div class="stat-number" style="color: {occupancy_color};">{occupancy}%</div>
+            <div class="stat-label">Ocupación Hoy</div>
         </div>
         """, unsafe_allow_html=True)
 
@@ -388,28 +437,7 @@ def show_dashboard_tab():
                 end_date=end_date.strftime('%Y-%m-%d')
             )
 
-            # Get activity statistics
-            activity_stats = db_manager.get_activity_stats(
-                start_date=start_date.strftime('%Y-%m-%d'),
-                end_date=end_date.strftime('%Y-%m-%d')
-            )
-
             if timeline_data and len(timeline_data) > 0:
-                # Display activity summary
-                col1, col2, col3 = st.columns(3)
-
-                with col1:
-                    st.metric("🎯 Total Reservas", activity_stats.get('total_activities', 0))
-
-                with col2:
-                    st.metric("👥 Usuarios Activos", activity_stats.get('unique_users', 0))
-
-                with col3:
-                    avg_activities = activity_stats.get('total_activities', 0) / max(activity_stats.get('unique_users', 1), 1)
-                    st.metric("📊 Promedio/Usuario", f"{avg_activities:.1f}")
-
-                st.markdown("---")
-
                 # Process data for timeline
                 df_timeline = pd.DataFrame(timeline_data)
                 # Timestamps are already in Colombian timezone, just parse them
