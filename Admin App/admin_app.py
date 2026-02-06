@@ -1376,33 +1376,6 @@ def show_reservations_management_tab():
             }
         )
 
-        # Estadísticas adicionales
-        with st.expander("📊 Estadísticas de Cancelaciones", expanded=False):
-            col1, col2, col3, col4 = st.columns(4)
-
-            with col1:
-                total_refunds = df_cancellations['credits_refunded'].sum()
-                st.metric("💰 Total Créditos Reembolsados", total_refunds)
-
-            with col2:
-                admin_cancellations = len(df_cancellations[df_cancellations['cancelled_by'] != 'system'])
-                st.metric("👤 Cancelaciones Admin", admin_cancellations)
-
-            with col3:
-                with_reason = len(df_cancellations[
-                                      (df_cancellations['cancellation_reason'].notna()) &
-                                      (df_cancellations['cancellation_reason'] != 'Sin motivo especificado')
-                                      ])
-                st.metric("📝 Con Motivo Específico", with_reason)
-
-            with col4:
-                unique_users = df_cancellations['user_email'].nunique()
-                st.metric("👥 Usuarios Afectados", unique_users)
-
-    else:
-        st.info(
-            f"📅 No hay cancelaciones registradas {'en el período seleccionado' if not show_all_cancellations else ''}")
-
 def show_user_detailed_info(user):
     """Mostrar información detallada del usuario con feedback mejorado"""
     col1, col2 = st.columns(2)
