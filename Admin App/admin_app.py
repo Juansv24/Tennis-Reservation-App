@@ -77,9 +77,14 @@ def get_cached_credit_economy_data(days_back):
     return admin_db_manager.get_credit_economy_data(days_back)
 
 @st.cache_data(ttl=300)
-def get_cached_users_detailed_statistics():
+def get_cached_users_detailed_statistics(limit: int = None, offset: int = 0):
     """Cached users detailed stats - TTL 5 minutes"""
-    return admin_db_manager.get_users_detailed_statistics()
+    return admin_db_manager.get_users_detailed_statistics(limit=limit, offset=offset)
+
+@st.cache_data(ttl=300)
+def get_cached_users_count():
+    """Cached users count - TTL 5 minutes"""
+    return admin_db_manager.get_users_count()
 
 @st.cache_data(ttl=60)
 def get_cached_dashboard_data():
@@ -1591,11 +1596,32 @@ def show_users_management_tab():
 
     st.divider()
 
-    # Base de datos completa
+    # Base de datos completa con paginación
     st.markdown("### 📊 Base de Usuarios Registrados")
 
+    # Pagination settings
+    USERS_PER_PAGE = 10
+
+    # Initialize pagination state
+    if 'users_page' not in st.session_state:
+        st.session_state.users_page = 0
+
+    # Get total count and calculate pages
+    total_users = get_cached_users_count()
+    total_pages = max(1, (total_users + USERS_PER_PAGE - 1) // USERS_PER_PAGE)
+
+    # Ensure current page is valid
+    if st.session_state.users_page >= total_pages:
+        st.session_state.users_page = total_pages - 1
+    if st.session_state.users_page < 0:
+        st.session_state.users_page = 0
+
+    current_page = st.session_state.users_page
+    offset = current_page * USERS_PER_PAGE
+
+    # Get users for current page
     with st.spinner("Cargando datos de usuarios..."):
-        users_stats = get_cached_users_detailed_statistics()
+        users_stats = get_cached_users_detailed_statistics(limit=USERS_PER_PAGE, offset=offset)
 
     if users_stats:
         df = pd.DataFrame(users_stats)
@@ -1613,7 +1639,6 @@ def show_users_management_tab():
         st.dataframe(
             df,
             use_container_width=True,
-            height=600,
             hide_index=True,
             column_config={
                 "Email": st.column_config.TextColumn("Email", width="medium"),
@@ -1622,6 +1647,32 @@ def show_users_management_tab():
                 "Reservas Totales": st.column_config.NumberColumn("Reservas Totales", format="%d 🎾"),
             }
         )
+
+        # Pagination controls
+        col1, col2, col3, col4, col5 = st.columns([1, 1, 2, 1, 1])
+
+        with col1:
+            if st.button("⏮️ Primera", disabled=(current_page == 0), key="users_first"):
+                st.session_state.users_page = 0
+                st.rerun()
+
+        with col2:
+            if st.button("◀️ Anterior", disabled=(current_page == 0), key="users_prev"):
+                st.session_state.users_page -= 1
+                st.rerun()
+
+        with col3:
+            st.markdown(f"<div style='text-align: center; padding: 8px;'>Página **{current_page + 1}** de **{total_pages}** ({total_users} usuarios)</div>", unsafe_allow_html=True)
+
+        with col4:
+            if st.button("Siguiente ▶️", disabled=(current_page >= total_pages - 1), key="users_next"):
+                st.session_state.users_page += 1
+                st.rerun()
+
+        with col5:
+            if st.button("Última ⏭️", disabled=(current_page >= total_pages - 1), key="users_last"):
+                st.session_state.users_page = total_pages - 1
+                st.rerun()
     else:
         st.info("No hay usuarios registrados")
 

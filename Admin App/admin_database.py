@@ -261,12 +261,21 @@ class AdminDatabaseManager:
             print(f"Error getting user reservations: {e}")
             return []
 
-    def get_users_detailed_statistics(self) -> List[Dict]:
-        """Get detailed statistics for all users"""
-        # Use Python-based processing (RPC function not implemented in database)
-        return self._get_users_detailed_statistics_fallback()
+    def get_users_count(self) -> int:
+        """Get total count of users"""
+        try:
+            result = self.client.table('users').select('id', count='exact').execute()
+            return result.count if result.count else 0
+        except Exception as e:
+            print(f"Error getting users count: {e}")
+            return 0
 
-    def _get_users_detailed_statistics_fallback(self) -> List[Dict]:
+    def get_users_detailed_statistics(self, limit: int = None, offset: int = 0) -> List[Dict]:
+        """Get detailed statistics for all users with optional pagination"""
+        # Use Python-based processing (RPC function not implemented in database)
+        return self._get_users_detailed_statistics_fallback(limit=limit, offset=offset)
+
+    def _get_users_detailed_statistics_fallback(self, limit: int = None, offset: int = 0) -> List[Dict]:
         """Fallback method using Python processing (for backwards compatibility)"""
         try:
             # Get all users with their IDs
@@ -362,6 +371,9 @@ class AdminDatabaseManager:
                     'favorite_time': favorite_time
                 })
 
+            # Apply pagination if limit is specified
+            if limit is not None:
+                return user_stats[offset:offset + limit]
             return user_stats
 
         except Exception as e:
