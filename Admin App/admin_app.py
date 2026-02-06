@@ -697,8 +697,7 @@ def show_dashboard_tab():
             hovertemplate='<b>%{y}</b> a las <b>%{x}</b><br>%{z} reservas<extra></extra>',
             showscale=True,
             colorbar=dict(
-                title="Reservas",
-                titleside="right"
+                title=dict(text="Reservas", side="right")
             )
         ))
 
