@@ -1372,12 +1372,28 @@ class AdminDatabaseManager:
                 'message': f'No se pudieron cargar las alertas: {str(e)}'
             }]
 
-    def get_credit_transactions(self, limit: int = 50, offset: int = 0) -> List:
-        """Obtener historial de transacciones de créditos con paginación"""
+    def get_credit_transactions(self, limit: int = 50, offset: int = 0, user_name_filter: str = None) -> List:
+        """Obtener historial de transacciones de créditos con paginación y filtro opcional por nombre"""
         try:
-            result = self.client.table('credit_transactions').select(
+            # If user name filter is provided, first get matching user IDs
+            user_ids = None
+            if user_name_filter and user_name_filter.strip():
+                users_result = self.client.table('users').select('id').ilike(
+                    'full_name', f'%{user_name_filter.strip()}%'
+                ).execute()
+                user_ids = [u['id'] for u in users_result.data] if users_result.data else []
+                if not user_ids:
+                    return []  # No matching users found
+
+            query = self.client.table('credit_transactions').select(
                 'users(full_name), amount, transaction_type, description, admin_user, created_at'
-            ).order('created_at', desc=True).range(offset, offset + limit - 1).execute()
+            )
+
+            # Apply user filter if provided
+            if user_ids is not None:
+                query = query.in_('user_id', user_ids)
+
+            result = query.order('created_at', desc=True).range(offset, offset + limit - 1).execute()
 
             # Formatear datos para mostrar
             formatted_transactions = []
@@ -1397,10 +1413,26 @@ class AdminDatabaseManager:
             print(f"Error getting credit transactions: {e}")
             return []
 
-    def get_credit_transactions_count(self) -> int:
-        """Obtener el total de transacciones de créditos"""
+    def get_credit_transactions_count(self, user_name_filter: str = None) -> int:
+        """Obtener el total de transacciones de créditos con filtro opcional por nombre"""
         try:
-            result = self.client.table('credit_transactions').select('id', count='exact').execute()
+            # If user name filter is provided, first get matching user IDs
+            user_ids = None
+            if user_name_filter and user_name_filter.strip():
+                users_result = self.client.table('users').select('id').ilike(
+                    'full_name', f'%{user_name_filter.strip()}%'
+                ).execute()
+                user_ids = [u['id'] for u in users_result.data] if users_result.data else []
+                if not user_ids:
+                    return 0  # No matching users found
+
+            query = self.client.table('credit_transactions').select('id', count='exact')
+
+            # Apply user filter if provided
+            if user_ids is not None:
+                query = query.in_('user_id', user_ids)
+
+            result = query.execute()
             return result.count if result.count else 0
         except Exception as e:
             print(f"Error getting credit transactions count: {e}")

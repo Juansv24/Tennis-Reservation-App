@@ -1992,6 +1992,22 @@ def show_credits_management_tab():
     # Historial de transacciones con paginación
     st.subheader("📋 Historial de Transacciones")
 
+    # User name filter
+    if 'transactions_user_filter' not in st.session_state:
+        st.session_state.transactions_user_filter = ""
+
+    user_filter = st.text_input(
+        "🔍 Filtrar por nombre de usuario",
+        value=st.session_state.transactions_user_filter,
+        placeholder="Escribe el nombre del usuario...",
+        key="transactions_filter_input"
+    )
+
+    # Reset pagination if filter changed
+    if user_filter != st.session_state.transactions_user_filter:
+        st.session_state.transactions_user_filter = user_filter
+        st.session_state.transactions_page = 0
+
     # Pagination settings
     TRANSACTIONS_PER_PAGE = 10
 
@@ -1999,8 +2015,9 @@ def show_credits_management_tab():
     if 'transactions_page' not in st.session_state:
         st.session_state.transactions_page = 0
 
-    # Get total count and calculate pages
-    total_transactions = admin_db_manager.get_credit_transactions_count()
+    # Get total count and calculate pages (with filter)
+    filter_value = user_filter if user_filter.strip() else None
+    total_transactions = admin_db_manager.get_credit_transactions_count(user_name_filter=filter_value)
     total_pages = max(1, (total_transactions + TRANSACTIONS_PER_PAGE - 1) // TRANSACTIONS_PER_PAGE)
 
     # Ensure current page is valid
@@ -2012,8 +2029,8 @@ def show_credits_management_tab():
     current_page = st.session_state.transactions_page
     offset = current_page * TRANSACTIONS_PER_PAGE
 
-    # Get transactions for current page
-    transactions = admin_db_manager.get_credit_transactions(limit=TRANSACTIONS_PER_PAGE, offset=offset)
+    # Get transactions for current page (with filter)
+    transactions = admin_db_manager.get_credit_transactions(limit=TRANSACTIONS_PER_PAGE, offset=offset, user_name_filter=filter_value)
 
     if transactions:
         df_transactions = pd.DataFrame(transactions)
@@ -2046,7 +2063,10 @@ def show_credits_management_tab():
                 st.session_state.transactions_page = total_pages - 1
                 st.rerun()
     else:
-        st.info("No hay transacciones de créditos")
+        if filter_value:
+            st.info(f"No se encontraron transacciones para usuarios con nombre '{filter_value}'")
+        else:
+            st.info("No hay transacciones de créditos")
 
 
 def show_config_tab():
