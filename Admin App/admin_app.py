@@ -1434,79 +1434,66 @@ def show_user_detailed_info(user):
     if edit_key not in st.session_state:
         st.session_state[edit_key] = False
 
-    col_edit1, col_edit2 = st.columns([3, 1])
-
     if st.session_state[edit_key]:
         # Edit mode
-        with col_edit1:
+        col_input, col_save, col_cancel = st.columns([3, 1, 1])
+        with col_input:
             new_name = st.text_input(
                 "Nuevo nombre:",
                 value=user['full_name'],
-                key=f"new_name_{user['id']}"
+                key=f"new_name_{user['id']}",
+                label_visibility="collapsed"
             )
-        with col_edit2:
-            st.write("")  # Spacer
-            col_save, col_cancel = st.columns(2)
-            with col_save:
-                if st.button("💾", key=f"save_name_{user['id']}", help="Guardar"):
-                    if new_name and new_name.strip():
-                        success, message = admin_db_manager.update_user_name(user['id'], new_name.strip())
-                        if success:
-                            st.success(message)
-                            st.session_state[edit_key] = False
-                            st.session_state.found_users = []  # Clear to refresh
-                            get_cached_search_users.clear()  # Clear search cache
-                            st.rerun()
-                        else:
-                            st.error(message)
+        with col_save:
+            if st.button("💾 Guardar", key=f"save_name_{user['id']}"):
+                if new_name and new_name.strip():
+                    success, message = admin_db_manager.update_user_name(user['id'], new_name.strip())
+                    if success:
+                        st.success(message)
+                        st.session_state[edit_key] = False
+                        st.session_state.found_users = []
+                        get_cached_search_users.clear()
+                        st.rerun()
                     else:
-                        st.warning("El nombre no puede estar vacío")
-            with col_cancel:
-                if st.button("❌", key=f"cancel_edit_{user['id']}", help="Cancelar"):
-                    st.session_state[edit_key] = False
-                    st.rerun()
+                        st.error(message)
+                else:
+                    st.warning("El nombre no puede estar vacío")
+        with col_cancel:
+            if st.button("❌ Cancelar", key=f"cancel_edit_{user['id']}"):
+                st.session_state[edit_key] = False
+                st.rerun()
     else:
-        # View mode - show edit button
-        with col_edit1:
-            pass
-        with col_edit2:
-            if st.button("✏️ Editar Nombre", key=f"edit_btn_{user['id']}", type="secondary"):
+        # Action buttons row
+        is_active = user.get('is_active', True)
+        block_text = "🚫 Bloquear Usuario" if is_active else "✅ Desbloquear Usuario"
+        block_type = "secondary" if is_active else "primary"
+
+        col_edit, col_block = st.columns(2)
+
+        with col_edit:
+            if st.button("✏️ Editar Nombre", key=f"edit_btn_{user['id']}", type="secondary", use_container_width=True):
                 st.session_state[edit_key] = True
                 st.rerun()
 
-    st.divider()
+        with col_block:
+            if st.button(block_text, key=f"toggle_block_{user['id']}", type=block_type, use_container_width=True):
+                admin_user = st.session_state.get('admin_user', {})
+                admin_username = admin_user.get('username', 'admin')
 
-    # Botón para bloquear/desbloquear usuario
-    is_active = user.get('is_active', True)
-    block_text = "🚫 Bloquear Usuario" if is_active else "✅ Desbloquear Usuario"
-    block_type = "secondary" if is_active else "primary"
+                with st.spinner(f"🔄 {'Bloqueando' if is_active else 'Desbloqueando'} usuario..."):
+                    if is_active:
+                        success, message = admin_db_manager.block_user(user['email'], admin_username)
+                        new_state = "🚫 Bloqueado"
+                    else:
+                        success, message = admin_db_manager.unblock_user(user['email'], admin_username)
+                        new_state = "✅ Activo"
 
-    if st.button(block_text, key=f"toggle_block_{user['id']}", type=block_type):
-        admin_user = st.session_state.get('admin_user', {})
-        admin_username = admin_user.get('username', 'admin')
-
-        with st.spinner(f"🔄 {'Bloqueando' if is_active else 'Desbloqueando'} usuario..."):
-            if is_active:
-                # Block user
-                success, message = admin_db_manager.block_user(user['email'], admin_username)
-                new_state = "🚫 Bloqueado"
-            else:
-                # Unblock user
-                success, message = admin_db_manager.unblock_user(user['email'], admin_username)
-                new_state = "✅ Activo"
-
-            if success:
-                # Clear search results to allow searching for another user
-                st.session_state.found_users = []
-
-                # Show success message with new state
-                st.success(f"{message}\n\n**Nuevo estado del usuario:** {new_state}")
-
-                # Button to search for another user
-                if st.button("🔍 Buscar otro usuario", type="primary"):
-                    st.rerun()
-            else:
-                st.error(message)
+                    if success:
+                        st.session_state.found_users = []
+                        st.success(f"{message}\n\n**Nuevo estado del usuario:** {new_state}")
+                        st.rerun()
+                    else:
+                        st.error(message)
 
 
 def show_users_management_tab():
