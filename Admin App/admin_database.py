@@ -542,7 +542,7 @@ class AdminDatabaseManager:
         try:
             result = self.client.table('users').select('*').or_(
                 f'email.ilike.%{search_term}%,full_name.ilike.%{search_term}%'
-            ).execute()
+            ).limit(20).execute()
 
             # Formatear fechas para cada usuario
             for user in result.data:
@@ -554,6 +554,27 @@ class AdminDatabaseManager:
             error_msg = f"Error de base de datos al buscar usuarios: {str(e)}"
             print(f"[Search Detailed] ERROR: {error_msg}")
             return ([], error_msg)
+
+    def update_user_name(self, user_id: int, new_name: str) -> tuple[bool, str]:
+        """
+        Actualizar el nombre de un usuario
+
+        Returns:
+            tuple: (success, message)
+        """
+        try:
+            result = self.client.table('users').update({
+                'full_name': new_name
+            }).eq('id', user_id).execute()
+
+            if result.data:
+                return (True, f"Nombre actualizado exitosamente a '{new_name}'")
+            else:
+                return (False, "No se encontró el usuario")
+        except Exception as e:
+            error_msg = f"Error al actualizar nombre: {str(e)}"
+            print(f"[Update User Name] ERROR: {error_msg}")
+            return (False, error_msg)
 
     def get_user_stats(self, user_id: int) -> Dict:
         """Obtener estadísticas de un usuario específico - Now uses user_id"""
