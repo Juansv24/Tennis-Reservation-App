@@ -1690,9 +1690,6 @@ def show_users_management_tab():
         st.info("No hay usuarios registrados")
 
 def show_credits_management_tab():
-    """Gestión de créditos"""
-    st.subheader("💰 Gestión de Créditos")
-
     # Estadísticas de créditos (usando stats del sistema)
     stats = get_cached_system_statistics()
     credit_stats = get_cached_credit_statistics()
@@ -1722,127 +1719,6 @@ def show_credits_management_tab():
             <div class="stat-label">Usuarios con Créditos</div>
         </div>
         """, unsafe_allow_html=True)
-
-    st.divider()
-
-    # Economía de Créditos
-    st.subheader("📈 Economía de Créditos")
-
-    # Period selector
-    col_period, col_spacer = st.columns([1, 3])
-    with col_period:
-        economy_period = st.selectbox(
-            "Período",
-            options=[("Últimos 30 días", 30), ("Últimos 60 días", 60), ("Últimos 90 días", 90)],
-            format_func=lambda x: x[0],
-            index=0,
-            key="credit_economy_period"
-        )
-        economy_days = economy_period[1]
-
-    economy_data = get_cached_credit_economy_data(economy_days)
-
-    # Metrics cards
-    col1, col2, col3, col4, col5 = st.columns(5)
-
-    card_style = "background: #f5f5f5; padding: 15px; border-radius: 12px; text-align: center; min-height: 80px; display: flex; flex-direction: column; justify-content: center;"
-
-    with col1:
-        st.markdown(f"""
-        <div style="{card_style}">
-            <span style="font-size: 1.8em; color: #2e7d32; font-weight: bold;">+{economy_data['credits_granted']}</span>
-            <span style="color: #666; font-size: 0.85em;">Otorgados</span>
-        </div>
-        """, unsafe_allow_html=True)
-
-    with col2:
-        st.markdown(f"""
-        <div style="{card_style}">
-            <span style="font-size: 1.8em; color: #c62828; font-weight: bold;">-{economy_data['credits_used']}</span>
-            <span style="color: #666; font-size: 0.85em;">Usados</span>
-        </div>
-        """, unsafe_allow_html=True)
-
-    with col3:
-        st.markdown(f"""
-        <div style="{card_style}">
-            <span style="font-size: 1.8em; color: #1565c0; font-weight: bold;">+{economy_data['credits_refunded']}</span>
-            <span style="color: #666; font-size: 0.85em;">Reembolsados</span>
-        </div>
-        """, unsafe_allow_html=True)
-
-    with col4:
-        st.markdown(f"""
-        <div style="{card_style}">
-            <span style="font-size: 1.8em; color: #6a1b9a; font-weight: bold;">-{economy_data['credits_removed']}</span>
-            <span style="color: #666; font-size: 0.85em;">Removidos</span>
-        </div>
-        """, unsafe_allow_html=True)
-
-    with col5:
-        net = economy_data['net_flow']
-        net_color = '#2e7d32' if net >= 0 else '#c62828'
-        net_sign = '+' if net >= 0 else ''
-        st.markdown(f"""
-        <div style="{card_style}">
-            <span style="font-size: 1.8em; color: {net_color}; font-weight: bold;">{net_sign}{net}</span>
-            <span style="color: #666; font-size: 0.85em;">Balance Neto</span>
-        </div>
-        """, unsafe_allow_html=True)
-
-    # Timeline chart
-    if economy_data['timeline']['dates']:
-        st.markdown("**📊 Flujo de Créditos**")
-
-        fig_credits = go.Figure()
-
-        # Add granted line
-        fig_credits.add_trace(go.Scatter(
-            x=economy_data['timeline']['dates'],
-            y=economy_data['timeline']['granted'],
-            mode='lines+markers',
-            name='Otorgados',
-            line=dict(color='#2e7d32', width=2),
-            marker=dict(size=6)
-        ))
-
-        # Add used line
-        fig_credits.add_trace(go.Scatter(
-            x=economy_data['timeline']['dates'],
-            y=economy_data['timeline']['used'],
-            mode='lines+markers',
-            name='Usados',
-            line=dict(color='#c62828', width=2),
-            marker=dict(size=6)
-        ))
-
-        # Add cumulative line
-        fig_credits.add_trace(go.Scatter(
-            x=economy_data['timeline']['dates'],
-            y=economy_data['timeline']['cumulative'],
-            mode='lines',
-            name='Balance Acumulado',
-            line=dict(color='#1565c0', width=2, dash='dash'),
-            yaxis='y2'
-        ))
-
-        fig_credits.update_layout(
-            height=350,
-            margin=dict(l=0, r=0, t=30, b=0),
-            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-            xaxis_title='',
-            yaxis_title='Créditos/día',
-            yaxis2=dict(
-                title='Balance Acumulado',
-                overlaying='y',
-                side='right'
-            ),
-            hovermode='x unified'
-        )
-
-        st.plotly_chart(fig_credits, use_container_width=True)
-    else:
-        st.info("No hay datos de transacciones en el período seleccionado")
 
     st.divider()
 
@@ -1990,6 +1866,127 @@ def show_credits_management_tab():
     else:
         # Mostrar instrucciones cuando no hay usuario seleccionado
         st.info("💡 Usa el buscador para encontrar y seleccionar un usuario")
+
+    st.divider()
+
+    # Economía de Créditos
+    st.subheader("📈 Economía de Créditos")
+
+    # Period selector
+    col_period, col_spacer = st.columns([1, 3])
+    with col_period:
+        economy_period = st.selectbox(
+            "Período",
+            options=[("Últimos 30 días", 30), ("Últimos 60 días", 60), ("Últimos 90 días", 90)],
+            format_func=lambda x: x[0],
+            index=0,
+            key="credit_economy_period"
+        )
+        economy_days = economy_period[1]
+
+    economy_data = get_cached_credit_economy_data(economy_days)
+
+    # Metrics cards
+    col1, col2, col3, col4, col5 = st.columns(5)
+
+    card_style = "background: #f5f5f5; padding: 15px; border-radius: 12px; text-align: center; min-height: 80px; display: flex; flex-direction: column; justify-content: center;"
+
+    with col1:
+        st.markdown(f"""
+        <div style="{card_style}">
+            <span style="font-size: 1.8em; color: #2e7d32; font-weight: bold;">+{economy_data['credits_granted']}</span>
+            <span style="color: #666; font-size: 0.85em;">Otorgados</span>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col2:
+        st.markdown(f"""
+        <div style="{card_style}">
+            <span style="font-size: 1.8em; color: #c62828; font-weight: bold;">-{economy_data['credits_used']}</span>
+            <span style="color: #666; font-size: 0.85em;">Usados</span>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col3:
+        st.markdown(f"""
+        <div style="{card_style}">
+            <span style="font-size: 1.8em; color: #1565c0; font-weight: bold;">+{economy_data['credits_refunded']}</span>
+            <span style="color: #666; font-size: 0.85em;">Reembolsados</span>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col4:
+        st.markdown(f"""
+        <div style="{card_style}">
+            <span style="font-size: 1.8em; color: #6a1b9a; font-weight: bold;">-{economy_data['credits_removed']}</span>
+            <span style="color: #666; font-size: 0.85em;">Removidos</span>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col5:
+        net = economy_data['net_flow']
+        net_color = '#2e7d32' if net >= 0 else '#c62828'
+        net_sign = '+' if net >= 0 else ''
+        st.markdown(f"""
+        <div style="{card_style}">
+            <span style="font-size: 1.8em; color: {net_color}; font-weight: bold;">{net_sign}{net}</span>
+            <span style="color: #666; font-size: 0.85em;">Balance Neto</span>
+        </div>
+        """, unsafe_allow_html=True)
+
+    # Timeline chart
+    if economy_data['timeline']['dates']:
+        st.markdown("**📊 Flujo de Créditos**")
+
+        fig_credits = go.Figure()
+
+        # Add granted line
+        fig_credits.add_trace(go.Scatter(
+            x=economy_data['timeline']['dates'],
+            y=economy_data['timeline']['granted'],
+            mode='lines+markers',
+            name='Otorgados',
+            line=dict(color='#2e7d32', width=2),
+            marker=dict(size=6)
+        ))
+
+        # Add used line
+        fig_credits.add_trace(go.Scatter(
+            x=economy_data['timeline']['dates'],
+            y=economy_data['timeline']['used'],
+            mode='lines+markers',
+            name='Usados',
+            line=dict(color='#c62828', width=2),
+            marker=dict(size=6)
+        ))
+
+        # Add cumulative line
+        fig_credits.add_trace(go.Scatter(
+            x=economy_data['timeline']['dates'],
+            y=economy_data['timeline']['cumulative'],
+            mode='lines',
+            name='Balance Acumulado',
+            line=dict(color='#1565c0', width=2, dash='dash'),
+            yaxis='y2'
+        ))
+
+        fig_credits.update_layout(
+            height=350,
+            margin=dict(l=0, r=0, t=30, b=0),
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+            xaxis_title='',
+            yaxis_title='Créditos/día',
+            yaxis2=dict(
+                title='Balance Acumulado',
+                overlaying='y',
+                side='right'
+            ),
+            hovermode='x unified'
+        )
+
+        st.plotly_chart(fig_credits, use_container_width=True)
+    else:
+        st.info("No hay datos de transacciones en el período seleccionado")
 
     st.divider()
 
