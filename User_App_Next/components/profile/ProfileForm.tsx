@@ -64,7 +64,7 @@ export default function ProfileForm({ user, onSaved }: Props) {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-8 max-w-2xl">
+    <form onSubmit={handleSubmit} className="space-y-8">
       {/* Personal Info */}
       <section className="space-y-4">
         <h3 className="text-lg font-semibold text-us-open-blue">Información personal</h3>

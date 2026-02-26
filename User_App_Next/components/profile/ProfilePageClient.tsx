@@ -23,7 +23,7 @@ export default function ProfilePageClient({ profile: initialProfile }: Props) {
   }
 
   return (
-    <div className="max-w-2xl">
+    <div>
       <div className="mb-6">
         <Link
           href="/"
