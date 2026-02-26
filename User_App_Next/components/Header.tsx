@@ -1,7 +1,10 @@
+// ABOUTME: Site-wide header component — displays user name, credits, lock code, and navigation buttons.
+// ABOUTME: Renders the Mi Perfil link and Salir logout button in the right section.
 'use client'
 
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import type { User } from '@/types/database.types'
 
 interface HeaderProps {
@@ -39,14 +42,22 @@ export default function Header({ user, lockCode, hasReservations }: HeaderProps)
             </div>
           </div>
 
-          {/* Right section: Salir button and Lock code */}
+          {/* Right section: Mi Perfil link, Salir button and Lock code */}
           <div className="flex flex-col items-end gap-2">
-            <button
-              onClick={handleLogout}
-              className="px-4 py-2 bg-white bg-opacity-20 hover:bg-opacity-30 rounded-lg transition-colors font-semibold"
-            >
-              Salir
-            </button>
+            <div className="flex items-center gap-2">
+              <Link
+                href="/profile"
+                className="px-4 py-2 bg-white bg-opacity-20 hover:bg-opacity-30 rounded-lg transition-colors font-semibold"
+              >
+                👤 Mi Perfil
+              </Link>
+              <button
+                onClick={handleLogout}
+                className="px-4 py-2 bg-white bg-opacity-20 hover:bg-opacity-30 rounded-lg transition-colors font-semibold"
+              >
+                Salir
+              </button>
+            </div>
             {hasReservations && lockCode && (
               <div className="flex items-center gap-2 text-white">
                 <p className="text-base opacity-90">Código de candado:</p>
