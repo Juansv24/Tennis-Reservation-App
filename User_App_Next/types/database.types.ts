@@ -1,3 +1,8 @@
+// ABOUTME: TypeScript interfaces for all Supabase database tables.
+// ABOUTME: Keep in sync with the database schema after every migration.
+
+export type Availability = Record<string, number[]>
+
 export interface User {
   id: string
   email: string
@@ -6,6 +11,16 @@ export interface User {
   is_vip: boolean
   first_login_completed: boolean
   created_at: string
+  gender: string | null
+  age: number | null
+  level_tier: string | null
+  categoria: string | null
+  availability: Availability | null
+  profile_completed: boolean
+  last_profile_visit: string | null
+  notify_suggestions: boolean
+  notify_match_posts: boolean
+  notify_messages: boolean
 }
 
 export interface Reservation {
@@ -56,3 +71,35 @@ export type SlotStatus =
   | 'maintenance'
   | 'tennis-school'
   | 'selected'
+
+export interface MatchPost {
+  id: string
+  user_id: string
+  type: 'specific' | 'standing'
+  date: string | null
+  hour: number | null
+  desired_level_tier: string | null
+  desired_categoria: string | null
+  note: string | null
+  is_active: boolean
+  created_at: string
+  users?: { full_name: string; level_tier: string | null; categoria: string | null }
+}
+
+export interface MatchPostComment {
+  id: string
+  post_id: string
+  user_id: string
+  content: string
+  created_at: string
+  users?: { full_name: string }
+}
+
+export interface DirectMessage {
+  id: string
+  sender_id: string
+  recipient_id: string
+  content: string
+  created_at: string
+  read_at: string | null
+}
