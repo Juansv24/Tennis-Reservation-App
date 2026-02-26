@@ -20,6 +20,12 @@ export interface User {
   notify_messages: boolean
 }
 
+export interface SuggestedPartner {
+  user: Pick<User, 'id' | 'full_name' | 'level_tier' | 'categoria'>
+  badge: 'nivel+horario' | 'solo-nivel'
+  overlapMessage: string | null
+}
+
 export interface Reservation {
   id: string
   user_id: string
@@ -81,6 +87,10 @@ export interface MatchPost {
   is_active: boolean
   created_at: string
   users?: { full_name: string; level_tier: string | null; categoria: string | null }
+}
+
+export interface MatchPostWithCount extends MatchPost {
+  comment_count: number
 }
 
 export interface MatchPostComment {

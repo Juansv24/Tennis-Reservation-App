@@ -1475,7 +1475,7 @@ def show_users_management_tab():
     stats = get_cached_system_statistics()
 
     # Métricas principales - Usuarios
-    col1, col2, col3 = st.columns(3)
+    col1, col2, col3, col4 = st.columns(4)
 
     with col1:
         st.markdown(f"""
@@ -1494,6 +1494,16 @@ def show_users_management_tab():
         """, unsafe_allow_html=True)
 
     with col3:
+        profile_pct = stats['profile_completed_pct']
+        profile_color = '#2e7d32' if profile_pct >= 70 else '#f57c00' if profile_pct >= 40 else '#757575'
+        st.markdown(f"""
+        <div class="stat-card">
+            <div class="stat-number" style="color: {profile_color};">{profile_pct}%</div>
+            <div class="stat-label">Perfil Completado</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col4:
         st.markdown(f"""
         <div class="stat-card">
             <div class="stat-number">{stats['vip_users']}</div>

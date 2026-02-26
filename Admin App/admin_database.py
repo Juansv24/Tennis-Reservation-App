@@ -80,9 +80,11 @@ class AdminDatabaseManager:
         """Obtener estadísticas generales del sistema"""
         try:
             # Usuarios totales y VIP
-            users_result = self.client.table('users').select('id, is_vip, credits').execute()
+            users_result = self.client.table('users').select('id, is_vip, credits, profile_completed').execute()
             total_users = len(users_result.data)
             vip_users = len([u for u in users_result.data if u.get('is_vip', False)])
+            completed_profiles = len([u for u in users_result.data if u.get('profile_completed', False)])
+            profile_completed_pct = round((completed_profiles / max(total_users, 1)) * 100, 1)
 
             # Fechas
             today = get_colombia_today()
@@ -145,7 +147,8 @@ class AdminDatabaseManager:
                 'today_reservations': today_reservations_count,
                 'today_occupancy_rate': today_occupancy_rate,
                 'total_credits_issued': total_credits_issued,
-                'total_credits_balance': total_credits_balance
+                'total_credits_balance': total_credits_balance,
+                'profile_completed_pct': profile_completed_pct
             }
         except Exception as e:
             print(f"Error getting system statistics: {e}")
@@ -158,7 +161,8 @@ class AdminDatabaseManager:
                 'today_reservations': 0,
                 'today_occupancy_rate': 0,
                 'total_credits_issued': 0,
-                'total_credits_balance': 0
+                'total_credits_balance': 0,
+                'profile_completed_pct': 0
             }
 
     def get_reservations_by_day_of_week(self) -> Dict:
