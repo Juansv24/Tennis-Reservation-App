@@ -68,6 +68,9 @@ export default async function DashboardLayout({
             <p className="text-xs text-gray-400">
               © {new Date().getFullYear()} Sistema de reservas de cancha de tenis. Todos los derechos reservados. Desarrollado por Juan Sebastian Vallejo.
             </p>
+            <p className="text-xs text-gray-400 mt-1">
+              Para mayor información o sugerencias relacionadas con la app escribir al correo: vallejo240@gmail.com
+            </p>
           </div>
         </footer>
       </div>

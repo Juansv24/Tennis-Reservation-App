@@ -1,16 +1,15 @@
 // ABOUTME: Site-wide header component — displays user name, credits, lock code, and Salir button.
-// ABOUTME: Renders a tab bar at the bottom (Mi Perfil / Comunidad / Mensajes) for profile navigation.
+// ABOUTME: Renders a tab bar at the bottom (Mi Perfil / Comunidad) for profile navigation.
 'use client'
 
 import { createClient } from '@/lib/supabase/client'
-import { useRouter, usePathname } from 'next/navigation'
+import { useRouter, usePathname, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import type { User } from '@/types/database.types'
 
 const PROFILE_TABS = [
-  { label: 'Mi Perfil',  href: '/profile' },
-  { label: 'Comunidad',  href: '/profile?tab=comunidad' },
-  { label: 'Mensajes',   href: '/profile?tab=mensajes' },
+  { label: 'Mi Perfil',  href: '/profile',               tab: null },
+  { label: 'Comunidad',  href: '/profile?tab=comunidad', tab: 'comunidad' },
 ]
 
 interface HeaderProps {
@@ -22,8 +21,10 @@ interface HeaderProps {
 export default function Header({ user, lockCode, hasReservations }: HeaderProps) {
   const router = useRouter()
   const pathname = usePathname()
+  const searchParams = useSearchParams()
   const supabase = createClient()
   const onProfilePage = pathname.startsWith('/profile')
+  const currentTab = searchParams.get('tab')
 
   async function handleLogout() {
     await supabase.auth.signOut()
@@ -72,7 +73,7 @@ export default function Header({ user, lockCode, hasReservations }: HeaderProps)
       <div className="max-w-7xl mx-auto px-4">
         <div className="flex gap-1">
           {PROFILE_TABS.map(tab => {
-            const isActive = onProfilePage && pathname === '/profile' && tab.href === '/profile'
+            const isActive = onProfilePage && currentTab === tab.tab
             return (
               <Link
                 key={tab.href}
