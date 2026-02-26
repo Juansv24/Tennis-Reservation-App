@@ -146,9 +146,9 @@ export default function ProfileForm({ user, onSaved }: Props) {
       <section className="space-y-3">
         <h3 className="text-lg font-semibold text-us-open-blue">Notificaciones por email</h3>
         {[
-          { label: 'Recibir emails de potenciales compañeros de juego', value: notifySuggestions, setter: setNotifySuggestions },
-          { label: 'Recibir emails de jugadores buscando partidos', value: notifyMatchPosts, setter: setNotifyMatchPosts },
-          { label: 'Recibir emails de mensajes directos de jugadores que quieren jugar contigo', value: notifyMessages, setter: setNotifyMessages },
+          { label: 'Recibir emails con sugerencias de jugadores con niveles de juego similar.', value: notifySuggestions, setter: setNotifySuggestions },
+          { label: 'Recibir emails de jugadores buscando partidos.', value: notifyMatchPosts, setter: setNotifyMatchPosts },
+          { label: 'Recibir emails de mensajes directos de jugadores que quieren jugar contigo.', value: notifyMessages, setter: setNotifyMessages },
         ].map(({ label, value, setter }) => (
           <label key={label} className="flex items-center gap-3 cursor-pointer">
             <input
