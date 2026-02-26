@@ -57,7 +57,7 @@ export default async function DashboardLayout({
     <div className="min-h-screen bg-white md:bg-gray-50 flex items-center justify-center md:block p-4 md:p-0">
       <div className="w-full max-w-7xl md:max-w-none min-h-[95vh] md:min-h-screen flex flex-col bg-white rounded-lg md:rounded-none shadow-2xl md:shadow-none overflow-hidden">
         <Header user={profile} lockCode={lockCode} hasReservations={hasReservations} />
-        <main className="px-4 py-8 flex-1 bg-white md:max-w-7xl md:mx-auto">
+        <main className="px-4 py-8 flex-1 bg-white w-full md:max-w-7xl md:mx-auto">
           {children}
         </main>
 
