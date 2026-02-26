@@ -1,8 +1,6 @@
 // ABOUTME: TypeScript interfaces for all Supabase database tables.
 // ABOUTME: Keep in sync with the database schema after every migration.
 
-export type Availability = Record<string, number[]>
-
 export interface User {
   id: string
   email: string
@@ -15,7 +13,6 @@ export interface User {
   age: number | null
   level_tier: string | null
   categoria: string | null
-  availability: Availability | null
   profile_completed: boolean
   last_profile_visit: string | null
   notify_suggestions: boolean

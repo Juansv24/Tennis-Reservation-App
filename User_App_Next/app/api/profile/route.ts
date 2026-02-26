@@ -38,7 +38,7 @@ export async function PUT(request: NextRequest) {
   }
 
   const body = await request.json()
-  const { gender, age, level_tier, categoria, availability, notify_suggestions, notify_match_posts, notify_messages } = body
+  const { gender, age, level_tier, categoria, notify_suggestions, notify_match_posts, notify_messages } = body
 
   if (gender !== undefined && gender !== null && !VALID_GENDERS.includes(gender)) {
     return NextResponse.json({ error: 'Género inválido' }, { status: 400 })
@@ -58,7 +58,6 @@ export async function PUT(request: NextRequest) {
   if (age !== undefined) updates.age = age
   if (level_tier !== undefined) updates.level_tier = level_tier
   if (categoria !== undefined) updates.categoria = categoria
-  if (availability !== undefined) updates.availability = availability
   if (notify_suggestions !== undefined) updates.notify_suggestions = notify_suggestions
   if (notify_match_posts !== undefined) updates.notify_match_posts = notify_match_posts
   if (notify_messages !== undefined) updates.notify_messages = notify_messages

@@ -3,8 +3,7 @@
 'use client'
 
 import { useState } from 'react'
-import type { User, Availability } from '@/types/database.types'
-import AvailabilityGrid from './AvailabilityGrid'
+import type { User } from '@/types/database.types'
 
 interface Props {
   user: User
@@ -24,7 +23,6 @@ export default function ProfileForm({ user, onSaved }: Props) {
   const [age, setAge] = useState<string>(user.age?.toString() ?? '')
   const [levelTier, setLevelTier] = useState(user.level_tier ?? '')
   const [categoria, setCategoria] = useState(user.categoria ?? '')
-  const [availability, setAvailability] = useState<Availability | null>(user.availability)
   const [notifySuggestions, setNotifySuggestions] = useState(user.notify_suggestions)
   const [notifyMatchPosts, setNotifyMatchPosts] = useState(user.notify_match_posts)
   const [notifyMessages, setNotifyMessages] = useState(user.notify_messages)
@@ -46,7 +44,6 @@ export default function ProfileForm({ user, onSaved }: Props) {
         age: age ? parseInt(age) : null,
         level_tier: levelTier || null,
         categoria: categoria || null,
-        availability,
         notify_suggestions: notifySuggestions,
         notify_match_posts: notifyMatchPosts,
         notify_messages: notifyMessages,
@@ -143,13 +140,6 @@ export default function ProfileForm({ user, onSaved }: Props) {
             {CATEGORIAS.map(c => <option key={c} value={c}>{c}</option>)}
           </select>
         </div>
-      </section>
-
-      {/* Availability Grid */}
-      <section className="space-y-2">
-        <h3 className="text-lg font-semibold text-us-open-blue">Disponibilidad habitual</h3>
-        <p className="text-sm text-gray-500">Selecciona los horarios en que usualmente juegas</p>
-        <AvailabilityGrid value={availability} onChange={setAvailability} />
       </section>
 
       {/* Email Preferences */}
