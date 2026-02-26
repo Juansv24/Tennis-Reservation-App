@@ -1,6 +1,8 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import ReservationGrid from '@/components/ReservationGrid'
+import WelcomeBanner from '@/components/WelcomeBanner'
+import CollapsibleSections from '@/components/CollapsibleSections'
 import { getTodayDate } from '@/lib/constants'
 import { generateTennisSchoolSlots } from '@/lib/tennis-school'
 import type { MaintenanceSlot } from '@/types/database.types'
@@ -51,12 +53,16 @@ export default async function DashboardPage() {
   }
 
   return (
-    <ReservationGrid
-      initialReservations={reservationsResult.data || []}
-      initialMaintenance={maintenanceSlots}
-      user={profile}
-      initialDate={today}
-      tennisSchoolEnabled={systemSettingsResult.data?.tennis_school_enabled || false}
-    />
+    <div className="space-y-6">
+      <WelcomeBanner user={profile} />
+      <CollapsibleSections user={profile} />
+      <ReservationGrid
+        initialReservations={reservationsResult.data || []}
+        initialMaintenance={maintenanceSlots}
+        user={profile}
+        initialDate={today}
+        tennisSchoolEnabled={systemSettingsResult.data?.tennis_school_enabled || false}
+      />
+    </div>
   )
 }

@@ -1,11 +1,17 @@
-// ABOUTME: Site-wide header component — displays user name, credits, lock code, and navigation buttons.
-// ABOUTME: Renders the Mi Perfil link and Salir logout button in the right section.
+// ABOUTME: Site-wide header component — displays user name, credits, lock code, and Salir button.
+// ABOUTME: Renders a tab bar at the bottom (Mi Perfil / Comunidad / Mensajes) for profile navigation.
 'use client'
 
 import { createClient } from '@/lib/supabase/client'
-import { useRouter } from 'next/navigation'
+import { useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
 import type { User } from '@/types/database.types'
+
+const PROFILE_TABS = [
+  { label: 'Mi Perfil',  href: '/profile' },
+  { label: 'Comunidad',  href: '/profile?tab=comunidad' },
+  { label: 'Mensajes',   href: '/profile?tab=mensajes' },
+]
 
 interface HeaderProps {
   user: User
@@ -15,7 +21,9 @@ interface HeaderProps {
 
 export default function Header({ user, lockCode, hasReservations }: HeaderProps) {
   const router = useRouter()
+  const pathname = usePathname()
   const supabase = createClient()
+  const onProfilePage = pathname.startsWith('/profile')
 
   async function handleLogout() {
     await supabase.auth.signOut()
@@ -42,22 +50,14 @@ export default function Header({ user, lockCode, hasReservations }: HeaderProps)
             </div>
           </div>
 
-          {/* Right section: Mi Perfil link, Salir button and Lock code */}
+          {/* Right section: Salir button and Lock code */}
           <div className="flex flex-col items-end gap-2">
-            <div className="flex items-center gap-2">
-              <Link
-                href="/profile"
-                className="px-4 py-2 bg-white bg-opacity-20 hover:bg-opacity-30 rounded-lg transition-colors font-semibold"
-              >
-                👤 Mi Perfil
-              </Link>
-              <button
-                onClick={handleLogout}
-                className="px-4 py-2 bg-white bg-opacity-20 hover:bg-opacity-30 rounded-lg transition-colors font-semibold"
-              >
-                Salir
-              </button>
-            </div>
+            <button
+              onClick={handleLogout}
+              className="px-4 py-2 bg-white bg-opacity-20 hover:bg-opacity-30 rounded-lg transition-colors font-semibold"
+            >
+              Salir
+            </button>
             {hasReservations && lockCode && (
               <div className="flex items-center gap-2 text-white">
                 <p className="text-base opacity-90">Código de candado:</p>
@@ -65,6 +65,28 @@ export default function Header({ user, lockCode, hasReservations }: HeaderProps)
               </div>
             )}
           </div>
+        </div>
+      </div>
+
+      {/* Tab bar */}
+      <div className="max-w-7xl mx-auto px-4">
+        <div className="flex gap-1">
+          {PROFILE_TABS.map(tab => {
+            const isActive = onProfilePage && pathname === '/profile' && tab.href === '/profile'
+            return (
+              <Link
+                key={tab.href}
+                href={tab.href}
+                className={`px-5 py-2 text-sm font-medium rounded-t-lg transition-colors ${
+                  isActive
+                    ? 'bg-white text-us-open-blue'
+                    : 'text-white opacity-80 hover:opacity-100 hover:bg-white hover:bg-opacity-10'
+                }`}
+              >
+                {tab.label}
+              </Link>
+            )
+          })}
         </div>
       </div>
     </header>
