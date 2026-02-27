@@ -78,13 +78,18 @@ export default function Header({ user, lockCode, hasReservations }: HeaderProps)
               <Link
                 key={tab.href}
                 href={tab.href}
-                className={`px-5 py-2 text-sm font-medium rounded-t-lg transition-colors ${
+                className={`px-5 py-2 text-base font-semibold rounded-t-lg transition-colors ${
                   isActive
                     ? 'bg-white text-us-open-blue'
                     : 'text-white opacity-80 hover:opacity-100 hover:bg-white hover:bg-opacity-10'
                 }`}
               >
-                {tab.label}
+                <span className="flex items-center gap-1.5">
+                  {tab.label}
+                  {tab.tab === null && !user.profile_completed && (
+                    <span className="w-2 h-2 bg-red-500 rounded-full inline-block" aria-label="Perfil incompleto" />
+                  )}
+                </span>
               </Link>
             )
           })}

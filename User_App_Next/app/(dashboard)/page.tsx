@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import ReservationGrid from '@/components/ReservationGrid'
 import WelcomeBanner from '@/components/WelcomeBanner'
+import UpdateBanner from '@/components/UpdateBanner'
 import CollapsibleSections from '@/components/CollapsibleSections'
 import { getTodayDate } from '@/lib/constants'
 import { generateTennisSchoolSlots } from '@/lib/tennis-school'
@@ -54,6 +55,7 @@ export default async function DashboardPage() {
 
   return (
     <div className="space-y-6">
+      <UpdateBanner />
       <WelcomeBanner user={profile} />
       <CollapsibleSections user={profile} />
       <ReservationGrid
