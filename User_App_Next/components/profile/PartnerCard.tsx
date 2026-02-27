@@ -20,7 +20,7 @@ export default function PartnerCard({ partner }: Props) {
           ? 'bg-green-100 text-green-700'
           : 'bg-blue-100 text-blue-700'
       }`}>
-        {badge === 'nivel+horario' ? '🎾 Nivel + horario' : '📋 Solo nivel'}
+        {badge === 'nivel+horario' ? '🎾 Nivel + horario' : '📋 Nivel Similar'}
       </span>
       {overlapMessage && (
         <p className="text-xs text-gray-500 italic">{overlapMessage}</p>
