@@ -132,6 +132,10 @@ export default function MessagesTab({ currentUserId }: Props) {
           <div ref={threadBottomRef} />
         </div>
 
+        <p className="text-xs text-gray-400 text-center">
+          Los mensajes de conversaciones sin actividad por más de 15 días se eliminan automáticamente.
+        </p>
+
         {/* Inline reply field */}
         <form onSubmit={handleSendReply} className="flex items-center gap-2 border border-gray-300 rounded-xl px-3 py-2 bg-white focus-within:ring-2 focus-within:ring-us-open-light-blue">
           <input
