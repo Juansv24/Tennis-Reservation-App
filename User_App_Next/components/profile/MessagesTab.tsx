@@ -183,7 +183,7 @@ export default function MessagesTab({ currentUserId }: Props) {
                     {formatTime(conv.last_message.created_at)}
                   </span>
                   {conv.unread_count > 0 && (
-                    <span className="bg-us-open-yellow text-us-open-blue text-xs font-bold px-1.5 py-0.5 rounded-full">
+                    <span className="bg-us-open-yellow text-white text-xs font-bold px-1.5 py-0.5 rounded-full">
                       {conv.unread_count}
                     </span>
                   )}
