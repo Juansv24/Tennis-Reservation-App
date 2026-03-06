@@ -18,7 +18,7 @@ export default function UpdateBanner() {
   return (
     <div className="bg-yellow-50 border-l-4 border-us-open-yellow text-gray-800 p-4 rounded-lg shadow-sm animate-in fade-in duration-300">
       <p className="font-semibold mb-2">Actualización V3 App Reservas</p>
-      <p className="text-sm mb-2">Se han añadido dos nuevas pestañas en la parte inferior del encabezado:</p>
+      <p className="text-sm mb-2">Se han añadido tres nuevas pestañas en la parte inferior del encabezado:</p>
       <ul className="text-sm space-y-2 list-none">
         <li>
           <span className="font-semibold">Mi Perfil</span> — Completa tu perfil con tu información (nivel, categoría, edad) para recibir sugerencias de jugadores compatibles con tu disponibilidad y nivel de juego.
