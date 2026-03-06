@@ -16,8 +16,8 @@ export default function UpdateBanner() {
   if (!isVisible) return null
 
   return (
-    <div className="bg-orange-100 border-l-4 border-orange-400 text-orange-900 p-4 rounded-lg shadow-sm animate-in fade-in duration-300">
-      <p className="font-semibold mb-2">Actualización de la app (Beta)</p>
+    <div className="bg-yellow-50 border-l-4 border-us-open-yellow text-gray-800 p-4 rounded-lg shadow-sm animate-in fade-in duration-300">
+      <p className="font-semibold mb-2">Actualización V3 App Reservas</p>
       <p className="text-sm mb-2">Se han añadido dos nuevas pestañas en la parte inferior del encabezado:</p>
       <ul className="text-sm space-y-2 list-none">
         <li>
@@ -25,6 +25,9 @@ export default function UpdateBanner() {
         </li>
         <li>
           <span className="font-semibold">Comunidad</span> — Consulta y comenta sobre publicaciones de jugadores que buscan partidos a determinados días, horarios y niveles de juego y publica tus propios posts para conectar con otros jugadores registrados.
+        </li>
+        <li>
+          <span className="font-semibold">Mensajes</span> — Envía mensajes directos a otros jugadores registrados desde la pestaña Comunidad y gestiona tus conversaciones en esta nueva pestaña.
         </li>
       </ul>
     </div>
