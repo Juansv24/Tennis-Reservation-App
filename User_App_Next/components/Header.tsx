@@ -1,15 +1,18 @@
 // ABOUTME: Site-wide header component — displays user name, credits, lock code, and Salir button.
-// ABOUTME: Renders a tab bar at the bottom (Mi Perfil / Comunidad) for profile navigation.
+// ABOUTME: Renders a tab bar (Reservas / Mi Perfil / Comunidad / Mensajes) for app navigation.
 'use client'
 
 import { createClient } from '@/lib/supabase/client'
 import { useRouter, usePathname, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
+import { useEffect, useState } from 'react'
 import type { User } from '@/types/database.types'
 
-const PROFILE_TABS = [
-  { label: 'Mi Perfil',  href: '/profile',               tab: null },
-  { label: 'Comunidad',  href: '/profile?tab=comunidad', tab: 'comunidad' },
+const ALL_TABS = [
+  { label: 'Reservas',  href: '/',                       key: 'reservas'  },
+  { label: 'Mi Perfil', href: '/profile',                key: 'perfil'    },
+  { label: 'Comunidad', href: '/profile?tab=comunidad',  key: 'comunidad' },
+  { label: 'Mensajes',  href: '/profile?tab=mensajes',   key: 'mensajes'  },
 ]
 
 interface HeaderProps {
@@ -23,13 +26,30 @@ export default function Header({ user, lockCode, hasReservations }: HeaderProps)
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const supabase = createClient()
-  const onProfilePage = pathname.startsWith('/profile')
-  const currentTab = searchParams.get('tab')
+  const [unreadCount, setUnreadCount] = useState(0)
+
+  useEffect(() => {
+    fetch('/api/messages')
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { if (data) setUnreadCount(data.totalUnread) })
+      .catch(() => {})
+  }, [])
 
   async function handleLogout() {
     await supabase.auth.signOut()
     router.push('/login')
     router.refresh()
+  }
+
+  const onProfilePage = pathname.startsWith('/profile')
+  const currentTab = searchParams.get('tab')
+
+  function isActive(key: string) {
+    if (key === 'reservas')  return pathname === '/'
+    if (key === 'perfil')    return onProfilePage && currentTab === null
+    if (key === 'comunidad') return onProfilePage && currentTab === 'comunidad'
+    if (key === 'mensajes')  return onProfilePage && currentTab === 'mensajes'
+    return false
   }
 
   return (
@@ -72,27 +92,29 @@ export default function Header({ user, lockCode, hasReservations }: HeaderProps)
       {/* Tab bar */}
       <div className="max-w-7xl mx-auto px-4">
         <div className="flex gap-1">
-          {PROFILE_TABS.map(tab => {
-            const isActive = onProfilePage && currentTab === tab.tab
-            return (
-              <Link
-                key={tab.href}
-                href={tab.href}
-                className={`px-5 py-2 text-base font-semibold rounded-t-lg transition-colors ${
-                  isActive
-                    ? 'bg-white text-us-open-blue'
-                    : 'text-white opacity-80 hover:opacity-100 hover:bg-white hover:bg-opacity-10'
-                }`}
-              >
-                <span className="flex items-center gap-1.5">
-                  {tab.label}
-                  {tab.tab === null && !user.profile_completed && (
-                    <span className="w-2 h-2 bg-red-500 rounded-full inline-block" aria-label="Perfil incompleto" />
-                  )}
-                </span>
-              </Link>
-            )
-          })}
+          {ALL_TABS.map(tab => (
+            <Link
+              key={tab.key}
+              href={tab.href}
+              className={`px-5 py-2 text-base font-semibold rounded-t-lg transition-colors ${
+                isActive(tab.key)
+                  ? 'bg-white text-us-open-blue'
+                  : 'text-white opacity-80 hover:opacity-100 hover:bg-white hover:bg-opacity-10'
+              }`}
+            >
+              <span className="flex items-center gap-1.5">
+                {tab.label}
+                {tab.key === 'perfil' && !user.profile_completed && (
+                  <span className="w-2 h-2 bg-red-500 rounded-full inline-block" aria-label="Perfil incompleto" />
+                )}
+                {tab.key === 'mensajes' && unreadCount > 0 && (
+                  <span className="bg-us-open-yellow text-us-open-blue text-xs font-bold px-1.5 py-0.5 rounded-full leading-none">
+                    {unreadCount}
+                  </span>
+                )}
+              </span>
+            </Link>
+          ))}
         </div>
       </div>
     </header>
