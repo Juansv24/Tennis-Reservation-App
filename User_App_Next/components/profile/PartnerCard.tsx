@@ -43,7 +43,7 @@ export default function PartnerCard({ partner }: Props) {
           ) : (
             <button
               onClick={() => setComposing(true)}
-              className="w-full py-2 bg-us-open-blue rounded-lg text-us-open-yellow font-bold text-sm text-center hover:bg-us-open-light-blue transition-colors"
+              className="w-full py-2 bg-us-open-blue rounded-lg text-white text-sm text-center hover:bg-us-open-light-blue transition-colors"
             >
               Enviar mensaje
             </button>
