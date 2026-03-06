@@ -110,8 +110,8 @@ export default function MessagesTab({ currentUserId }: Props) {
                 <div key={msg.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
                   <div className={`max-w-xs px-3 py-2 rounded-xl text-sm ${
                     isMe
-                      ? 'bg-us-open-blue text-white'
-                      : 'bg-us-open-light-blue text-white'
+                      ? 'bg-us-open-light-blue text-white'
+                      : 'bg-us-open-blue text-white'
                   }`}>
                     <p>{msg.content}</p>
                     <p className="text-xs mt-1 text-white/70">
