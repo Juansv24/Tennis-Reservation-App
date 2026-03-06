@@ -56,7 +56,7 @@ export default function ComunidadTab({ suggestions, currentUserId }: Props) {
 
       {/* Buscando partido */}
       <section>
-        <h3 className="text-lg font-semibold text-us-open-blue mb-4">Buscando partido</h3>
+        <h3 className="text-lg font-semibold text-us-open-blue mb-4">Buscar partido</h3>
         <div className="flex gap-2 mb-4">
           <button
             onClick={() => setView('feed')}
