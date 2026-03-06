@@ -133,7 +133,7 @@ export default function MessagesTab({ currentUserId }: Props) {
         </div>
 
         <p className="text-xs text-gray-400 text-center">
-          Los mensajes de conversaciones sin actividad por más de 15 días se eliminan automáticamente.
+          Los mensajes de conversaciones sin actividad por más de 15 días se eliminarán automáticamente.
         </p>
 
         {/* Inline reply field */}
