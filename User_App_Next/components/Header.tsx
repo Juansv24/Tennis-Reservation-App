@@ -33,6 +33,12 @@ export default function Header({ user, lockCode, hasReservations }: HeaderProps)
       .then(r => r.ok ? r.json() : null)
       .then(data => { if (data) setUnreadCount(data.totalUnread) })
       .catch(() => {})
+
+    function handleUnreadChange(e: Event) {
+      setUnreadCount((e as CustomEvent<{ count: number }>).detail.count)
+    }
+    window.addEventListener('unread-count-changed', handleUnreadChange)
+    return () => window.removeEventListener('unread-count-changed', handleUnreadChange)
   }, [])
 
   async function handleLogout() {

@@ -54,9 +54,14 @@ export default function MessagesTab({ currentUserId }: Props) {
     if (res.ok) {
       const data = await res.json()
       setThread(data.messages || [])
-      setConversations(prev =>
-        prev.map(c => c.other_user.id === conv.other_user.id ? { ...c, unread_count: 0 } : c)
-      )
+      setConversations(prev => {
+        const updated = prev.map(c =>
+          c.other_user.id === conv.other_user.id ? { ...c, unread_count: 0 } : c
+        )
+        const newTotal = updated.reduce((sum, c) => sum + c.unread_count, 0)
+        window.dispatchEvent(new CustomEvent('unread-count-changed', { detail: { count: newTotal } }))
+        return updated
+      })
     }
     setLoadingThread(false)
   }
@@ -178,7 +183,7 @@ export default function MessagesTab({ currentUserId }: Props) {
                     {formatTime(conv.last_message.created_at)}
                   </span>
                   {conv.unread_count > 0 && (
-                    <span className="bg-us-open-light-blue text-white text-xs font-bold px-1.5 py-0.5 rounded-full">
+                    <span className="bg-us-open-yellow text-us-open-blue text-xs font-bold px-1.5 py-0.5 rounded-full">
                       {conv.unread_count}
                     </span>
                   )}
