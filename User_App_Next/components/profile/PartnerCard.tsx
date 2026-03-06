@@ -37,13 +37,13 @@ export default function PartnerCard({ partner }: Props) {
         {overlapMessage && (
           <p className="text-xs text-gray-500 italic">{overlapMessage}</p>
         )}
-        <div className="pt-1">
+        <div className="pt-2">
           {sent ? (
-            <p className="text-xs text-green-600 font-medium">Mensaje enviado</p>
+            <p className="text-sm text-green-600 font-semibold text-center">✓ Mensaje enviado</p>
           ) : (
             <button
               onClick={() => setComposing(true)}
-              className="text-xs font-medium text-us-open-light-blue hover:underline"
+              className="w-full py-2 bg-us-open-blue rounded-lg text-us-open-yellow font-bold text-sm text-center hover:bg-us-open-light-blue transition-colors"
             >
               Enviar mensaje
             </button>

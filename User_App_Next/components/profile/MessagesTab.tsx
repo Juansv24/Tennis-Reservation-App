@@ -111,10 +111,10 @@ export default function MessagesTab({ currentUserId }: Props) {
                   <div className={`max-w-xs px-3 py-2 rounded-xl text-sm ${
                     isMe
                       ? 'bg-us-open-blue text-white'
-                      : 'bg-white border border-gray-200 text-gray-800'
+                      : 'bg-us-open-light-blue text-white'
                   }`}>
                     <p>{msg.content}</p>
-                    <p className={`text-xs mt-1 ${isMe ? 'text-blue-200' : 'text-gray-400'}`}>
+                    <p className="text-xs mt-1 text-white/70">
                       {formatTime(msg.created_at)}
                     </p>
                   </div>

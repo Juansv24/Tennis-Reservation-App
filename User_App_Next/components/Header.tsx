@@ -105,12 +105,10 @@ export default function Header({ user, lockCode, hasReservations }: HeaderProps)
               <span className="flex items-center gap-1.5">
                 {tab.label}
                 {tab.key === 'perfil' && !user.profile_completed && (
-                  <span className="w-2 h-2 bg-red-500 rounded-full inline-block" aria-label="Perfil incompleto" />
+                  <span className="w-3 h-3 bg-us-open-yellow rounded-full inline-block" aria-label="Perfil incompleto" />
                 )}
                 {tab.key === 'mensajes' && unreadCount > 0 && (
-                  <span className="bg-us-open-yellow text-us-open-blue text-xs font-bold px-1.5 py-0.5 rounded-full leading-none">
-                    {unreadCount}
-                  </span>
+                  <span className="w-3 h-3 bg-us-open-yellow rounded-full inline-block" aria-label="Mensajes nuevos" />
                 )}
               </span>
             </Link>

@@ -46,7 +46,7 @@ export default function ComunidadTab({ suggestions, currentUserId }: Props) {
             Aún no hay compañeros sugeridos con tu nivel. A medida que más jugadores completen su perfil y reserven canchas aparecerán aquí.
           </p>
         ) : (
-          <div className="space-y-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {suggestions.map(s => (
               <PartnerCard key={s.user.id} partner={s} />
             ))}
