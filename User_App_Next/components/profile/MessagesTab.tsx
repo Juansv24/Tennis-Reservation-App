@@ -4,7 +4,6 @@
 
 import { useState, useEffect, useRef } from 'react'
 import type { Conversation, DirectMessage } from '@/types/database.types'
-import MessageCompose from './MessageCompose'
 
 function formatTime(iso: string): string {
   const d = new Date(iso)
@@ -26,7 +25,8 @@ export default function MessagesTab({ currentUserId }: Props) {
   const [activeConv, setActiveConv] = useState<Conversation | null>(null)
   const [thread, setThread] = useState<DirectMessage[]>([])
   const [loadingThread, setLoadingThread] = useState(false)
-  const [composingNew, setComposingNew] = useState(false)
+  const [replyContent, setReplyContent] = useState('')
+  const [sending, setSending] = useState(false)
   const threadBottomRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -54,7 +54,6 @@ export default function MessagesTab({ currentUserId }: Props) {
     if (res.ok) {
       const data = await res.json()
       setThread(data.messages || [])
-      // Clear unread badge locally
       setConversations(prev =>
         prev.map(c => c.other_user.id === conv.other_user.id ? { ...c, unread_count: 0 } : c)
       )
@@ -62,9 +61,20 @@ export default function MessagesTab({ currentUserId }: Props) {
     setLoadingThread(false)
   }
 
-  function handleReplySent() {
-    if (activeConv) openConversation(activeConv)
-    setComposingNew(false)
+  async function handleSendReply(e: React.FormEvent) {
+    e.preventDefault()
+    if (!replyContent.trim() || !activeConv || sending) return
+    setSending(true)
+    const res = await fetch('/api/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ recipient_id: activeConv.other_user.id, content: replyContent.trim() }),
+    })
+    setSending(false)
+    if (res.ok) {
+      setReplyContent('')
+      openConversation(activeConv)
+    }
   }
 
   if (loading) {
@@ -82,20 +92,12 @@ export default function MessagesTab({ currentUserId }: Props) {
           &larr; Volver a conversaciones
         </button>
 
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="font-semibold text-us-open-blue">{activeConv.other_user.full_name}</p>
-            <p className="text-xs text-gray-500">
-              {activeConv.other_user.level_tier ?? '—'}
-              {activeConv.other_user.categoria ? ` / ${activeConv.other_user.categoria}` : ''}
-            </p>
-          </div>
-          <button
-            onClick={() => setComposingNew(true)}
-            className="px-3 py-1.5 text-xs bg-us-open-blue text-white rounded-lg font-medium hover:bg-us-open-light-blue transition-colors"
-          >
-            Responder
-          </button>
+        <div>
+          <p className="font-semibold text-us-open-blue">{activeConv.other_user.full_name}</p>
+          <p className="text-xs text-gray-500">
+            {activeConv.other_user.level_tier ?? '—'}
+            {activeConv.other_user.categoria ? ` / ${activeConv.other_user.categoria}` : ''}
+          </p>
         </div>
 
         <div className="border border-gray-200 rounded-lg bg-gray-50 p-4 space-y-3 max-h-96 overflow-y-auto">
@@ -125,14 +127,27 @@ export default function MessagesTab({ currentUserId }: Props) {
           <div ref={threadBottomRef} />
         </div>
 
-        {composingNew && (
-          <MessageCompose
-            recipientId={activeConv.other_user.id}
-            recipientName={activeConv.other_user.full_name}
-            onClose={() => setComposingNew(false)}
-            onSent={handleReplySent}
+        {/* Inline reply field */}
+        <form onSubmit={handleSendReply} className="flex items-center gap-2 border border-gray-300 rounded-xl px-3 py-2 bg-white focus-within:ring-2 focus-within:ring-us-open-light-blue">
+          <input
+            type="text"
+            value={replyContent}
+            onChange={e => setReplyContent(e.target.value)}
+            placeholder="Mensaje"
+            maxLength={1000}
+            className="flex-1 text-sm outline-none bg-transparent text-gray-800 placeholder-gray-400"
           />
-        )}
+          <button
+            type="submit"
+            disabled={!replyContent.trim() || sending}
+            className="text-us-open-blue hover:text-us-open-light-blue transition-colors disabled:opacity-30"
+            aria-label="Enviar"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
+              <path d="M3.478 2.405a.75.75 0 00-.926.94l2.432 7.905H13.5a.75.75 0 010 1.5H4.984l-2.432 7.905a.75.75 0 00.926.94 60.519 60.519 0 0018.445-8.986.75.75 0 000-1.218A60.517 60.517 0 003.478 2.405z" />
+            </svg>
+          </button>
+        </form>
       </div>
     )
   }
