@@ -110,3 +110,9 @@ export interface DirectMessage {
   created_at: string
   read_at: string | null
 }
+
+export interface Conversation {
+  other_user: Pick<User, 'id' | 'full_name' | 'level_tier' | 'categoria'>
+  last_message: DirectMessage
+  unread_count: number
+}

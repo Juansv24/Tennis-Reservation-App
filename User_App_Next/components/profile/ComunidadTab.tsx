@@ -46,7 +46,7 @@ export default function ComunidadTab({ suggestions, currentUserId }: Props) {
             Aún no hay compañeros sugeridos con tu nivel. A medida que más jugadores completen su perfil y reserven canchas aparecerán aquí.
           </p>
         ) : (
-          <div className="space-y-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {suggestions.map(s => (
               <PartnerCard key={s.user.id} partner={s} />
             ))}
@@ -56,7 +56,7 @@ export default function ComunidadTab({ suggestions, currentUserId }: Props) {
 
       {/* Buscando partido */}
       <section>
-        <h3 className="text-lg font-semibold text-us-open-blue mb-4">Buscando partido</h3>
+        <h3 className="text-lg font-semibold text-us-open-blue mb-4">Buscar partido</h3>
         <div className="flex gap-2 mb-4">
           <button
             onClick={() => setView('feed')}
